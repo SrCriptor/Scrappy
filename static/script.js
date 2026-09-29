@@ -122,7 +122,10 @@ async function copyToClipboard(text) {
             showCopyToast();
         } catch (err) {
             console.error('Falha ao copiar texto: ', err);
-            alert('Não foi possível copiar o link. Tente selecionar e copiar manualmente.');
+            showSiteNotice('Não foi possível copiar o link. Tente selecionar e copiar manualmente.', {
+                type: 'error',
+                title: 'Falha ao copiar'
+            });
         } finally {
             document.body.removeChild(textArea);
         }
@@ -294,7 +297,7 @@ function downloadAllImages() {
     const imageUrls = Array.from(images).map(img => img.src).filter(src => src && src !== '');
     
     if (imageUrls.length === 0) {
-        alert('Nenhuma imagem encontrada para download.');
+        showSiteNotice('Nenhuma imagem encontrada para download.', { type: 'info' });
         return;
     }
     
@@ -322,7 +325,7 @@ function downloadAllVideos() {
     });
     
     if (videoUrls.length === 0) {
-        alert('Nenhum vídeo encontrado para download.');
+        showSiteNotice('Nenhum vídeo encontrado para download.', { type: 'info' });
         return;
     }
     
@@ -355,7 +358,7 @@ function downloadAllMedia() {
     const allUrls = [...imageUrls, ...videoUrls];
     
     if (allUrls.length === 0) {
-        alert('Nenhum arquivo de mídia encontrado para download.');
+        showSiteNotice('Nenhum arquivo de mídia encontrado para download.', { type: 'info' });
         return;
     }
     
@@ -365,7 +368,7 @@ function downloadAllMedia() {
 // Helper function to download multiple files
 function downloadMultipleFiles(urls, type) {
     if (!urls || urls.length === 0) {
-        alert(`Nenhum arquivo de ${type} encontrado.`);
+        showSiteNotice(`Nenhum arquivo de ${type} encontrado.`, { type: 'info' });
         return;
     }
     

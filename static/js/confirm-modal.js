@@ -16,7 +16,7 @@
 
         const wrap = document.createElement('div');
         wrap.innerHTML = `
-        <div class="modal fade" id="globalConfirmModal" tabindex="-1">
+        <div class="modal fade" id="globalConfirmModal" tabindex="-1" style="z-index:20000;">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content" style="background:#161b22;border-color:#30363d;">
                     <div class="modal-header border-bottom" style="border-color:#21262d !important;">
@@ -74,6 +74,11 @@
 
         const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
         modalInstance.show();
+        // Ensure backdrop also sits above the chat window (z-index 9999)
+        setTimeout(() => {
+            const backdrop = document.querySelector('.modal-backdrop:last-of-type');
+            if (backdrop) backdrop.style.zIndex = '19999';
+        }, 50);
     };
 
     /**
