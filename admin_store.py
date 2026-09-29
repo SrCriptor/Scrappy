@@ -1,5 +1,5 @@
 """Admin database store — PostgreSQL (psycopg2), thread-safe, parameterized."""
-import secrets, os, json, time, hashlib
+import secrets, os, json, time, hashlib, re
 import uuid as _uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -19,7 +19,7 @@ ROLE_LEVEL = {r: i for i, r in enumerate(ROLES)}
 
 PERMISSIONS = {
     'owner':     {'all', 'manage_admins', 'gateway', 'batch_config', 'debug', 'debug_resolve'},
-    'admin':     {'manage_admins', 'batch_config', 'debug', 'debug_resolve'},  # 'gateway' removido — controlado por allow_admin_gateway
+    'admin':     {'manage_admins', 'batch_config', 'debug', 'debug_resolve'},  # gateway is controlled per user below
     'moderator': {'batch_config', 'debug', 'debug_resolve'},
     'helper':    {'debug_resolve', 'debug'},
 }
@@ -124,7 +124,9 @@ def init_db():
             created_by   TEXT,
             active       INTEGER NOT NULL DEFAULT 1,
             status       TEXT NOT NULL DEFAULT 'offline',
-            crowned      INTEGER NOT NULL DEFAULT 0
+            crowned      INTEGER NOT NULL DEFAULT 0,
+            access_dev_mode BOOLEAN NOT NULL DEFAULT FALSE,
+            manage_gateways BOOLEAN NOT NULL DEFAULT FALSE
         )
         """)
         c.execute("""
@@ -214,16 +216,36 @@ def init_db():
         )
         """)
         c.execute("""
+        CREATE TABLE IF NOT EXISTS gateway_change_requests (
+            id            SERIAL PRIMARY KEY,
+            admin_id      INTEGER NOT NULL,
+            admin_name    TEXT NOT NULL,
+            admin_role    TEXT NOT NULL,
+            scope         TEXT NOT NULL,
+            before_cfg    TEXT NOT NULL,
+            proposed_cfg  TEXT NOT NULL,
+            status        TEXT NOT NULL DEFAULT 'pending',
+            created_at    TEXT NOT NULL,
+            decided_at    TEXT,
+            decided_by    TEXT,
+            decision_note TEXT
+        )
+        """)
+        c.execute("""
         CREATE TABLE IF NOT EXISTS pix_payments (
             id         SERIAL PRIMARY KEY,
             payment_id TEXT NOT NULL,
             gateway_id TEXT NOT NULL,
             amount     REAL NOT NULL,
+            currency   TEXT NOT NULL DEFAULT 'BRL',
             status     TEXT NOT NULL DEFAULT 'pending',
             ts         TEXT NOT NULL,
             expires_at TEXT,
             updated_at TEXT,
-            updated_by TEXT
+            updated_by TEXT,
+            font_id    TEXT NOT NULL DEFAULT 'default',
+            text_effect TEXT NOT NULL DEFAULT 'solid',
+            name_color TEXT NOT NULL DEFAULT '#f3f4f6'
         )
         """)
         c.execute("""
@@ -337,9 +359,14 @@ def init_db():
             nickname      TEXT NOT NULL,
             avatar_id     TEXT NOT NULL DEFAULT 'm_1',
             total_donated NUMERIC NOT NULL DEFAULT 0,
+            currency      TEXT NOT NULL DEFAULT 'BRL',
             vip_level     INTEGER NOT NULL DEFAULT 5,
             secret_token  TEXT UNIQUE NOT NULL,
-            ts            TEXT NOT NULL
+            ts            TEXT NOT NULL,
+            font_id       TEXT NOT NULL DEFAULT 'default',
+            text_effect   TEXT NOT NULL DEFAULT 'solid',
+            name_color    TEXT NOT NULL DEFAULT '#f3f4f6',
+            last_seen_at  DOUBLE PRECISION
         )
         """)
 
@@ -360,6 +387,70 @@ def init_db():
             metric_value DOUBLE PRECISION NOT NULL DEFAULT 0
         )
         """)
+
+        # ── WAF auto-ban list ─────────────────────────────────────────────
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS waf_bans (
+            id          SERIAL PRIMARY KEY,
+            ip          TEXT NOT NULL UNIQUE,
+            reason      TEXT NOT NULL DEFAULT '',
+            url_path    TEXT NOT NULL DEFAULT '',
+            method      TEXT NOT NULL DEFAULT 'GET',
+            ua          TEXT,
+            ts          TEXT NOT NULL,
+            unban_ts    TEXT
+        )
+        """)
+
+        # ── WAF: first-strike warning table (two-strikes system) ─────────────
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS waf_warnings (
+            ip          TEXT PRIMARY KEY,
+            count       INT  NOT NULL DEFAULT 1,
+            reason      TEXT NOT NULL DEFAULT '',
+            url_path    TEXT NOT NULL DEFAULT '',
+            method      TEXT NOT NULL DEFAULT 'GET',
+            ua          TEXT,
+            ts          TEXT NOT NULL
+        )
+        """)
+
+        # ── Firewall: whitelist for devs / pentesters (ADD02/ADD03) ─────────
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS waf_lista_branca (
+            id              SERIAL PRIMARY KEY,
+            nome_dev        TEXT NOT NULL DEFAULT '',
+            ip              TEXT,
+            dispositivo_id  TEXT,
+            modo_teste_ativo BOOLEAN NOT NULL DEFAULT FALSE,
+            ultimo_login    TEXT,
+            criado_em       TEXT NOT NULL
+        )
+        """)
+
+        # Unique index so the same device fingerprint can't be added twice
+        c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uix_waf_lista_branca_dev_id
+        ON waf_lista_branca (dispositivo_id)
+        WHERE dispositivo_id IS NOT NULL AND dispositivo_id <> ''
+        """)
+
+        # ── WAF: seed known-malicious IPs with their historical attack records ──
+        _WAF_SEEDS = [
+            ('20.125.48.163',
+             'Varredura de Path Traversal — Tentativa de acesso não autorizado a diretórios e arquivos confidenciais do sistema',
+             '/..%2f..%2f..%2fetc%2fpasswd', 'GET'),
+            ('52.240.186.21',
+             'Exfiltração de Credenciais — Acesso forçado a arquivos de configuração sensíveis (.env / segredos do sistema)',
+             '/.env.production', 'GET'),
+        ]
+        for _ip, _reason, _url, _method in _WAF_SEEDS:
+            c.execute("""
+                INSERT INTO waf_bans (ip, reason, url_path, method, ua, ts)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (ip) DO NOTHING
+            """, (_ip, _reason, _url, _method, '[Histórico — registrado manualmente]',
+                  '2026-08-03T00:00:00'))
 
         # Failed/blocked scrape URLs — replaces failed_urls.json so the
         # debug panel state survives container reboots.
@@ -402,6 +493,13 @@ def init_db():
         count = c.fetchone()['n'] or 0
         if count == 0:
             _seed_owner(c)
+        # Owners always retain the administrative controls. This also covers
+        # an owner inserted by a previous installation before these columns
+        # existed.
+        c.execute(
+            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE "
+            "WHERE role='owner'"
+        )
 
         c.execute(
             "INSERT INTO maintenance_mode(id, enabled) VALUES(1, 0) ON CONFLICT DO NOTHING"
@@ -561,7 +659,8 @@ def check_returning_donor(token: str, ip: str, ua: str):
         return None
     with _conn() as c:
         c.execute(
-            "SELECT id, nickname, avatar_id, vip_level, total_donated, last_ip, last_ua, discriminator "
+            "SELECT id, nickname, avatar_id, vip_level, total_donated, last_ip, last_ua, "
+            "discriminator, font_id, text_effect, name_color "
             "FROM donation_ranking WHERE secret_token=%s",
             (token,)
         )
@@ -592,15 +691,33 @@ def _generate_discriminator(c, nickname: str) -> str:
 
 
 def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
-                      payment_id: str = None, ip: str = None, ua: str = None) -> dict:
+                      payment_id: str = None, ip: str = None, ua: str = None,
+                      font_id: str = None, text_effect: str = None,
+                      name_color: str = None, currency: str = 'BRL') -> dict:
     """Insert or accumulate a donation; atomically claims the payment and upserts ranking.
 
     Raises DuplicatePaymentError if payment_id is already linked to a different token,
     preventing double-crediting of the same payment.
     ip / ua are stored for returning-donor identity verification.
+    font_id is deliberately validated against a small server-side allowlist;
+    the browser is never allowed to write arbitrary CSS into the ranking.
     """
     import datetime
     ts = datetime.datetime.utcnow().isoformat()
+    allowed_fonts = {'default', 'inter', 'orbitron', 'rajdhani', 'space-grotesk',
+                     'press-start', 'bangers', 'roboto-mono', 'montserrat',
+                     'gothic', 'script', 'pixel'}
+    allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
+    font_id = font_id if font_id in allowed_fonts else None
+    text_effect = text_effect if text_effect in allowed_effects else None
+    if name_color is not None and not re.fullmatch(r'#[0-9a-fA-F]{6}', str(name_color or '')):
+        name_color = None
+    if name_color is not None:
+        name_color = str(name_color).lower()
+    currency = str(currency or 'BRL').upper()
+    if currency not in {'BRL', 'USD'}:
+        currency = 'BRL'
+    seen_at = time.time()
     with _lock, _conn() as c:
         # ── Step 1: Idempotent atomic payment claim ────────────────────────
         #   Only proceed with a ranking write when this payment is unclaimed.
@@ -631,9 +748,15 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
                 # amount is NOT added again below)
 
         # ── Step 2: Upsert ranking — only accumulate amount on first claim ──
-        c.execute("SELECT id, total_donated, discriminator FROM donation_ranking WHERE secret_token = %s", (token,))
+        c.execute(
+            "SELECT id, total_donated, discriminator, vip_level, font_id, text_effect, name_color "
+            "FROM donation_ranking WHERE secret_token = %s", (token,)
+        )
         existing = c.fetchone()
         if existing:
+            font_id = font_id or existing.get('font_id') or 'default'
+            text_effect = text_effect or existing.get('text_effect') or 'solid'
+            name_color = name_color or existing.get('name_color') or '#f3f4f6'
             # Only add amount when this is genuinely the first claim of this payment
             added = amount if (first_claim or payment_id is None) else 0
             new_total = float(existing['total_donated']) + added
@@ -641,35 +764,68 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
             # Keep existing discriminator; generate one if the row was created before this feature
             disc = existing.get('discriminator') or _generate_discriminator(c, nickname)
             c.execute(
-                "UPDATE donation_ranking SET total_donated=%s, vip_level=%s, avatar_id=%s, nickname=%s, last_ip=%s, last_ua=%s, discriminator=%s WHERE secret_token=%s",
-                (new_total, vip, avatar_id, nickname[:40], ip, ua, disc, token)
+                "UPDATE donation_ranking SET total_donated=%s, vip_level=%s, avatar_id=%s, nickname=%s, "
+                "currency=%s, last_ip=%s, last_ua=%s, discriminator=%s, font_id=%s, text_effect=%s, name_color=%s, last_seen_at=%s "
+                "WHERE secret_token=%s",
+                (new_total, vip, avatar_id, nickname[:40], currency, ip, ua, disc, font_id,
+                 text_effect, name_color, seen_at, token)
             )
             # is_new=False signals a repeat donation from an already-known supporter
             # (secret_token already had a ranking row) — used by app.py to fire the
             # "apoiador de elite" repeat-donation notification/webhook.
-            return {'id': existing['id'], 'total_donated': new_total, 'vip_level': vip, 'nickname': nickname[:40], 'discriminator': disc, 'is_new': False, 'previous_vip_level': int(existing['vip_level'])}
+            return {'id': existing['id'], 'total_donated': new_total, 'vip_level': vip,
+                    'nickname': nickname[:40], 'discriminator': disc, 'font_id': font_id,
+                    'text_effect': text_effect, 'name_color': name_color,
+                    'is_new': False, 'previous_vip_level': int(existing['vip_level'])}
         else:
+            font_id = font_id or 'default'
+            text_effect = text_effect or 'solid'
+            name_color = name_color or '#f3f4f6'
             credited = amount if (first_claim or payment_id is None) else 0
             vip = _compute_vip_level_with_conn(c, credited)
             disc = _generate_discriminator(c, nickname)
             c.execute(
-                """INSERT INTO donation_ranking(nickname, avatar_id, total_donated, vip_level, secret_token, ts, last_ip, last_ua, discriminator)
-                   VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (nickname[:40], avatar_id, credited, vip, token, ts, ip, ua, disc)
+                """INSERT INTO donation_ranking(
+                   nickname, avatar_id, total_donated, currency, vip_level, secret_token, ts,
+                   last_ip, last_ua, discriminator, font_id, text_effect, name_color, last_seen_at)
+                   VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (nickname[:40], avatar_id, credited, currency, vip, token, ts, ip, ua, disc,
+                  font_id, text_effect, name_color, seen_at)
             )
             row = c.fetchone()
-            return {'id': row['id'], 'total_donated': credited, 'vip_level': vip, 'nickname': nickname[:40], 'discriminator': disc, 'is_new': True, 'previous_vip_level': None}
+            return {'id': row['id'], 'total_donated': credited, 'vip_level': vip,
+                    'nickname': nickname[:40], 'discriminator': disc, 'font_id': font_id,
+                    'text_effect': text_effect, 'name_color': name_color,
+                    'is_new': True, 'previous_vip_level': None}
 
 
 def get_ranking(limit: int = 50) -> list:
-    """Return top donors sorted by total_donated DESC."""
+    """Return top donors by total, preserving first-support order on ties."""
     with _conn() as c:
         c.execute(
-            "SELECT id, nickname, avatar_id, total_donated, vip_level, ts, discriminator "
-            "FROM donation_ranking ORDER BY total_donated DESC LIMIT %s",
+            "SELECT id, nickname, avatar_id, total_donated, vip_level, ts, discriminator, "
+            "currency, font_id, text_effect, name_color, last_seen_at "
+            "FROM donation_ranking ORDER BY total_donated DESC, id ASC LIMIT %s",
             (limit,)
         )
-        return [dict(r) for r in c.fetchall()]
+        rows = []
+        allowed_fonts = {'default', 'inter', 'orbitron', 'rajdhani', 'space-grotesk',
+                         'press-start', 'bangers', 'roboto-mono', 'montserrat',
+                         'gothic', 'script', 'pixel'}
+        allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
+        for row in c.fetchall():
+            item = dict(row)
+            item['currency'] = str(item.get('currency') or 'BRL').upper()
+            if item['currency'] not in {'BRL', 'USD'}:
+                item['currency'] = 'BRL'
+            if item.get('font_id') not in allowed_fonts:
+                item['font_id'] = 'default'
+            if item.get('text_effect') not in allowed_effects:
+                item['text_effect'] = 'solid'
+            if not re.fullmatch(r'#[0-9a-fA-F]{6}', str(item.get('name_color') or '')):
+                item['name_color'] = '#f3f4f6'
+            rows.append(item)
+        return rows
 
 
 def get_vip_by_token(token: str):
@@ -678,11 +834,48 @@ def get_vip_by_token(token: str):
         return None
     with _conn() as c:
         c.execute(
-            "SELECT vip_level, total_donated, nickname, discriminator FROM donation_ranking WHERE secret_token = %s",
+            "SELECT vip_level, total_donated, nickname, discriminator, avatar_id, font_id, "
+            "text_effect, name_color "
+            "FROM donation_ranking WHERE secret_token = %s",
             (token,)
         )
         row = c.fetchone()
         return dict(row) if row else None
+
+
+def update_donor_style(token: str, font_id: str = 'default',
+                       text_effect: str = 'solid',
+                       name_color: str = '#f3f4f6') -> bool:
+    """Persist only allowlisted public nickname styling for a donor token."""
+    allowed_fonts = {'default', 'inter', 'orbitron', 'rajdhani', 'space-grotesk',
+                     'press-start', 'bangers', 'roboto-mono', 'montserrat',
+                     'gothic', 'script', 'pixel'}
+    allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
+    if font_id not in allowed_fonts:
+        font_id = 'default'
+    if text_effect not in allowed_effects:
+        text_effect = 'solid'
+    if not re.fullmatch(r'#[0-9a-fA-F]{6}', str(name_color or '')):
+        name_color = '#f3f4f6'
+    with _lock, _conn() as c:
+        c.execute(
+            "UPDATE donation_ranking SET font_id=%s, text_effect=%s, name_color=%s "
+            "WHERE secret_token=%s",
+            (font_id, text_effect, str(name_color).lower(), token)
+        )
+        return c.rowcount == 1
+
+
+def touch_supporter_presence(token: str) -> bool:
+    """Mark a supporter as recently active without exposing their token."""
+    if not token:
+        return False
+    with _conn() as c:
+        c.execute(
+            "UPDATE donation_ranking SET last_seen_at=%s WHERE secret_token=%s",
+            (time.time(), token)
+        )
+        return c.rowcount > 0
 
 
 def delete_ranking_entry(user_id: int) -> bool:
@@ -707,6 +900,23 @@ def _migrate_columns(c):
         c.execute("ALTER TABLE admins ADD COLUMN status TEXT NOT NULL DEFAULT 'offline'")
     if 'crowned' not in existing:
         c.execute("ALTER TABLE admins ADD COLUMN crowned INTEGER NOT NULL DEFAULT 0")
+    added_dev_mode = 'access_dev_mode' not in existing
+    added_gateways = 'manage_gateways' not in existing
+    if added_dev_mode:
+        c.execute("ALTER TABLE admins ADD COLUMN access_dev_mode BOOLEAN NOT NULL DEFAULT FALSE")
+    if added_gateways:
+        c.execute("ALTER TABLE admins ADD COLUMN manage_gateways BOOLEAN NOT NULL DEFAULT FALSE")
+    if added_dev_mode:
+        c.execute(
+            "UPDATE admins SET access_dev_mode = (role IN ('owner','admin'))"
+        )
+    if added_gateways:
+        # The former global gateway switch is intentionally not migrated into
+        # every admin account. New access is granted explicitly per user.
+        c.execute("UPDATE admins SET manage_gateways = FALSE")
+    c.execute(
+        "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE WHERE role='owner'"
+    )
 
     existing_log = _cols('activity_log')
     if 'hidden_by' not in existing_log:
@@ -721,6 +931,8 @@ def _migrate_columns(c):
         c.execute("ALTER TABLE notifications ADD COLUMN cleared_by TEXT NOT NULL DEFAULT '[]'")
 
     existing_pix = _cols('pix_payments')
+    if 'currency' not in existing_pix:
+        c.execute("ALTER TABLE pix_payments ADD COLUMN currency TEXT NOT NULL DEFAULT 'BRL'")
     if 'expires_at' not in existing_pix:
         c.execute("ALTER TABLE pix_payments ADD COLUMN expires_at TEXT")
     if 'linked_ranking_token' not in existing_pix:
@@ -736,8 +948,24 @@ def _migrate_columns(c):
         c.execute("ALTER TABLE pix_payments ADD COLUMN avatar_id TEXT DEFAULT NULL")
     if 'donor_token' not in existing_pix:
         c.execute("ALTER TABLE pix_payments ADD COLUMN donor_token TEXT DEFAULT NULL")
+    if 'font_id' not in existing_pix:
+        c.execute("ALTER TABLE pix_payments ADD COLUMN font_id TEXT DEFAULT 'default'")
+    if 'text_effect' not in existing_pix:
+        c.execute("ALTER TABLE pix_payments ADD COLUMN text_effect TEXT NOT NULL DEFAULT 'solid'")
+    if 'name_color' not in existing_pix:
+        c.execute("ALTER TABLE pix_payments ADD COLUMN name_color TEXT NOT NULL DEFAULT '#f3f4f6'")
 
     existing_ranking = _cols('donation_ranking')
+    if 'currency' not in existing_ranking:
+        c.execute("ALTER TABLE donation_ranking ADD COLUMN currency TEXT NOT NULL DEFAULT 'BRL'")
+    if 'font_id' not in existing_ranking:
+        c.execute("ALTER TABLE donation_ranking ADD COLUMN font_id TEXT NOT NULL DEFAULT 'default'")
+    if 'text_effect' not in existing_ranking:
+        c.execute("ALTER TABLE donation_ranking ADD COLUMN text_effect TEXT NOT NULL DEFAULT 'solid'")
+    if 'name_color' not in existing_ranking:
+        c.execute("ALTER TABLE donation_ranking ADD COLUMN name_color TEXT NOT NULL DEFAULT '#f3f4f6'")
+    if 'last_seen_at' not in existing_ranking:
+        c.execute("ALTER TABLE donation_ranking ADD COLUMN last_seen_at DOUBLE PRECISION")
     if 'last_ip' not in existing_ranking:
         c.execute("ALTER TABLE donation_ranking ADD COLUMN last_ip TEXT DEFAULT NULL")
     if 'last_ua' not in existing_ranking:
@@ -866,9 +1094,11 @@ def _seed_owner(c):
         if not pw:
             continue
         c.execute(
-            "INSERT INTO admins (username, password, role, avatar, display_name, created_at, status) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
-            (username, generate_password_hash(pw), role, avatar, display_name, now, status)
+            "INSERT INTO admins (username, password, role, avatar, display_name, created_at, status, "
+            "access_dev_mode, manage_gateways) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
+            (username, generate_password_hash(pw), role, avatar, display_name, now, status,
+             role == 'owner', role == 'owner')
         )
 
 
@@ -957,6 +1187,249 @@ def record_suspicious_request(ip: str, attack_type: str, url_path: str, method: 
             )
 
 
+# ── WAF first-strike warning functions (two-strikes system) ──────────────
+
+def record_waf_warning(ip: str, reason: str, url_path: str,
+                       method: str = 'GET', ua: str = '') -> int:
+    """Record or increment a first-strike WAF warning for an IP.
+    Returns the new cumulative count."""
+    with _lock, _conn() as c:
+        c.execute("""
+            INSERT INTO waf_warnings (ip, count, reason, url_path, method, ua, ts)
+            VALUES (%s, 1, %s, %s, %s, %s, %s)
+            ON CONFLICT (ip) DO UPDATE
+              SET count    = waf_warnings.count + 1,
+                  reason   = EXCLUDED.reason,
+                  url_path = EXCLUDED.url_path,
+                  method   = EXCLUDED.method,
+                  ua       = EXCLUDED.ua,
+                  ts       = EXCLUDED.ts
+            RETURNING count
+        """, (ip, reason[:255], url_path[:500], method, (ua or '')[:300], _now()))
+        row = c.fetchone()
+        return row['count'] if row else 1
+
+
+def get_waf_warning(ip: str) -> 'dict | None':
+    """Return the warning record for an IP, or None if clean."""
+    with _conn() as c:
+        c.execute("SELECT * FROM waf_warnings WHERE ip = %s", (ip,))
+        return c.fetchone()
+
+
+def clear_waf_warning(ip: str) -> None:
+    """Remove the warning record once an IP is permanently banned."""
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM waf_warnings WHERE ip = %s", (ip,))
+
+
+def get_waf_status(ip: str) -> dict:
+    """Return a dict with waf_status ('banned'|'warning'|'clean') and waf_count."""
+    ban  = is_ip_banned_waf(ip)
+    if ban:
+        return {'waf_status': 'banned', 'waf_count': 2}
+    warn = get_waf_warning(ip)
+    if warn:
+        return {'waf_status': 'warning', 'waf_count': int(warn['count'])}
+    return {'waf_status': 'clean', 'waf_count': 0}
+
+
+# ── WAF auto-ban functions ────────────────────────────────────────────────
+
+def ban_ip_waf(ip: str, reason: str, url_path: str,
+               method: str = 'GET', ua: str = '') -> None:
+    """Permanently ban an IP via the WAF. Idempotent: re-banning updates meta."""
+    with _lock, _conn() as c:
+        c.execute("""
+            INSERT INTO waf_bans (ip, reason, url_path, method, ua, ts)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (ip) DO UPDATE
+              SET reason   = EXCLUDED.reason,
+                  url_path = EXCLUDED.url_path,
+                  method   = EXCLUDED.method,
+                  ua       = EXCLUDED.ua,
+                  ts       = EXCLUDED.ts,
+                  unban_ts = NULL
+        """, (ip, reason[:255], url_path[:500], method, (ua or '')[:300], _now()))
+
+
+def is_ip_banned_waf(ip: str) -> dict | None:
+    """Return ban record dict if IP is banned (and unban_ts is null or future),
+    else None."""
+    with _conn() as c:
+        c.execute(
+            "SELECT * FROM waf_bans WHERE ip=%s AND (unban_ts IS NULL OR unban_ts > %s)",
+            (ip, _now())
+        )
+        return c.fetchone()
+
+
+def get_waf_bans(limit: int = 200) -> list:
+    """Return the most recent WAF bans."""
+    with _conn() as c:
+        c.execute(
+            "SELECT * FROM waf_bans ORDER BY ts DESC LIMIT %s", (limit,)
+        )
+        return c.fetchall() or []
+
+
+# ── WAF Whitelist (waf_lista_branca) CRUD ─────────────────────────────────
+
+def get_whitelist() -> list:
+    """Return all whitelist entries ordered by creation date."""
+    with _conn() as c:
+        c.execute("SELECT * FROM waf_lista_branca ORDER BY criado_em DESC")
+        return [dict(r) for r in c.fetchall()]
+
+
+def add_to_whitelist(nome_dev: str, ip: str = '', dispositivo_id: str = '',
+                     modo_teste_ativo: bool = False) -> None:
+    """Insert a new developer/pentester into the whitelist.
+
+    Uses two code-paths:
+    - If dispositivo_id is provided → ON CONFLICT against the partial unique index
+      (only works when the value is non-NULL and non-empty, matching the index predicate).
+    - If dispositivo_id is absent → plain INSERT (no conflict key available for NULLs).
+    """
+    dev_id = (dispositivo_id or '').strip() or None
+    with _lock, _conn() as c:
+        if dev_id:
+            c.execute("""
+                INSERT INTO waf_lista_branca (nome_dev, ip, dispositivo_id, modo_teste_ativo, criado_em)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (dispositivo_id)
+                WHERE dispositivo_id IS NOT NULL AND dispositivo_id <> ''
+                DO UPDATE
+                  SET nome_dev        = EXCLUDED.nome_dev,
+                      ip              = EXCLUDED.ip,
+                      modo_teste_ativo = EXCLUDED.modo_teste_ativo,
+                      ultimo_login    = %s
+            """, (nome_dev, ip or None, dev_id, modo_teste_ativo, _now(), _now()))
+        else:
+            c.execute("""
+                INSERT INTO waf_lista_branca (nome_dev, ip, dispositivo_id, modo_teste_ativo, criado_em)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (nome_dev, ip or None, None, modo_teste_ativo, _now()))
+
+
+def remove_from_whitelist(entry_id: int) -> None:
+    """Remove a whitelist entry by its primary key."""
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM waf_lista_branca WHERE id = %s", (entry_id,))
+
+
+def is_ip_whitelisted(ip: str, dispositivo_id: str = '') -> bool:
+    """Return True if IP or device fingerprint is in the whitelist with modo_teste_ativo."""
+    with _conn() as c:
+        if ip:
+            c.execute(
+                "SELECT 1 FROM waf_lista_branca WHERE ip = %s AND modo_teste_ativo = TRUE",
+                (ip,)
+            )
+            if c.fetchone():
+                return True
+        if dispositivo_id:
+            c.execute(
+                "SELECT 1 FROM waf_lista_branca WHERE dispositivo_id = %s AND modo_teste_ativo = TRUE",
+                (dispositivo_id,)
+            )
+            if c.fetchone():
+                return True
+    return False
+
+
+def auto_register_staff_whitelist(nome_dev: str, ip: str, dispositivo_id: str) -> bool:
+    """Auto-register (or refresh) a staff member's derived device fingerprint in the
+    WAF whitelist when they log in successfully.
+
+    - If an entry with the same ``dispositivo_id`` already exists it is refreshed
+      (IP + ultimo_login updated, modo_teste_ativo kept TRUE).
+    - Otherwise a new row is inserted.
+
+    Returns True if a new entry was created, False if an existing one was refreshed.
+    """
+    if not dispositivo_id:
+        return False
+    now = _now()
+    with _lock, _conn() as c:
+        c.execute(
+            "SELECT id FROM waf_lista_branca WHERE dispositivo_id = %s",
+            (dispositivo_id,)
+        )
+        existing = c.fetchone()
+        if existing:
+            c.execute("""
+                UPDATE waf_lista_branca
+                SET ip = %s, ultimo_login = %s, modo_teste_ativo = TRUE
+                WHERE dispositivo_id = %s
+            """, (ip or None, now, dispositivo_id))
+            return False
+        else:
+            c.execute("""
+                INSERT INTO waf_lista_branca
+                    (nome_dev, ip, dispositivo_id, modo_teste_ativo, ultimo_login, criado_em)
+                VALUES (%s, %s, %s, TRUE, %s, %s)
+            """, (nome_dev, ip or None, dispositivo_id, now, now))
+            return True
+
+
+def sync_waf_bans_from_history() -> dict:
+    """Scan suspicious_requests and waf_warnings to auto-import malicious IPs
+    into waf_bans with intelligently detected reasons.
+    Returns {'imported': N, 'skipped': N, 'no_history': [ips]}."""
+    _PATH_TRAVERSAL_RE = re.compile(r'\.\.|%2e%2e|%252e|etc/passwd|etc%2fpasswd', re.I)
+    _ENV_RE            = re.compile(r'\.env|config\.php|wp-config|secrets?\b', re.I)
+    _SCAN_RE           = re.compile(r'phpinfo|autodiscover|\.git|\.svn|sqlmap', re.I)
+    imported = 0
+    skipped  = 0
+    no_hist  = []
+    with _conn() as c:
+        c.execute("""
+            SELECT ip, url_path
+            FROM suspicious_requests
+            WHERE ip NOT IN (SELECT ip FROM waf_bans)
+            GROUP BY ip, url_path
+            ORDER BY ip
+        """)
+        rows = c.fetchall()
+
+    ip_url: dict[str, str] = {}
+    for r in rows:
+        ip_url.setdefault(r['ip'], r['url_path'])
+
+    now = _now()
+    for ip, sample_url in ip_url.items():
+        if _PATH_TRAVERSAL_RE.search(sample_url):
+            reason = 'Exploração de vulnerabilidade via Path Traversal'
+        elif _ENV_RE.search(sample_url):
+            reason = 'Tentativa de vazamento de credenciais (.env / arquivos de configuração)'
+        elif _SCAN_RE.search(sample_url):
+            reason = 'Scanner Automatizado de Vulnerabilidades (Bot/Robô)'
+        else:
+            reason = 'Atividade suspeita detectada automaticamente'
+            no_hist.append(ip)
+        try:
+            with _lock, _conn() as c:
+                c.execute("""
+                    INSERT INTO waf_bans (ip, reason, url_path, method, ua, ts)
+                    VALUES (%s, %s, %s, 'GET', '[Sync automático de dossiês]', %s)
+                    ON CONFLICT (ip) DO NOTHING
+                """, (ip, reason, sample_url[:500], now))
+                if c.rowcount:
+                    imported += 1
+                else:
+                    skipped += 1
+        except Exception:
+            skipped += 1
+    return {'imported': imported, 'skipped': skipped, 'no_history': no_hist}
+
+
+def unban_ip_waf(ip: str) -> None:
+    """Lift a WAF ban immediately."""
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM waf_bans WHERE ip=%s", (ip,))
+
+
 # ── Brute-force incident forensics ───────────────────────────────────────
 
 def record_brute_force_incident(ip: str, username: str, failures: int,
@@ -1001,12 +1474,56 @@ def record_brute_force_incident(ip: str, username: str, failures: int,
     return row[0] if row else 0
 
 
+def get_linked_ips_for_ip(ip: str) -> list:
+    """Return other IPs that share the same hardware canvas fingerprint as the given IP.
+    Cross-references brute_force_incidents for VPN evasion detection in the
+    suspicious-requests accordion view."""
+    with _conn() as c:
+        c.execute(
+            "SELECT DISTINCT canvas_fp FROM brute_force_incidents "
+            "WHERE ip = %s AND canvas_fp IS NOT NULL AND canvas_fp != ''",
+            (ip,)
+        )
+        fps = [row['canvas_fp'] for row in c.fetchall()]
+    if not fps:
+        return []
+    linked: list = []
+    seen: set = set()
+    for fp in fps:
+        for other in get_linked_ips_by_fingerprint(fp, exclude_ip=ip):
+            if other['ip'] not in seen:
+                seen.add(other['ip'])
+                linked.append(other['ip'])
+    return linked
+
+
+def get_linked_ips_by_fingerprint(canvas_fp: str, exclude_ip: str = '') -> list:
+    """Return distinct IPs that share the same canvas fingerprint (same physical device,
+    different external IP — indicates VPN rotation or NAT change)."""
+    if not canvas_fp:
+        return []
+    with _conn() as c:
+        c.execute(
+            "SELECT ip, geo_country, geo_city, geo_isp, geo_is_proxy, "
+            "operating_system, browser_name, MIN(ts) AS first_seen, MAX(ts) AS last_seen, "
+            "COUNT(*) AS incident_count "
+            "FROM brute_force_incidents "
+            "WHERE canvas_fp = %s AND ip != %s "
+            "GROUP BY ip, geo_country, geo_city, geo_isp, geo_is_proxy, operating_system, browser_name "
+            "ORDER BY last_seen DESC",
+            (canvas_fp, exclude_ip or ''),
+        )
+        return [dict(r) for r in c.fetchall()]
+
+
 def update_incident_fingerprint(ip: str, canvas_fp: str,
                                 webrtc_ip: str, hardware_json: str,
                                 hardware_ram: str = '', hardware_gpu: str = '',
                                 hardware_cores: str = '', screen_resolution: str = ''):
     """Update the most recent brute-force incident for this IP with
-    forensic fingerprint data sent from the locked browser."""
+    forensic fingerprint data sent from the locked browser.
+    Auto-links the incident to any existing dossier that shares the same hardware fingerprint
+    (same device, different external IP — VPN rotation / IP change detected)."""
     with _lock, _conn() as c:
         c.execute("""
             UPDATE brute_force_incidents
@@ -1033,6 +1550,25 @@ def update_incident_fingerprint(ip: str, canvas_fp: str,
             (screen_resolution or '')[:32],
             ip,
         ))
+
+    # ── Auto-report: same hardware fingerprint detected on a different IP ──
+    if canvas_fp:
+        linked = get_linked_ips_by_fingerprint(canvas_fp, exclude_ip=ip)
+        if linked:
+            linked_ip_list = ', '.join(r['ip'] for r in linked)
+            detail = (
+                f"HARDWARE VINCULADO AUTOMATICAMENTE — IP {ip} detectado com o mesmo "
+                f"fingerprint de hardware (canvas_fp={canvas_fp[:16]}…) já registrado nos "
+                f"IPs: {linked_ip_list}. Possível troca de IP/VPN pelo mesmo dispositivo físico."
+            )
+            with _lock, _conn() as c:
+                c.execute("""
+                    INSERT INTO audit_log (admin_id, admin_name, role, action, detail, ts, ip)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """, (
+                    0, 'SISTEMA', 'system', 'hardware_link_detected',
+                    detail[:1000], _now(), ip,
+                ))
 
 
 def get_brute_force_incidents(limit: int = 200) -> list:
@@ -1086,8 +1622,17 @@ def clear_suspicious_requests():
         c.execute("DELETE FROM suspicious_requests")
 
 
+def delete_suspicious_by_ip(ip: str) -> int:
+    """Delete ALL suspicious_requests records for a specific IP.
+    Returns the number of rows deleted."""
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM suspicious_requests WHERE ip = %s", (ip,))
+        return c.rowcount
+
+
 def get_all_events_by_ip(ip: str) -> dict:
-    """Collect every logged event tied to a specific IP — used for dossier export."""
+    """Collect every logged event tied to a specific IP — used for dossier export.
+    Also includes linked IPs (same hardware fingerprint, different external IP)."""
     with _conn() as c:
         c.execute(
             "SELECT id, ts, attack_type, method, url_path, count, "
@@ -1115,10 +1660,23 @@ def get_all_events_by_ip(ip: str) -> dict:
         )
         audit_entries = [dict(r) for r in c.fetchall()]
 
+    # Resolve linked IPs via shared canvas fingerprint
+    canvas_fps = list({r['canvas_fp'] for r in brute_force if r.get('canvas_fp')})
+    linked_ips: list = []
+    if canvas_fps:
+        seen: set = set()
+        for fp in canvas_fps:
+            for row in get_linked_ips_by_fingerprint(fp, exclude_ip=ip):
+                if row['ip'] not in seen:
+                    seen.add(row['ip'])
+                    row['canvas_fp'] = fp
+                    linked_ips.append(row)
+
     return {
         'suspicious':   suspicious,
         'brute_force':  brute_force,
         'audit':        audit_entries,
+        'linked_ips':   linked_ips,
     }
 
 
@@ -1253,17 +1811,29 @@ def list_admins():
     with _conn() as c:
         c.execute("SELECT * FROM admins ORDER BY id")
         rows = c.fetchall()
-    return sorted(
-        [dict(r) for r in rows],
-        key=lambda r: (ROLE_LEVEL.get(r['role'], 99), r['username'])
-    )
+    result = []
+    for row in rows:
+        item = dict(row)
+        item['permissions'] = {
+            'accessDevMode': bool(item.get('access_dev_mode')),
+            'manageGateways': bool(item.get('manage_gateways')),
+        }
+        result.append(item)
+    return sorted(result, key=lambda r: (ROLE_LEVEL.get(r['role'], 99), r['username']))
 
 
 def get_admin_by_id(admin_id: int):
     with _conn() as c:
         c.execute("SELECT * FROM admins WHERE id=%s", (admin_id,))
         row = c.fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    result = dict(row)
+    result['permissions'] = {
+        'accessDevMode': bool(result.get('access_dev_mode')),
+        'manageGateways': bool(result.get('manage_gateways')),
+    }
+    return result
 
 
 def create_admin(username: str, password: str, role: str,
@@ -1326,6 +1896,128 @@ def delete_admin(admin_id: int):
         c.execute("DELETE FROM admins WHERE id=%s", (admin_id,))
 
 
+ADMIN_PERMISSION_COLUMNS = {
+    'accessDevMode': 'access_dev_mode',
+    'manageGateways': 'manage_gateways',
+}
+
+
+def get_admin_permissions(admin_id: int) -> dict:
+    with _conn() as c:
+        c.execute(
+            "SELECT access_dev_mode, manage_gateways FROM admins WHERE id=%s",
+            (admin_id,)
+        )
+        row = c.fetchone()
+    if not row:
+        return {'accessDevMode': False, 'manageGateways': False}
+    return {
+        'accessDevMode': bool(row['access_dev_mode']),
+        'manageGateways': bool(row['manage_gateways']),
+    }
+
+
+def has_admin_permission(admin, permission: str) -> bool:
+    """Check the per-user permission flags, never the static role alone."""
+    if not admin:
+        return False
+    column = ADMIN_PERMISSION_COLUMNS.get(permission, permission)
+    return bool(admin.get(column, False))
+
+
+def ensure_owner_permissions(admin_id: int) -> None:
+    """Owners retain both built-in controls even when their row predates flags."""
+    with _lock, _conn() as c:
+        c.execute(
+            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE "
+            "WHERE id=%s AND role='owner'",
+            (admin_id,)
+        )
+
+
+def update_admin_permission(admin_id: int, permission: str, enabled: bool) -> dict | None:
+    """Persist one allowlisted permission and return the resulting permission map."""
+    column = ADMIN_PERMISSION_COLUMNS.get(permission)
+    if not column:
+        return None
+    with _lock, _conn() as c:
+        c.execute(
+            f"UPDATE admins SET {column}=%s WHERE id=%s",
+            (bool(enabled), admin_id)
+        )
+        if c.rowcount != 1:
+            return None
+    return get_admin_permissions(admin_id)
+
+
+# ── Gateway change approval queue ─────────────────────────────────────────
+
+def create_gateway_change_request(admin_id: int, admin_name: str, admin_role: str,
+                                  scope: str, before_cfg: dict,
+                                  proposed_cfg: dict) -> int:
+    """Queue a sensitive gateway change without touching the live config."""
+    with _lock, _conn() as c:
+        c.execute(
+            "INSERT INTO gateway_change_requests "
+            "(admin_id, admin_name, admin_role, scope, before_cfg, proposed_cfg, created_at) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (admin_id, admin_name, admin_role, scope,
+             json.dumps(before_cfg, ensure_ascii=False),
+             json.dumps(proposed_cfg, ensure_ascii=False), _now())
+        )
+        return c.fetchone()['id']
+
+
+def get_pending_gateway_change_requests() -> list:
+    with _conn() as c:
+        c.execute(
+            "SELECT * FROM gateway_change_requests WHERE status='pending' "
+            "ORDER BY created_at ASC"
+        )
+        rows = c.fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item['before_cfg'] = json.loads(item['before_cfg'])
+        item['proposed_cfg'] = json.loads(item['proposed_cfg'])
+        item['created_label'] = fmt_ts(item['created_at'])
+        result.append(item)
+    return result
+
+
+def get_gateway_change_request(request_id: int) -> dict | None:
+    with _conn() as c:
+        c.execute("SELECT * FROM gateway_change_requests WHERE id=%s", (request_id,))
+        row = c.fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    item['before_cfg'] = json.loads(item['before_cfg'])
+    item['proposed_cfg'] = json.loads(item['proposed_cfg'])
+    item['created_label'] = fmt_ts(item['created_at'])
+    return item
+
+
+def decide_gateway_change_request(request_id: int, status: str,
+                                  decided_by: str, note: str = None) -> dict | None:
+    if status not in ('approved', 'rejected'):
+        raise ValueError('Status de decisão inválido')
+    with _lock, _conn() as c:
+        c.execute(
+            "UPDATE gateway_change_requests SET status=%s, decided_at=%s, "
+            "decided_by=%s, decision_note=%s "
+            "WHERE id=%s AND status='pending' RETURNING *",
+            (status, _now(), decided_by, note, request_id)
+        )
+        row = c.fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    item['before_cfg'] = json.loads(item['before_cfg'])
+    item['proposed_cfg'] = json.loads(item['proposed_cfg'])
+    return item
+
+
 # ── Activity log ──────────────────────────────────────────────────────────
 
 def _owner_is_invisible(admin_id: int) -> bool:
@@ -1356,8 +2048,13 @@ def get_activity_log(limit: int = 300, viewer_role: str = 'owner'):
                 "SELECT * FROM activity_log ORDER BY ts DESC LIMIT %s", (limit,)
             )
         else:
+            # Non-owners: hide manually-suppressed entries AND any private-room
+            # deletion records (owner-only, confidential by design).
             c.execute(
-                "SELECT * FROM activity_log WHERE hidden_by IS NULL ORDER BY ts DESC LIMIT %s",
+                "SELECT * FROM activity_log "
+                "WHERE hidden_by IS NULL "
+                "  AND action NOT LIKE '%%conversa privada%%' "
+                "ORDER BY ts DESC LIMIT %s",
                 (limit,)
             )
         rows = c.fetchall()
@@ -1569,34 +2266,17 @@ def clear_all_failed_urls():
         c.execute("DELETE FROM failed_urls")
 
 
-def get_allow_admin_gateway() -> bool:
-    """Retorna True se o Owner permitiu que Admins acessem o painel de gateway."""
-    with _conn() as c:
-        c.execute("SELECT value FROM admin_settings WHERE key='allow_admin_gateway'")
-        row = c.fetchone()
-    return (row['value'] == '1') if row else False
-
-
-def set_allow_admin_gateway(enabled: bool):
-    """Owner-only: habilita/desabilita o acesso de Admins ao painel de gateway."""
-    with _lock, _conn() as c:
-        c.execute(
-            "INSERT INTO admin_settings(key, value) VALUES('allow_admin_gateway',%s) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            ('1' if enabled else '0',)
-        )
-
-
-def _notif_visible(notif_dict: dict, viewer_role: str, allow_admin_gw: bool = False) -> bool:
+def _notif_visible(notif_dict: dict, viewer_role: str,
+                   manage_gateways: bool = False) -> bool:
     d = notif_dict
     if d.get('type') == 'security' and viewer_role != 'owner':
         return False
-    # Notificações financeiras ('payment') → Owner sempre vê;
-    # Admin vê apenas se allow_admin_gateway=True; Mod/Helper nunca veem.
+    # Notificações financeiras ('payment') → Owner sempre vê; qualquer membro
+    # com a permissão individual de gateway também pode vê-las.
     if d.get('type') == 'payment':
         if viewer_role == 'owner':
             return True
-        if viewer_role == 'admin' and allow_admin_gw:
+        if manage_gateways:
             return True
         return False
     min_role = d.get('min_role') or 'admin'
@@ -1607,7 +2287,7 @@ def _notif_visible(notif_dict: dict, viewer_role: str, allow_admin_gw: bool = Fa
 
 def get_notifications(limit: int = 20, viewer_role: str = 'owner',
                       admin_id=None, unread_only: bool = False,
-                      allow_admin_gw: bool = False):
+                      manage_gateways: bool = False):
     with _conn() as c:
         c.execute(
             "SELECT * FROM notifications ORDER BY ts DESC LIMIT %s", (limit,)
@@ -1616,7 +2296,7 @@ def get_notifications(limit: int = 20, viewer_role: str = 'owner',
     result = []
     for r in rows:
         d = dict(r)
-        if not _notif_visible(d, viewer_role, allow_admin_gw):
+        if not _notif_visible(d, viewer_role, manage_gateways):
             continue
         # Skip notifications the user has individually cleared
         if admin_id is not None:
@@ -1644,14 +2324,14 @@ def mark_notification_read(notif_id: int, admin_id: int):
 
 
 def count_unread_notifications(admin_id: int, viewer_role: str = 'owner',
-                               allow_admin_gw: bool = False) -> int:
+                               manage_gateways: bool = False) -> int:
     with _conn() as c:
         c.execute("SELECT type, read_by, min_role, cleared_by FROM notifications")
         rows = c.fetchall()
     count = 0
     for r in rows:
         d = dict(r)
-        if not _notif_visible(d, viewer_role, allow_admin_gw):
+        if not _notif_visible(d, viewer_role, manage_gateways):
             continue
         # Notifications cleared by this admin do not count
         cleared = json.loads(d.get('cleared_by') or '[]')
@@ -2095,6 +2775,27 @@ def set_internal_access_helper(enabled: bool):
         )
 
 
+def get_version_override() -> str | None:
+    """Retorna versão customizada salva pelo admin, ou None se não definida."""
+    with _conn() as c:
+        c.execute("SELECT value FROM admin_settings WHERE key='version_override'")
+        row = c.fetchone()
+    return row['value'] if row and row['value'] else None
+
+
+def set_version_override(version: str | None):
+    """Salva (ou remove) versão customizada. Passa None para limpar."""
+    with _lock, _conn() as c:
+        if version:
+            c.execute(
+                "INSERT INTO admin_settings(key, value) VALUES('version_override',%s) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (version,)
+            )
+        else:
+            c.execute("DELETE FROM admin_settings WHERE key='version_override'")
+
+
 def clear_channel_messages(channel: str):
     _ensure_chat_table()
     with _lock, _conn() as c:
@@ -2153,7 +2854,9 @@ def get_others_seen_up_to(key: str, admin_id: int) -> int:
 # ── PIX Payments ──────────────────────────────────────────────────────────
 
 def save_pix_payment(payment_id: str, gateway_id: str, amount: float, expires_at: str = None,
-                     nickname: str = None, avatar_id: str = None, donor_token: str = None):
+                     nickname: str = None, avatar_id: str = None, donor_token: str = None,
+                     font_id: str = 'default', text_effect: str = 'solid',
+                     name_color: str = '#f3f4f6', currency: str = 'BRL'):
     """nickname/avatar_id/donor_token são opcionais — usados apenas nos fluxos de
     cartão (Stripe/PayPal) onde o apelido é coletado ANTES do redirect, já que o
     navegador sai do site e pode não voltar à mesma aba. Isso permite que
@@ -2161,12 +2864,22 @@ def save_pix_payment(payment_id: str, gateway_id: str, amount: float, expires_at
     o gateway confirmar o pagamento via webhook."""
     if expires_at is None:
         expires_at = _now(datetime.now() + timedelta(minutes=10))
+    currency = str(currency or 'BRL').upper()
+    if currency not in {'BRL', 'USD'}:
+        currency = 'BRL'
     with _lock, _conn() as c:
         c.execute(
-            "INSERT INTO pix_payments(payment_id, gateway_id, amount, status, ts, expires_at, nickname, avatar_id, donor_token) "
-            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            (payment_id, gateway_id, amount, 'pending', _now(), expires_at,
-             (nickname[:40] if nickname else None), avatar_id, donor_token)
+            "INSERT INTO pix_payments(payment_id, gateway_id, amount, currency, status, ts, expires_at, "
+            "nickname, avatar_id, donor_token, font_id, text_effect, name_color) "
+            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (payment_id, gateway_id, amount, currency, 'pending', _now(), expires_at,
+             (nickname[:40] if nickname else None), avatar_id, donor_token,
+             font_id if font_id in {'default', 'inter', 'orbitron', 'rajdhani',
+                                     'space-grotesk', 'press-start', 'bangers',
+                                     'roboto-mono', 'montserrat', 'gothic', 'script',
+                                     'pixel'} else 'default',
+              text_effect if text_effect in {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'} else 'solid',
+              name_color.lower() if re.fullmatch(r'#[0-9a-fA-F]{6}', str(name_color or '')) else '#f3f4f6')
         )
 
 
@@ -2217,6 +2930,47 @@ def update_pix_payment_status(payment_id: str, status: str, updated_by: str):
         )
 
 
+def cancel_pix_payment(payment_id: str, updated_by: str = 'supporter') -> str:
+    """Cancel a pending PIX order when the supporter changes the amount.
+
+    A client can request cancellation, but it can never cancel a payment that
+    was already approved/paid. This protects the confirmation flow when a
+    supporter clicks the back button after paying.
+    """
+    with _lock, _conn() as c:
+        c.execute(
+            "SELECT status, expires_at FROM pix_payments WHERE payment_id=%s",
+            (payment_id,)
+        )
+        row = c.fetchone()
+        if not row:
+            return 'not_found'
+
+        status = row['status']
+        if status in ('paid', 'approved', 'expired', 'cancelled'):
+            return status
+
+        expires_at = row['expires_at']
+        if expires_at:
+            try:
+                if datetime.now() > datetime.fromisoformat(str(expires_at)):
+                    c.execute(
+                        "UPDATE pix_payments SET status='expired', updated_at=%s, updated_by=%s "
+                        "WHERE payment_id=%s AND status='pending'",
+                        (_now(), updated_by, payment_id)
+                    )
+                    return 'expired'
+            except Exception:
+                pass
+
+        c.execute(
+            "UPDATE pix_payments SET status='cancelled', updated_at=%s, updated_by=%s "
+            "WHERE payment_id=%s AND status='pending'",
+            (_now(), updated_by, payment_id)
+        )
+        return 'cancelled' if c.rowcount else 'pending'
+
+
 def fulfill_pix_payment(payment_id: str, updated_by: str) -> dict | None:
     """Handler global de fulfillment (Item 3): marca o pagamento como 'paid' e,
     se um nickname/avatar já foi capturado para ele (fluxos de cartão que
@@ -2255,10 +3009,16 @@ def fulfill_pix_payment(payment_id: str, updated_by: str) -> dict | None:
     if not nickname:
         return None  # sem apelido pré-coletado — aguarda o fluxo client-side
     avatar_id = payment_row.get('avatar_id') or 'm_1'
+    font_id = payment_row.get('font_id') or 'default'
+    text_effect = payment_row.get('text_effect') or 'solid'
+    name_color = payment_row.get('name_color') or '#f3f4f6'
     token = payment_row.get('donor_token') or str(_uuid.uuid4())
     amount = float(payment_row.get('amount', 0))
     try:
-        result = register_donation(nickname, avatar_id, amount, token, payment_id=payment_id)
+        result = register_donation(nickname, avatar_id, amount, token,
+                                    payment_id=payment_id, font_id=font_id,
+                                    text_effect=text_effect, name_color=name_color,
+                                    currency=payment_row.get('currency', 'BRL'))
         result['avatar_id'] = avatar_id
         result['amount'] = amount
         return result

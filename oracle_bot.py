@@ -9,11 +9,29 @@ STACKS = [
 ]
 historico_logs = []
 lock_bot = threading.Lock()
+STATUS_FILE = "bot_status.json"
+
+def salvar_estado(rodando):
+    """Grava o estado atual do bot em um arquivo local para sobreviver ao F5 e Reboots"""
+    try:
+        with open(STATUS_FILE, "w") as f:
+            json.dump({"rodando": rodando}, f)
+    except:
+        pass
+
+def ler_estado():
+    """Lê se o bot deveria estar rodando ou não"""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r") as f:
+                return json.load(f).get("rodando", False)
+        except:
+            return False
+    return False
 
 def adicionar_log(texto):
     global historico_logs
     linha = f"[{datetime.now().strftime('%H:%M:%S')}] {texto}"
-    # Limpa as tags HTML para o print real do terminal do servidor
     historico_logs.append(linha)
     if len(historico_logs) > 40: historico_logs.pop(0)
 
@@ -26,63 +44,52 @@ def atualizar_ultima_linha_log(texto):
         historico_logs.append(linha)
 
 def atualizar_status_na_tentativa(ad_num, status):
-    """Localiza a linha da tentativa e acopla o status nela com efeito Laranja Neon"""
     global historico_logs
     for i in range(len(historico_logs) - 1, -1, -1):
         if "Tentativa #" in historico_logs[i] and f"AD-{ad_num}" in historico_logs[i]:
             partes = historico_logs[i].split(" | ")
             prefixo_limpo = partes[0]
-            
-            # Efeito Laranja Neon com sombra projetada de alta intensidade
             estilo_laranja = "color: #FF8C00; font-weight: bold; text-shadow: 0 0 8px rgba(255, 140, 0, 0.6), 0 0 15px rgba(255, 140, 0, 0.4);"
-            
             historico_logs[i] = f"{prefixo_limpo} | AD-{ad_num} ⚙️ Status: <span style='{estilo_laranja}'>{status}</span>"
             break
 
-
 def contagem_regressiva_vermelha(segundos, mensagem_prefixo):
     global historico_logs
-    
-    # Efeito Vermelho Neon vibrante cobrindo toda a extensão da string
     estilo_vermelho = "color: #FF0000; font-weight: bold; text-shadow: 0 0 8px rgba(255, 0, 0, 0.6), 0 0 15px rgba(255, 0, 0, 0.4);"
-    
     texto_base = f"<span style='{estilo_vermelho}'>⏱️ {mensagem_prefixo}: {segundos}s restantes...</span>"
     adicionar_log(texto_base)
     
     for i in range(segundos - 1, 0, -1):
+        if not ler_estado(): break # Interrompe imediatamente se o bot for parado
         time.sleep(1)
         texto_dinamico = f"<span style='{estilo_vermelho}'>⏱️ {mensagem_prefixo}: {i}s restantes...</span>"
         atualizar_ultima_linha_log(texto_dinamico)
         
     time.sleep(1)
     if historico_logs:
-        historico_logs.pop(-1) # Apaga o contador ao terminar
+        historico_logs.pop(-1)
 
 def pegar_logs():
     global historico_logs
     return "\n".join(historico_logs) if historico_logs else "[SISTEMA] Aguardando comando..."
 
-# --- SISTEMA DE ENVIO DE EMBEDS COM REDUNDÂNCIA INFALÍVEL ---
 def enviar_discord_embed(payload):
     def post_isolado():
         contexto = ssl._create_unverified_context()
         req_data = json.dumps(payload).encode('utf-8')
-        
         try:
             req = urllib.request.Request(DISCORD_WEBHOOK, data=req_data, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5, context=contexto): return
         except: pass
-        
         try:
             url_alt = DISCORD_WEBHOOK.replace("discord.com", "discordapp.com")
             req = urllib.request.Request(url_alt, data=req_data, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5, context=contexto): pass
         except Exception as e: print(f"[Discord Erro] {e}")
-
     threading.Thread(target=post_isolado, daemon=True).start()
 
 def validar_e_montar_config():
-    adicionar_log("[🔎 DIAGNÓSTICO] Verificando chaves de ambiente atualizadas...")
+    adicionar_log("[🔎 DIAGNÓSTICO] Verificando chaves de ambiente...")
     fpt = os.environ.get("OCI_FINGERPRINT", "").strip()
     key = os.environ.get("OCI_PRIVATE_KEY", "").strip()
     if not fpt or not key:
@@ -91,11 +98,9 @@ def validar_e_montar_config():
     key = key.replace("\\n", "\n").replace(" ", "\n")
     key = key.replace("BEGIN\nRSA\nPRIVATE\nKEY", "BEGIN RSA PRIVATE KEY").replace("END\nRSA\nPRIVATE\nKEY", "END RSA PRIVATE KEY")
     key = key.replace("BEGIN\nPRIVATE\nKEY", "BEGIN PRIVATE KEY").replace("END\nPRIVATE\nKEY", "END PRIVATE KEY")
-    
     if not ("-----BEGIN RSA PRIVATE KEY-----" in key or "-----BEGIN PRIVATE KEY-----" in key):
-        adicionar_log("❌ [CRÍTICO] Falta o cabeçalho '-----BEGIN PRIVATE KEY-----'!")
+        adicionar_log("❌ [CRÍTICO] Falta o cabeçalho correto da chave privada!")
         return None
-
     config = {"user": os.environ.get("OCI_USER_OCID"), "fingerprint": fpt, "key_content": key, "tenancy": os.environ.get("OCI_TENANCY_OCID"), "region": os.environ.get("OCI_REGION", "us-ashburn-1")}
     try:
         oci.config.validate_config(config)
@@ -106,37 +111,48 @@ def validar_e_montar_config():
         return None
 
 def iniciar_auto_ping():
-    time.sleep(30)
+    time.sleep(10)
     url = os.environ.get("SPACE_URL")
     if not url: return
-    while True:
+    while ler_estado():
         try: requests.get(url, timeout=10)
         except: pass
         time.sleep(600)
 
 def loop_automacao_oracle():
+    if not ler_estado():
+        return
+        
     cfg = validar_e_montar_config()
     if not cfg:
         adicionar_log("🛑 [PARADO] Corrija os Secrets para liberar o loop.")
+        salvar_estado(False)
         return
 
     enviar_discord_embed({
         "embeds": [{
-            "title": "🤖 Robô OCI - Inteligência Anti-Bloqueio Ativada",
-            "description": "Script atualizado e rodando de forma oci-safe e assíncrona no Hugging Face.",
-            "color": 3447003,
+            "title": "⚙️ SISTEMA DE AUTOMAÇÃO OCI | INICIALIZADO",
+            "description": "O motor de monitoramento assíncrono foi ativado com sucesso e já está operando em modo de alta resiliência no Hugging Face.",
+            "color": 23293,  # Azul Corporativo Premium
             "fields": [
-                { "name": "⏱️ Tempo Base", "value": "60 segundos", "inline": True },
-                { "name": "📍 Região", "value": cfg['region'], "inline": True }
+                { "name": "⏱️ INTERVALO PADRÃO", "value": "`60 segundos`", "inline": True },
+                { "name": "📍 REGIÃO ALVO", "value": f"`{cfg['region']}`", "inline": True },
+                { "name": "🛡️ MECANISMO", "value": "`Anti-Bloqueio Ativo`", "inline": True }
             ],
-            "footer": { "text": "Modo Resiliente Ativado" }
+            "footer": { 
+                "text": "OCI Core Manager • Monitoramento Persistente"
+            },
+            "timestamp": datetime.utcnow().isoformat()
         }]
     })
 
     try:
         rm_client = oci.resource_manager.ResourceManagerClient(cfg)
         compute_client = oci.core.ComputeClient(cfg)
-    except: return
+    except Exception as e:
+        adicionar_log(f"❌ Erro ao criar clientes OCI: {e}")
+        salvar_estado(False)
+        return
 
     adicionar_log("[🛡️ TRAVA] Verificando instâncias criadas...")
     try:
@@ -152,13 +168,15 @@ def loop_automacao_oracle():
                         "color": 15158332
                     }]
                 })
+                salvar_estado(False)
                 return
-    except Exception as e: adicionar_log(f"[🛡️ TRAVA] Erro ao checar instâncias: {e}")
+    except Exception as e: 
+        adicionar_log(f"[🛡️ TRAVA] Erro ao checar instâncias: {e}")
 
     adicionar_log("[SISTEMA 🟢] Nenhuma máquina ativa detectada. Conexão liberada.")
     tentativa, esp_padrao, esp_erro = 1, 60, 60
 
-    while True:
+    while ler_estado():
         idx = (tentativa - 1) % 3
         ad_num = idx + 1
         adicionar_log(f"🔄 Tentativa #{tentativa} | AD-{ad_num}")
@@ -170,7 +188,7 @@ def loop_automacao_oracle():
             job_id = rm_client.create_job(details).data.id
             esp_erro = esp_padrao
             
-            while True:
+            while ler_estado():
                 status = rm_client.get_job(job_id).data.lifecycle_state
                 atualizar_status_na_tentativa(ad_num, status)
                 
@@ -185,25 +203,18 @@ def loop_automacao_oracle():
                             "fields": [
                                 { "name": "📊 Total de Tentativas", "value": str(tentativa), "inline": True },
                                 { "name": "📍 Local", "value": f"AD-{ad_num}", "inline": True }
-                            ],
-                            "footer": { "text": "Acesse o painel da OCI para pegar o IP" }
+                            ]
                         }]
                     })
+                    salvar_estado(False)
                     return
                 elif status in ["FAILED", "CANCELED"]:
                     adicionar_log(f"❌ Rejeitado: O Job terminou em {status} (Out of Capacity).")
-                    enviar_discord_embed({
-                        "embeds": [{
-                            "title": f"❌ Falha na Tentativa #{tentativa} (AD-{ad_num})",
-                            "description": "Recurso rejeitado pelo servidor da Oracle por falta de estoque (Out of Capacity).",
-                            "color": 15158332,
-                            "footer": { "text": "Rotacionando para o próximo AD..." }
-                        }]
-                    })
                     break
                 
                 contagem_regressiva_vermelha(30, f"Aguardando atualização do status AD-{ad_num}")
             
+            if not ler_estado(): break
             contagem_regressiva_vermelha(120, "[PREVENÇÃO] Aguardando descanso pós-falha")
             tentativa += 1
             continue
@@ -236,9 +247,23 @@ def reiniciar_bot_oracle():
     with lock_bot:
         historico_logs.clear()
         adicionar_log("[🔄 REBOOT] Forçando reinicialização do sistema...")
+        salvar_estado(True)  # Mantém o status persistido como ATIVO no JSON
         threading.Thread(target=loop_automacao_oracle, daemon=True).start()
     return "Sistema reiniciado com sucesso!"
 
 def ligar_bot_oracle():
-    threading.Thread(target=iniciar_auto_ping, daemon=True).start()
+    with lock_bot:
+        salvar_estado(True)  # Salva o status ativo em disco antes de disparar as threads
+        threading.Thread(target=iniciar_auto_ping, daemon=True).start()
+        threading.Thread(target=loop_automacao_oracle, daemon=True).start()
+
+def parar_bot_oracle():
+    with lock_bot:
+        salvar_estado(False) # Grava em disco que o bot deve parar
+        adicionar_log("🛑 [SISTEMA] Comando de parada recebido. Encerrando o loop...")
+    return "Bot parado com sucesso!"
+
+# --- MECANISMO WATCHDOG (SOBREVIVÊNCIA AUTOMÁTICA) ---
+# Se o container do Hugging Face sofrer reboot/sleep e o arquivo disser que o bot estava ativo, reativa sozinho!
+if ler_estado():
     threading.Thread(target=loop_automacao_oracle, daemon=True).start()

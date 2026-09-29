@@ -1,13 +1,20 @@
 import io
 import os
 import re
+import json
+import copy
 import logging
 import threading
 import time
 import random
-from apscheduler.schedulers.background import BackgroundScheduler
 import bs4  # BeautifulSoup
 import requests
+from requests.exceptions import ChunkedEncodingError as _ChunkedErr
+try:
+    from urllib3.exceptions import ProtocolError as _ProtocolErr, IncompleteRead as _IncompleteRead
+except ImportError:
+    _ProtocolErr = OSError
+    _IncompleteRead = OSError
 import urllib.parse
 from flask import Flask, jsonify, render_template, request, flash, Response, redirect, request, abort, send_file, session, g, make_response
 from media_scraper import MediaScraper
@@ -19,10 +26,56 @@ import discord_webhook as dwh
 import stats_store
 import payment_gateway as pgw
 import math
+from datetime import datetime, timedelta
 import uuid
 import colorlog
 
-__version__ = "2.2.0"
+__version__ = "2.2.1"
+
+# Fonts exposed to supporters are a server-side allowlist. The same ids are
+# used by the donation form, the ranking JSON and the CSS preview.
+DONOR_FONTS = {
+    'default':     {'label': 'Padrão', 'css': "'Segoe UI', sans-serif"},
+    'inter':       {'label': 'Inter', 'css': "'Inter', sans-serif"},
+    'orbitron':    {'label': 'Orbitron', 'css': "'Orbitron', sans-serif"},
+    'rajdhani':    {'label': 'Rajdhani', 'css': "'Rajdhani', sans-serif"},
+    'space-grotesk': {'label': 'Space Grotesk', 'css': "'Space Grotesk', sans-serif"},
+    'press-start': {'label': 'Press Start 2P', 'css': "'Press Start 2P', monospace"},
+    'bangers':     {'label': 'Bangers', 'css': "'Bangers', cursive"},
+    'roboto-mono': {'label': 'Roboto Mono', 'css': "'Roboto Mono', monospace"},
+    'montserrat':  {'label': 'Montserrat', 'css': "'Montserrat', sans-serif"},
+    'gothic':      {'label': 'Gótico', 'css': "'UnifrakturCook', serif"},
+    'script':      {'label': 'Script', 'css': "'Caveat', cursive"},
+    'pixel':       {'label': 'Pixel', 'css': "'Rubik Mono One', sans-serif"},
+}
+
+DONOR_EFFECTS = {
+    'solid':    'Sólido',
+    'gradient': 'Gradiente',
+    'neon':     'Neon',
+    'pop':      'Pop',
+    'gummy':    'Gummy',
+    'prism':    'Prism',
+}
+
+DONOR_COLORS = {
+    '#f3f4f6', '#00ff88', '#00f0ff', '#a855f7', '#ff2d95',
+    '#ffd700', '#ff7f50', '#22c55e', '#3b82f6', '#ec4899', '#f97316',
+}
+
+
+def _clean_donor_style(data: dict) -> dict:
+    """Normalize supporter style input before it reaches the data store."""
+    font_id = str(data.get('font_id', 'default')).strip().lower()
+    text_effect = str(data.get('text_effect', 'solid')).strip().lower()
+    name_color = str(data.get('name_color', '#f3f4f6')).strip().lower()
+    if font_id not in DONOR_FONTS:
+        font_id = 'default'
+    if text_effect not in DONOR_EFFECTS:
+        text_effect = 'solid'
+    if not re.fullmatch(r'#[0-9a-f]{6}', name_color):
+        name_color = '#f3f4f6'
+    return {'font_id': font_id, 'text_effect': text_effect, 'name_color': name_color}
 
 # IMPORT DO ROBÔ DA ORACLE POSICIONADO NO INÍCIO DO ARQUIVO
 import oracle_bot
@@ -67,7 +120,6 @@ scraper = MediaScraper()
 # ==============================================================================
 # ── ROTAS DO ORACLEBOT (INTEGRADAS AO SISTEMA DE ADM DO SEU SITE) ─────────────────
 # ==============================================================================
-oracle_bot.ligar_bot_oracle()
 
 @app.route('/admin/oracle')
 def painel_oracle_admin():
@@ -126,7 +178,51 @@ def oracle_reboot():
     import oracle_bot
     oracle_bot.reiniciar_bot_oracle()
     return jsonify({"status": "rebooted"})
+
+@app.route('/admin/oracle-start', methods=['POST'])
+def oracle_start():
+    session_id = request.cookies.get('admin_session')
     
+    # Mesma validação de segurança que você já usa
+    is_valid = False
+    if session_id:
+        if hasattr(admin_store, 'check_session') and admin_store.check_session(session_id):
+            is_valid = True
+        elif hasattr(admin_store, 'get_session') and admin_store.get_session(session_id):
+            is_valid = True
+        elif hasattr(admin_store, 'is_admin') and admin_store.is_admin(session_id):
+            is_valid = True
+
+    if not is_valid:
+        return jsonify({"erro": "Não autorizado"}), 403
+        
+    # Chama a função que você já tem para ligar o bot
+    oracle_bot.ligar_bot_oracle()
+    return jsonify({"status": "started"})
+
+
+@app.route('/admin/oracle-stop', methods=['POST'])
+def oracle_stop():
+    session_id = request.cookies.get('admin_session')
+    
+    # Mantém exatamente a mesma validação de segurança que você já usa nas outras rotas
+    is_valid = False
+    if session_id:
+        if hasattr(admin_store, 'check_session') and admin_store.check_session(session_id):
+            is_valid = True
+        elif hasattr(admin_store, 'get_session') and admin_store.get_session(session_id):
+            is_valid = True
+        elif hasattr(admin_store, 'is_admin') and admin_store.is_admin(session_id):
+            is_valid = True
+
+    if not is_valid:
+        return jsonify({"erro": "Não autorizado"}), 403
+        
+    # Chama a função de parada que está dentro do seu oracle_bot.py
+    import oracle_bot
+    oracle_bot.parar_bot_oracle()
+    return jsonify({"status": "stopped"})
+
 # ==============================================================================
 
 # ── Admin auth system ─────────────────────────────────────────────────────────
@@ -143,6 +239,89 @@ _SUSPICIOUS_PATTERNS = [
     (re.compile(r"(union\s+select|select\s+.+\s+from|drop\s+table|insert\s+into|delete\s+from|update\s+.+\s+set|'?\s*or\s+'?1'?\s*=\s*'?1|--\s*$|;\s*--)", re.I), 'SQL Injection'),
     (re.compile(r'(/etc/passwd|/proc/self|/var/www|\.env|\.git/config|wp-config)', re.I), 'Path Traversal'),
 ]
+
+# ── WAF: patterns that trigger an automatic IP ban (not just a log entry) ──────
+# Each entry: (compiled_regex, short_code, human_reason_pt)
+_WAF_BAN_PATTERNS = [
+    (re.compile(r'\.env(\.(production|local|backup|dev|staging|test|example))?(\b|$|[?#])', re.I),
+     'Credential Exfiltration (.env)',
+     'Exfiltração de Credenciais — Acesso forçado a arquivos de configuração sensíveis (.env / segredos do sistema)'),
+
+    (re.compile(r'(\.\./|\.\.\\|%2e%2e%2f|%2e%2e/|\.\.%2f)', re.I),
+     'Path Traversal',
+     'Varredura de Path Traversal — Tentativa de acesso não autorizado a diretórios e arquivos confidenciais do sistema'),
+
+    (re.compile(r'(wp-config\.php|/etc/passwd|/proc/self|/var/www|\.git/config|\.htpasswd|\.bash_history|/etc/shadow)', re.I),
+     'System File Probe',
+     'Sondagem de Arquivos do Sistema — Tentativa de leitura de arquivos críticos do servidor (senhas, configurações internas)'),
+
+    (re.compile(r'[?&]file=(/|%2f|\.\.|%2e%2e)', re.I),
+     'LFI via file= parameter',
+     'Inclusão Local de Arquivo (LFI) — Exploração do parâmetro file= para carregar arquivos arbitrários do servidor'),
+
+    (re.compile(r'(phpMyAdmin|phpmyadmin|PMA_|/mysql/|/adminer\.php|/db\.php)', re.I),
+     'DB Admin Scanner',
+     'Scanner de Painel de Banco de Dados — Sondagem automatizada em busca de interfaces de administração expostas'),
+
+    (re.compile(r'(\beval\b.*\(|base64_decode\s*\(|exec\s*\(|system\s*\(|passthru\s*\()', re.I),
+     'Remote Code Execution',
+     'Tentativa de Execução Remota de Código (RCE) — Injeção de payload para execução arbitrária de comandos no servidor'),
+]
+
+def _render_waf_block(ip: str, reason: str, ts: str, url_path: str,
+                      realtime: bool = False) -> 'Response':
+    """Return the WAF block screen response (403).
+
+    realtime=True  → caught in the act by the live filter right now.
+    realtime=False → IP was already on the ban list (historical ban).
+    """
+    from datetime import datetime as _dt
+    try:
+        dt = _dt.fromisoformat(ts)
+        ts_fmt = dt.strftime('%d/%m/%Y às %H:%M:%S UTC')
+    except Exception:
+        ts_fmt = ts
+    return make_response(
+        render_template('waf_block.html',
+                        attacker_ip=ip,
+                        threat_type=reason,
+                        blocked_ts=ts_fmt,
+                        blocked_url=url_path,
+                        realtime=realtime),
+        403
+    )
+
+# ── Pre-seeded WAF bans (known attackers with documented attack history) ──────
+def _seed_waf_bans():
+    """Insert known malicious IPs into the WAF ban list at startup.
+    Uses INSERT … ON CONFLICT DO NOTHING so it never overwrites a manual unban."""
+    _KNOWN_BANS = [
+        (
+            '20.125.48.163',
+            'Tentativa de exploração de vulnerabilidade via Path Traversal — '
+            'Acesso não autorizado a diretórios e arquivos confidenciais do sistema',
+            '/seed-historical',
+        ),
+        (
+            '52.240.186.21',
+            'Tentativa de vazamento de credenciais e arquivos de configuração sensíveis — '
+            'Acesso forçado a arquivos .env (segredos e configurações internas do sistema)',
+            '/.env',
+        ),
+    ]
+    try:
+        from admin_store import _conn, _now, _lock
+        with _lock, _conn() as c:
+            for ip, reason, url in _KNOWN_BANS:
+                c.execute("""
+                    INSERT INTO waf_bans (ip, reason, url_path, method, ua, ts)
+                    VALUES (%s, %s, %s, 'GET', 'seed/historical', %s)
+                    ON CONFLICT (ip) DO NOTHING
+                """, (ip, reason[:255], url, _now()))
+    except Exception as _e:
+        app_logger.warning('WAF seed skipped: %s', _e)
+
+_seed_waf_bans()
 
 # Register audit hook → fires 'admin_action' webhooks for every audit() call
 admin_store.register_audit_hook(
@@ -168,6 +347,7 @@ def inject_chat_context():
             'internal_access_mod': admin_store.get_internal_access_moderator(),
             'internal_access_helper': admin_store.get_internal_access_helper(),
             'role_meta': admin_store.ROLE_META,
+            'has_gateway_access': admin_store.has_admin_permission(admin, 'manageGateways'),
         }
     except Exception:
         return {}
@@ -300,9 +480,63 @@ def _get_admin():
         return None, None
     return admin_store.get_session(token)
 
+
+def _developer_admin():
+    """Return the authenticated admin only when developer mode is enabled for
+    this exact admin session. The signed Flask session is only a state hint;
+    the admin cookie is always revalidated against the database."""
+    admin, _ = _get_admin()
+    if not admin or not admin.get('active', True):
+        return None
+    if not admin_store.has_admin_permission(admin, 'accessDevMode'):
+        return None
+    if session.get('developer_mode_admin_id') != admin.get('id'):
+        return None
+    if not session.get('developer_mode_enabled', False):
+        return None
+    return admin
+
+
+def _developer_ui_state():
+    """Return homepage developer-control visibility and current switch state.
+
+    Turning the mode off revokes only the current session's developer
+    capabilities; it does not remove the control from an authorized admin.
+    """
+    admin, _ = _get_admin()
+    if not admin or not admin.get('active', True):
+        return None, False, False
+    if not admin_store.has_admin_permission(admin, 'accessDevMode'):
+        return None, False, False
+    enabled = _developer_admin() is not None
+    return admin, True, enabled
+
 def _get_client_ip():
     xff = request.headers.get('X-Forwarded-For', '')
     return xff.split(',')[0].strip() if xff else (request.remote_addr or '127.0.0.1')
+
+
+def _staff_device_signature(canvas_fp: str) -> str:
+    """Derive a server-keyed device identifier without storing raw fingerprint data.
+
+    The browser-generated canvas value is only an input to an HMAC.  Using a
+    keyed SHA-256 instead of a plain hash prevents someone who sees a stored
+    whitelist value from reproducing the identifier without the server secret.
+    """
+    import hashlib as _hashlib
+    import hmac as _hmac
+
+    value = str(canvas_fp or '').strip()[:128]
+    if not value:
+        return ''
+    secret = app.secret_key
+    if isinstance(secret, str):
+        secret = secret.encode('utf-8')
+    elif not isinstance(secret, bytes):
+        secret = str(secret).encode('utf-8')
+    payload = ('staff-waf-device-v2:' + value).encode('utf-8')
+    return _hmac.new(secret, payload, _hashlib.sha256).hexdigest()
+
 
 # Paths that bypass the admin auth guard (login pages + public batch report)
 _NO_AUTH_PATHS = frozenset({
@@ -314,7 +548,85 @@ _NO_AUTH_PATHS = frozenset({
     '/debug/logout',
     '/debug/report-batch',
     '/debug-info',
+    '/debug-security-screen',         # WAF block screen preview (access gated inside the view)
 })
+
+@app.before_request
+def _waf_enforce():
+    """WAF Layer 1 — runs before everything else.
+
+    1. If the IP is already banned, immediately serve the block screen.
+    2. If the request matches a critical pattern, ban the IP and serve the
+       block screen. The ban is persisted to the DB so it survives restarts.
+    """
+    path = request.path
+    # Never block: static assets, the keep-alive ping, and the debug preview
+    if (path.startswith('/static') or path == '/api/ping'
+            or path == '/debug-security-screen'):
+        return
+
+    ip = _get_client_ip()
+
+    # ── Step 1: already banned? ───────────────────────────────────────────
+    try:
+        ban = admin_store.is_ip_banned_waf(ip)
+        if ban:
+            # Check whitelist first — if this IP/device is a known dev/pentester, skip block.
+            # Derive the same keyed SHA-256 device signature used at login time so we can match
+            # the stored hash without ever persisting the raw canvas fingerprint.
+            canvas_fp = request.headers.get('X-Canvas-FP', '').strip()
+            device_sig = _staff_device_signature(canvas_fp)
+            if admin_store.is_ip_whitelisted(ip, device_sig):
+                pass  # Whitelisted — skip block
+            else:
+                return _render_waf_block(ip, ban['reason'], ban['ts'], ban['url_path'])
+    except Exception:
+        pass  # DB not ready yet — fail open, do not block legitimate traffic
+
+    # ── Step 2: scan for ban-worthy patterns (two-strikes system) ────────
+    qs = request.query_string.decode('utf-8', errors='ignore')
+    full_url = f'{path}?{qs}' if qs else path
+    ua_raw   = request.headers.get('User-Agent', '')
+
+    for pattern, short_code, human_reason in _WAF_BAN_PATTERNS:
+        if pattern.search(full_url):
+            _is_second_strike = False
+            try:
+                # Always log the suspicious request
+                admin_store.record_suspicious_request(
+                    ip, f'WAF-WARN: {short_code}', full_url[:500], request.method,
+                    ua=ua_raw, browser_name=_parse_browser(ua_raw),
+                    operating_system=_parse_os(ua_raw))
+
+                warn = admin_store.get_waf_warning(ip)
+                if warn and warn['count'] >= 1:
+                    # ── 2nd strike → permanent ban ─────────────────────────
+                    admin_store.ban_ip_waf(ip, human_reason, full_url[:500],
+                                           request.method, ua_raw)
+                    admin_store.clear_waf_warning(ip)
+                    app_logger.warning(
+                        '🚫 WAF BAN (2ª tentativa) — IP=%s  reason=%s  url=%s',
+                        ip, short_code, full_url[:120])
+                    _is_second_strike = True
+                else:
+                    # ── 1st strike → warn only, return 404 ────────────────
+                    admin_store.record_waf_warning(ip, human_reason,
+                                                   full_url[:500],
+                                                   request.method, ua_raw)
+                    app_logger.warning(
+                        '⚠️  WAF ALERTA (1ª tentativa) — IP=%s  reason=%s  url=%s',
+                        ip, short_code, full_url[:120])
+            except Exception:
+                pass
+
+            if _is_second_strike:
+                from datetime import datetime as _dt
+                ts_now = _dt.utcnow().isoformat(timespec='seconds')
+                return _render_waf_block(ip, human_reason, ts_now, full_url[:500],
+                                         realtime=True)
+            # First strike: return a plain 404 — no block screen yet
+            return make_response('Not Found', 404)
+
 
 @app.before_request
 def _detect_suspicious_request():
@@ -411,7 +723,12 @@ def _guard_admin_areas():
         admin['status'] = 'online'
     for prefix, perm in _SENSITIVE_PERM_PATHS.items():
         if path.startswith(prefix):
-            if not admin_store.has_perm(admin['role'], perm):
+            allowed = (
+                admin_store.has_admin_permission(admin, 'manageGateways')
+                if perm == 'gateway'
+                else admin_store.has_perm(admin['role'], perm)
+            )
+            if not allowed:
                 _fire_access_alert(admin, path, perm)
                 abort(404)
             break
@@ -500,7 +817,7 @@ def proxy_media():
     }
 
     try:
-        r = requests.get(url, headers=headers, stream=True, timeout=30)
+        r = requests.get(url, headers=headers, stream=True, timeout=(10, 60))
         r.raise_for_status()
 
         content_type = r.headers.get('Content-Type', 'application/octet-stream')
@@ -552,41 +869,76 @@ def force_download():
         "Origin": referer_dl.rstrip("/"),
     }
 
+    # Keep the download name safe for Content-Disposition and avoid carrying
+    # query strings or header-control characters from an untrusted URL.
+    filename = os.path.basename(urlparse(url).path) or 'download'
+    filename = re.sub(r'[\r\n"\\]', '_', filename)[:180] or 'download'
+    upstream = None
     try:
-        r = requests.get(url, headers=headers, stream=True, timeout=20)
-        r.raise_for_status()
+        # Do not buffer or persist media on the Hugging Face container. The
+        # origin response remains attached to the Flask generator below.
+        upstream = requests.get(
+            url,
+            stream=True,
+            timeout=(10, 60),
+            headers=headers,
+        )
+        upstream.raise_for_status()
+        content_type = upstream.headers.get('Content-Type', 'application/octet-stream')
+        expected_length = upstream.headers.get('Content-Length')
 
-        filename = url.split('/')[-1]
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=1024 * 32):
+                    if chunk:
+                        yield chunk
+            except (_ChunkedErr, _ProtocolErr, _IncompleteRead):
+                # The client receives a clean end-of-stream instead of a
+                # ChunkedEncodingError escaping through Gunicorn.
+                return
+            finally:
+                upstream.close()
+
+        download_headers = {
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+        }
+        if expected_length and expected_length.isdigit():
+            download_headers['X-Download-Expected-Length'] = expected_length
 
         stats_store.increment('downloads')
-        return Response(
-            r.iter_content(chunk_size=8192),
-            content_type=r.headers.get('Content-Type', 'application/octet-stream'),
-            headers={
-                'Content-Disposition': f'attachment; filename="{filename}"'
-            }
-        )
+        return Response(generate(), mimetype=content_type, headers=download_headers)
     except requests.exceptions.HTTPError as e:
-        status = e.response.status_code if e.response is not None else "?"
+        if upstream is not None:
+            upstream.close()
+        status = e.response.status_code if e.response is not None else 502
         if status not in (404, 410):
             debug_logger.log_failed_url(url, f"HTTP {status}", "http_error")
-        return f"Erro ao baixar o arquivo: HTTP {status}", 500
-    except requests.exceptions.ConnectionError as e:
-        debug_logger.log_failed_url(url, "Erro de conexão", "connection_error")
-        return f"Erro de conexão ao tentar baixar: {str(e)}", 500
-    except requests.exceptions.Timeout:
-        debug_logger.log_failed_url(url, "Timeout", "timeout")
-        return "Timeout ao tentar baixar o arquivo.", 500
+        return f"Erro ao baixar o arquivo: HTTP {status}", status if isinstance(status, int) else 502
+    except (_ChunkedErr, _ProtocolErr, _IncompleteRead, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        if upstream is not None:
+            upstream.close()
+        debug_logger.log_failed_url(url, str(e), "download_error")
+        return "Erro de conexão ao iniciar o download.", 502
     except requests.RequestException as e:
+        if upstream is not None:
+            upstream.close()
         debug_logger.log_failed_url(url, str(e), "request_error")
-        return f"Erro ao baixar o arquivo: {str(e)}", 500
+        return "Erro ao baixar o arquivo.", 502
+    except Exception as e:
+        if upstream is not None:
+            upstream.close()
+        debug_logger.log_failed_url(url, str(e), "download_error")
+        return "Erro inesperado ao baixar o arquivo.", 500
 
-      
 @app.route('/')
 def index():
     """Página principal com formulário para inserir URL"""
     stats_store.increment('views')
     payments_disabled = pgw.are_payments_disabled()
+    developer_admin, developer_available, developer_enabled = _developer_ui_state()
+    
     _VIP_DEFAULTS = [
         {'tier_id': 0, 'tier_name': 'VIP SUPREME',  'min_value': 500, 'bonus_urls': 100},
         {'tier_id': 1, 'tier_name': 'VIP DIAMANTE',  'min_value': 100, 'bonus_urls': 60},
@@ -596,15 +948,58 @@ def index():
         {'tier_id': 5, 'tier_name': 'VIP BRONZE',    'min_value': 15,  'bonus_urls': 20},
         {'tier_id': 6, 'tier_name': 'VIP ESTELAR',   'min_value': 1,   'bonus_urls': 10},
     ]
+    
     try:
         vip_tiers = admin_store.get_vip_tiers() or _VIP_DEFAULTS
         if len(vip_tiers) < 7:
             vip_tiers = _VIP_DEFAULTS
     except Exception:
         vip_tiers = _VIP_DEFAULTS
+        
     _tm = {t['tier_id']: t['bonus_urls'] for t in vip_tiers}
+
+    # 1. PEGA O USUÁRIO LOGADO E ATUALIZA SEU NIVEL VIP EM TEMPO REAL PARA O CABEÇALHO
+    user_data = None
+    if hasattr(g, 'user') and g.user:
+        # Cria uma cópia mutável para evitar travas de leitura no objeto do banco
+        user_data = dict(g.user)
+        total = float(user_data.get('total_donated') or 0.0)
+        
+        if total >= 500.00: user_data['vip_level'] = 0
+        elif total >= 100.00: user_data['vip_level'] = 1
+        elif total >= 80.00:  user_data['vip_level'] = 2
+        elif total >= 60.00:  user_data['vip_level'] = 3
+        elif total >= 35.00:  user_data['vip_level'] = 4
+        elif total >= 15.00:  user_data['vip_level'] = 5
+        elif total >= 1.00:   user_data['vip_level'] = 6
+        else: user_data['vip_level'] = 6
+
+    # 2. PEGA O RANKING DO BANCO E FORÇA O DESCONGELAMENTO DE TODOS OS BADGES DO MENUS LATERAL
+    raw_ranking = []
+    try:
+        raw_ranking = admin_store.get_ranking() or []
+    except Exception:
+        pass
+
+    updated_ranking = []
+    for r in raw_ranking:
+        r_dict = dict(r)
+        total_donated = float(r_dict.get('total_donated') or 0.0)
+        
+        if total_donated >= 500.00: r_dict['vip_level'] = 0
+        elif total_donated >= 100.00: r_dict['vip_level'] = 1
+        elif total_donated >= 80.00:  r_dict['vip_level'] = 2
+        elif total_donated >= 60.00:  r_dict['vip_level'] = 3
+        elif total_donated >= 35.00:  r_dict['vip_level'] = 4
+        elif total_donated >= 15.00:  r_dict['vip_level'] = 5
+        else: r_dict['vip_level'] = 6  # VIP ESTELAR para doações de R$ 1 até R$ 14.99
+        
+        updated_ranking.append(r_dict)
+
     return render_template(
         'index.html',
+        user=user_data,  # Injeta o usuário com o nível VIP corrigido em tempo real
+        ranking_rows=updated_ranking,  # Envia a lista corrigida para o frontend
         payments_disabled=payments_disabled,
         vip_tiers=vip_tiers,
         vip0_links=_tm.get(0, 100),
@@ -614,7 +1009,51 @@ def index():
         vip4_links=_tm.get(4, 30),
         vip5_links=_tm.get(5, 20),
         vip6_links=_tm.get(6, 10),
+        developer_admin=developer_admin,
+        developer_available=developer_available,
+        developer_enabled=developer_enabled,
+        developer_role_label=(
+            admin_store.ROLE_META.get(developer_admin.get('role'), {}).get('label')
+            if developer_admin else None
+        ),
     )
+
+
+@app.route('/api/developer-mode/toggle', methods=['POST'])
+def developer_mode_toggle():
+    """Enable/disable the homepage developer mode for the current admin session."""
+    admin, _ = _get_admin()
+    if not admin or not admin.get('active', True):
+        return jsonify({'error': 'Sessão administrativa inválida'}), 403
+    if not admin_store.has_admin_permission(admin, 'accessDevMode'):
+        return jsonify({'error': 'Você não possui acesso ao Modo Desenvolvedor'}), 403
+
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled'))
+    if enabled:
+        # Older sessions may still carry the former revocation marker. It is
+        # obsolete now that the authorized control remains visible when off.
+        session.pop('developer_mode_revoked_admin_id', None)
+        session['developer_mode_admin_id'] = admin['id']
+        session['developer_mode_enabled'] = True
+        state = True
+    else:
+        session.pop('developer_mode_enabled', None)
+        session.pop('developer_mode_admin_id', None)
+        session.pop('developer_mode_revoked_admin_id', None)
+        state = False
+
+    try:
+        admin_store.audit(
+            admin['id'], admin['display_name'], admin['role'],
+            'developer_mode_toggle',
+            f'ativo={state}',
+            ip=_get_client_ip(),
+        )
+    except Exception:
+        pass
+    return jsonify({'ok': True, 'enabled': state, 'visible': True})
+
 
 @app.route('/api/auth/validate-key', methods=['POST'])
 def api_validate_access_key():
@@ -871,7 +1310,7 @@ def validate_url():
 
 @app.route('/debug-info')
 def debug_info_public():
-    """Página pública informativa sobre o painel de debug — sem autenticação."""
+    """Página informativa sobre o painel de debug."""
     return render_template('debug_info.html')
 
 @app.route('/debug/login', methods=['GET', 'POST'])
@@ -888,10 +1327,19 @@ def batch_panel_view():
     if not admin_store.has_perm(admin['role'], 'batch_config'):
         abort(404)
     batch_msg = session.pop('_batch_msg', None)
+    internal_access_mod    = admin_store.get_internal_access_moderator()
+    internal_access_helper = admin_store.get_internal_access_helper()
+    all_active  = admin_store.list_admins()
+    chat_admins = [{'id': a['id'], 'username': a['username'], 'display_name': a['display_name'],
+                    'role': a['role'], 'avatar': a['avatar']}
+                   for a in all_active if a['active'] and a['id'] != admin['id']]
     return render_template('batch_panel.html', admin=admin,
                            role_meta=admin_store.ROLE_META,
                            has_perm=admin_store.has_perm,
-                           batch_msg=batch_msg)
+                           batch_msg=batch_msg,
+                           internal_access_mod=internal_access_mod,
+                           internal_access_helper=internal_access_helper,
+                           chat_admins=chat_admins)
 
 
 @app.route('/debug')
@@ -1034,6 +1482,7 @@ def debug_json():
 
 @app.route('/dashboard')
 def dashboard():
+    _ensure_auto_ping()
     return render_template('dashboard.html')
 
 def _get_app_version():
@@ -1089,6 +1538,8 @@ def _get_performance_score():
 
 @app.route('/dashboard/api')
 def dashboard_api():
+    _ensure_auto_ping()
+    _ensure_next_ping_timestamp()
     real = stats_store.get_real()
     now = time.time()
 
@@ -1110,7 +1561,7 @@ def dashboard_api():
         'last_scrape_ts': real.get('last_scrape'),  # timestamp bruto — JS formata em tempo real
         'next_ping_ts': real.get('next_ping'),      # timestamp bruto — JS faz countdown em tempo real
         'system': {
-            'versao': _APP_VERSION,
+            'versao': _get_effective_version(),
             'status': 'Seguro',
             'memoria': f'{mem_mb} MB' if mem_mb is not None else 'N/A',
             'memoria_label': mem_label,
@@ -1124,33 +1575,61 @@ def dashboard_api():
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+def _get_effective_version() -> str:
+    """Retorna versão customizada do DB se existir, senão versão detectada automaticamente."""
+    override = admin_store.get_version_override()
+    return override if override else _APP_VERSION
+
+
 @app.route('/dashboard/config', methods=['GET', 'POST'])
 def dashboard_config():
     admin = g.admin
     if not admin_store.has_perm(admin['role'], 'debug'):
         abort(404)
     if request.method == 'POST':
-        overrides = {}
-        for key in ('views', 'searches', 'images', 'videos', 'downloads'):
-            val = request.form.get(key, '').strip()
-            if val:
-                try:
-                    overrides[key] = int(val)
-                except ValueError:
-                    pass
-        stats_store.save_overrides(overrides)
-        session['_debug_msg'] = 'Estatísticas do dashboard salvas.'
+        form_type = request.form.get('_form_type', 'stats')
+        if form_type == 'version':
+            # Apenas owner pode alterar a versão
+            if admin['role'] != 'owner':
+                abort(403)
+            new_ver = request.form.get('version_override', '').strip()
+            admin_store.set_version_override(new_ver if new_ver else None)
+            session['_debug_msg'] = f'Versão atualizada para "{new_ver}".' if new_ver else 'Versão resetada para automática.'
+        else:
+            overrides = {}
+            for key in ('views', 'searches', 'images', 'videos', 'downloads'):
+                val = request.form.get(key, '').strip()
+                if val:
+                    try:
+                        overrides[key] = int(val)
+                    except ValueError:
+                        pass
+            stats_store.save_overrides(overrides)
+            session['_debug_msg'] = 'Estatísticas do dashboard salvas.'
         return redirect('/dashboard/config')
     overrides = stats_store.get_overrides()
     real = stats_store.get_real()
     cfg_msg = session.pop('_debug_msg', None)
     mem_mb, mem_label = _get_memory_info()
+    internal_access_mod    = admin_store.get_internal_access_moderator()
+    internal_access_helper = admin_store.get_internal_access_helper()
+    all_active  = admin_store.list_admins()
+    chat_admins = [{'id': a['id'], 'username': a['username'], 'display_name': a['display_name'],
+                    'role': a['role'], 'avatar': a['avatar']}
+                   for a in all_active if a['active'] and a['id'] != admin['id']]
+    version_override = admin_store.get_version_override()
     return render_template('dashboard_config.html',
+                           admin=admin,
                            overrides=overrides, real=real, cfg_msg=cfg_msg,
-                           app_version=_APP_VERSION,
+                           app_version=_get_effective_version(),
+                           app_version_auto=_APP_VERSION,
+                           version_override=version_override,
                            sys_status='Seguro',
                            sys_memoria=(f'{mem_mb} MB' if mem_mb is not None else 'N/A'),
-                           sys_performance=_get_performance_score())
+                           sys_performance=_get_performance_score(),
+                           internal_access_mod=internal_access_mod,
+                           internal_access_helper=internal_access_helper,
+                           chat_admins=chat_admins)
 
 @app.route('/dashboard/config/reset')
 def dashboard_config_reset():
@@ -1182,6 +1661,18 @@ def _consume_intent(nonce: str):
     if time.time() - entry['ts'] > 1800:
         return None
     return entry['amount']
+
+
+def _public_base_url() -> str:
+    """Build gateway return URLs using the public reverse-proxy host."""
+    forwarded_host = request.headers.get('X-Forwarded-Host', '').split(',')[0].strip()
+    host = forwarded_host or request.host
+    forwarded_proto = request.headers.get('X-Forwarded-Proto', '').split(',')[0].strip()
+    proto = forwarded_proto if forwarded_proto in ('http', 'https') else (
+        'https' if request.is_secure else 'http'
+    )
+    return f'{proto}://{host}'.rstrip('/')
+
 
 @app.route('/payment/gateways')
 def payment_gateways_list():
@@ -1258,6 +1749,14 @@ def payment_create():
         if not gw:
             return jsonify({'error': 'Gateway não encontrado'}), 400
 
+        # The client disables the button for missing Stripe credentials, but
+        # this server-side guard is authoritative and also covers forged
+        # requests or a credential removed after the modal was opened.
+        if gateway_id in ('stripe', 'mercadopago'):
+            credential_status = pgw.gateway_credential_status(gateway_id, cfg)
+            if not credential_status['ready']:
+                return jsonify({'success': False, 'error': credential_status['error']}), 400
+
         # Item 3: em fluxos de redirect (cartão), o navegador sai do site e pode
         # não voltar à mesma aba — então o apelido/avatar são coletados AQUI,
         # antes de gerar o pagamento, e ficam salvos junto ao registro pendente.
@@ -1265,19 +1764,21 @@ def payment_create():
         # usa esses dados para completar o cadastro no ranking automaticamente.
         pending_nickname  = str(data.get('nickname', '')).strip()[:40] or None
         pending_avatar_id = str(data.get('avatar_id', '')).strip().lower() or None
+        pending_style     = _clean_donor_style(data)
+        pending_font_id   = pending_style['font_id']
         donor_token        = request.cookies.get('donation_token', '').strip() or None
         if pending_avatar_id and pending_avatar_id not in donor_avatars.get_valid_avatar_ids():
             pending_avatar_id = None
 
         if method == 'card' and gateway_id == 'stripe':
-            base_url = request.host_url.rstrip('/')
+            base_url = _public_base_url()
             result = gw.create_card_payment(
                 amount, 'Doação',
-                success_url=f'{base_url}/?payment=success',
+                success_url=f'{base_url}/payment/stripe/return?session_id={{CHECKOUT_SESSION_ID}}',
                 cancel_url=f'{base_url}/?payment=cancel',
             )
         elif method == 'card' and gateway_id == 'paypal':
-            base_url = request.host_url.rstrip('/')
+            base_url = _public_base_url()
             result = gw.create_pix_payment(
                 amount, 'Doação',
                 return_url=f'{base_url}/payment/paypal/capture',
@@ -1303,16 +1804,41 @@ def payment_create():
                 ))
             except Exception:
                 pass
-            return jsonify({'success': False, 'error': 'Não implementado'}), 200
+            return jsonify({
+                'success': False,
+                'error': result.error or '⚠️ Erro ao gerar o Pix com o Mercado Pago. Verifique as credenciais ou tente mais tarde.',
+            }), 400
 
-        # Save PIX payment for tracking
-        try:
-            if result.payment_id:
-                admin_store.save_pix_payment(result.payment_id, gateway_id, amount,
-                                             nickname=pending_nickname, avatar_id=pending_avatar_id,
-                                             donor_token=donor_token)
-        except Exception:
-            pass
+        if result.success and not result.payment_id:
+            app_logger.error(f'Gateway {gateway_id} retornou pagamento sem identificador rastreável')
+            return jsonify({
+                'success': False,
+                'error': 'Não foi possível vincular este pagamento com segurança. Tente novamente.',
+            }), 503
+
+        # Save the payment before returning the QR to the browser.  The browser
+        # keeps a local copy so it can restore an accidentally closed modal, but
+        # the database is the source of truth for status, cancellation and
+        # supporter benefits.  Returning an untracked QR would allow a real
+        # payment to become impossible to confirm.
+        if result.payment_id:
+            try:
+                expires_in = getattr(result, 'expires_in', 600) or 600
+                expires_at = (datetime.now() + timedelta(seconds=max(60, int(expires_in)))).isoformat(timespec='seconds')
+                admin_store.save_pix_payment(
+                    result.payment_id, gateway_id, amount, expires_at=expires_at,
+                    nickname=pending_nickname, avatar_id=pending_avatar_id,
+                    donor_token=donor_token, font_id=pending_font_id,
+                    text_effect=pending_style['text_effect'],
+                    name_color=pending_style['name_color'],
+                    currency=getattr(result, 'currency', 'BRL')
+                )
+            except Exception as exc:
+                app_logger.error(f'Não foi possível registrar o pagamento {result.payment_id}: {exc}')
+                return jsonify({
+                    'success': False,
+                    'error': 'Não foi possível preparar este pagamento com segurança. Tente novamente.',
+                }), 503
         # Dispara webhook de pagamento gerado
         try:
             _nick_ctx = pending_nickname or '—'
@@ -1325,8 +1851,8 @@ def payment_create():
             ))
         except Exception:
             pass
-        # Notificação financeira — tipo 'payment', visível apenas para Owner
-        # (ou Admin quando allow_admin_gateway=True, conforme _notif_visible)
+        # Notificação financeira — visível para Owner e para membros com a
+        # permissão individual de gerenciamento de gateways.
         try:
             val_fmt = f'R$ {amount:.2f}'.replace('.', ',')
             admin_store.add_notification(
@@ -1366,7 +1892,39 @@ def api_payment_status(payment_id):
         return jsonify({'status': 'error'}), 500
     if status == 'not_found':
         return jsonify({'status': 'not_found'}), 404
-    return jsonify({'status': status})
+    # Safe recovery metadata only: never return donor tokens or gateway
+    # credentials. The browser uses this to restore the exact checkout view
+    # after an accidental tab/modal close.
+    record = admin_store.get_pix_payment_by_id(payment_id)
+    response = {'status': status}
+    if record:
+        response['amount'] = float(record.get('amount', 0) or 0)
+        response['currency'] = record.get('currency', 'BRL')
+        response['expires_at'] = str(record.get('expires_at', '') or '')
+        if response['expires_at']:
+            try:
+                from datetime import datetime as _dt
+                remaining = int((_dt.fromisoformat(response['expires_at']) - _dt.now()).total_seconds())
+                response['remaining_seconds'] = max(0, remaining)
+            except Exception:
+                pass
+    return jsonify(response)
+
+
+@app.route('/api/payment/cancel/<payment_id>', methods=['POST'])
+def api_payment_cancel(payment_id):
+    """Cancel a pending PIX order only after the supporter changes its value."""
+    if not payment_id or len(payment_id) > 200 or not re.fullmatch(r'[A-Za-z0-9_-]+', payment_id):
+        return jsonify({'ok': False, 'status': 'invalid'}), 400
+    try:
+        status = admin_store.cancel_pix_payment(payment_id, 'supporter-back')
+    except Exception as exc:
+        app_logger.error(f'api_payment_cancel error: {exc}')
+        return jsonify({'ok': False, 'status': 'error'}), 500
+    return jsonify({
+        'ok': status in ('cancelled', 'expired'),
+        'status': status,
+    })
 
 def _fire_repeat_donation_alert(nickname: str, amount=None, gateway: str = None,
                                 payment_id: str = None, access_key: str = None):
@@ -1554,6 +2112,36 @@ def stripe_webhook():
         return '', 200  # 200 para o Stripe não ficar retentando em falha interna
 
 
+@app.route('/payment/stripe/return')
+def payment_stripe_return():
+    """Rota de retorno do Checkout Stripe. Recupera a session, verifica
+    payment_status == 'paid' e dispara o fulfillment global (ranking + broadcast)
+    — espelhando o mesmo padrão do PayPal capture."""
+    session_id = request.args.get('session_id', '').strip()
+    if not session_id:
+        return redirect('/?payment=cancel')
+    gw = pgw.get_gateway('stripe')
+    if not gw:
+        return redirect('/?payment=cancel')
+    try:
+        import stripe
+        stripe.api_key = gw.api_key
+        stripe_session = stripe.checkout.Session.retrieve(session_id)
+        # SDK Stripe retorna um objeto StripeObject, não um dict puro —
+        # usar getattr() em vez de .get() para compatibilidade com todas as versões.
+        payment_status = getattr(stripe_session, 'payment_status', None) or ''
+        if payment_status == 'paid':
+            _fulfill_and_broadcast(session_id, 'stripe-return')
+            app_logger.info(f'[Stripe Return] Checkout {session_id} confirmado como pago → fulfillment concluído.')
+            return redirect(f'/?payment=success&payment_id={session_id}')
+        else:
+            app_logger.warning(f'[Stripe Return] Checkout {session_id} com status "{payment_status}" — não confirmado.')
+            return redirect('/?payment=cancel')
+    except Exception as e:
+        app_logger.error(f'[Stripe Return] Erro ao recuperar sessão {session_id}: {e}')
+        return redirect('/?payment=cancel')
+
+
 @app.route('/payment/paypal/capture')
 def payment_paypal_capture():
     """Rota de retorno do checkout PayPal (application_context.return_url).
@@ -1629,12 +2217,331 @@ def mercadopago_webhook():
         return '', 200  # Sempre 200 para o MP não retentar em falha interna
 
 
+def _mask_gateway_secret(value) -> str:
+    """Keep secret values out of non-owner HTML, audit records and webhooks."""
+    value = str(value or '')
+    if not value:
+        return ''
+    if value.startswith('sk_test_'):
+        return 'sk_test_...****'
+    return '****'
+
+
+def _masked_gateway_config(cfg: dict, owner: bool) -> dict:
+    """Return a render-safe copy of the gateway configuration."""
+    safe = copy.deepcopy(cfg)
+    if owner:
+        return safe
+    sensitive = {
+        'manual': ('pix_key',),
+        'mercadopago': ('access_token',),
+        '99pay': ('client_id', 'client_secret'),
+        'stripe': ('stripe_test_secret_key', 'api_key'),
+        'paypal': ('client_id', 'client_secret'),
+    }
+    for gid, keys in sensitive.items():
+        data = safe.get('gateways', {}).get(gid, {})
+        for key in keys:
+            if data.get(key):
+                data[key] = _mask_gateway_secret(data[key])
+    for gateway in safe.get('custom_gateways', []):
+        if gateway.get('pix_key'):
+            gateway['pix_key'] = _mask_gateway_secret(gateway['pix_key'])
+    return safe
+
+
+def _secret_form_value(form, name: str, current: str) -> str:
+    """Preserve a masked value submitted by a non-owner, while allowing edits."""
+    if name not in form:
+        return current or ''
+    candidate = form.get(name, '').strip()
+    if '****' in candidate or candidate == 'sk_test_...':
+        return current or ''
+    return candidate
+
+
+def _gateway_config_from_form(current: dict, form) -> dict:
+    """Build a complete candidate config, preserving masked/hidden secrets."""
+    cfg = copy.deepcopy(current)
+    cfg['primary_gateway'] = form.get('primary_gateway', 'manual')
+    enabled = set(form.getlist('enabled_gateways'))
+    for gid in list(pgw._GATEWAY_CLASSES.keys()):
+        data = cfg.setdefault('gateways', {}).setdefault(gid, {})
+        data['enabled'] = gid in enabled
+        if gid == 'manual':
+            data['pix_key'] = _secret_form_value(form, 'manual_pix_key', data.get('pix_key'))
+            data['pix_key_type'] = form.get('manual_pix_key_type', 'email')
+            data['city'] = form.get('manual_city', 'Brasil')
+            data['beneficiary_name'] = form.get('manual_beneficiary_name', 'Doação')
+        elif gid == 'mercadopago':
+            data['access_token'] = _secret_form_value(
+                form, 'mercadopago_access_token', data.get('access_token'))
+        elif gid == '99pay':
+            data['client_id'] = _secret_form_value(form, '99pay_client_id', data.get('client_id'))
+            data['client_secret'] = _secret_form_value(
+                form, '99pay_client_secret', data.get('client_secret'))
+        elif gid == 'stripe':
+            data['stripe_test_enabled'] = 'stripe_test_enabled' in form
+            data['stripe_pix_enabled'] = 'stripe_pix_enabled' in form
+            existing_test = data.get('stripe_test_secret_key', '')
+            if not existing_test and str(data.get('api_key', '')).startswith('sk_test_'):
+                existing_test = data['api_key']
+            data['stripe_test_secret_key'] = _secret_form_value(
+                form, 'stripe_test_secret_key', existing_test)
+            # Do not retain an old production key in the live configuration.
+            data.pop('api_key', None)
+        elif gid == 'paypal':
+            data['client_id'] = _secret_form_value(form, 'paypal_client_id', data.get('client_id'))
+            data['client_secret'] = _secret_form_value(
+                form, 'paypal_client_secret', data.get('client_secret'))
+            data['sandbox'] = 'paypal_sandbox' in form
+
+    cg_ids = form.getlist('cg_id')
+    cg_names = form.getlist('cg_name')
+    cg_pix_keys = form.getlist('cg_pix_key')
+    cg_pix_key_types = form.getlist('cg_pix_key_type')
+    cg_beneficiaries = form.getlist('cg_beneficiary_name')
+    cg_cities = form.getlist('cg_city')
+    cg_colors = form.getlist('cg_color')
+    cg_icons = form.getlist('cg_icon')
+    cg_enabled_flags = form.getlist('cg_enabled')
+    old_custom = {str(x.get('id')): x for x in current.get('custom_gateways', [])}
+    custom_gateways = []
+    for i, raw_id in enumerate(cg_ids):
+        raw_id = raw_id.strip()
+        if not raw_id:
+            continue
+        name = cg_names[i] if i < len(cg_names) else 'Personalizado'
+        if raw_id.startswith('new_'):
+            slug = ''.join(c for c in name.lower() if c.isalnum() or c == '_')[:16] or 'custom'
+            final_id = f'custom_{slug}_{uuid.uuid4().hex[:6]}'
+        else:
+            final_id = raw_id
+        old = old_custom.get(final_id, {})
+        posted_key = cg_pix_keys[i] if i < len(cg_pix_keys) else ''
+        pix_key = posted_key.strip()
+        if '****' in pix_key:
+            pix_key = old.get('pix_key', '')
+        custom_gateways.append({
+            'id': final_id,
+            'name': name[:40],
+            'pix_key': pix_key,
+            'pix_key_type': cg_pix_key_types[i] if i < len(cg_pix_key_types) else 'email',
+            'beneficiary_name': (cg_beneficiaries[i] if i < len(cg_beneficiaries) else 'Doação')[:25],
+            'city': (cg_cities[i] if i < len(cg_cities) else 'Brasil')[:15],
+            'color': cg_colors[i] if i < len(cg_colors) else '#32d296',
+            'icon': cg_icons[i] if i < len(cg_icons) else 'fa-qrcode',
+            'enabled': i < len(cg_enabled_flags) and cg_enabled_flags[i] == '1',
+        })
+    cfg['custom_gateways'] = custom_gateways
+    return cfg
+
+
+_GATEWAY_AUDIT_DEFAULTS = {
+    # These are the fields that can actually be edited in payment_admin.html.
+    # Keeping the comparison allowlisted prevents legacy/internal keys from
+    # creating a false audit entry when the complete form is submitted.
+    'manual': {
+        'enabled': True, 'pix_key': '', 'pix_key_type': 'chave-aleatoria',
+        'beneficiary_name': 'Doação', 'city': 'Brasil',
+    },
+    'mercadopago': {'enabled': False, 'access_token': ''},
+    '99pay': {'enabled': False, 'client_id': '', 'client_secret': ''},
+    'stripe': {
+        'enabled': False, 'stripe_test_enabled': False,
+        'stripe_test_secret_key': '', 'stripe_pix_enabled': True,
+    },
+    'paypal': {
+        'enabled': False, 'client_id': '', 'client_secret': '', 'sandbox': True,
+    },
+}
+_CUSTOM_AUDIT_DEFAULTS = {
+    'name': 'Personalizado', 'pix_key': '', 'pix_key_type': 'email',
+    'beneficiary_name': 'Doação', 'city': 'Brasil', 'color': '#32d296',
+    'icon': 'fa-qrcode', 'enabled': False,
+}
+
+
+def _normalise_gateway_for_audit(gid: str, data: dict) -> dict:
+    """Return only user-editable gateway values in a stable shape.
+
+    The admin form posts every gateway at once. Older saved configurations can
+    also contain aliases such as Stripe's old ``api_key`` field. Comparing the
+    raw dictionaries therefore makes untouched gateways look edited. Defaults
+    make missing legacy keys equivalent to their current form values.
+    """
+    defaults = _GATEWAY_AUDIT_DEFAULTS.get(gid, {})
+    source = data or {}
+    result = {}
+    for key, default in defaults.items():
+        if gid == 'stripe' and key == 'stripe_test_secret_key':
+            # api_key was the former name for a test key. It is not an extra
+            # user edit and must not create a phantom Stripe change.
+            legacy_key = source.get('api_key', '')
+            value = source.get(key) or (
+                legacy_key if str(legacy_key).startswith('sk_test_') else default
+            )
+        else:
+            value = source.get(key, default)
+        result[key] = value
+    return result
+
+
+def _normalise_custom_for_audit(data: dict) -> dict:
+    source = data or {}
+    return {
+        'id': str(source.get('id', '')),
+        **{
+            key: source.get(key, default)
+            for key, default in _CUSTOM_AUDIT_DEFAULTS.items()
+        },
+    }
+
+
+def _gateway_change_scope(before: dict, after: dict) -> str:
+    parts = _gateway_change_parts(before, after)
+    changed = [pgw.GATEWAY_META[gid]['name'] for gid in parts['gateway_ids']]
+    if parts['custom']:
+        changed.append('gateways personalizados')
+    if parts['primary'] and not changed:
+        changed.append('gateway padrão')
+    if len(changed) == 1:
+        return changed[0]
+    return 'múltiplas alterações' if changed else 'nenhuma alteração'
+
+
+def _gateway_change_parts(before: dict, after: dict) -> dict:
+    """Return only the gateway sections that differ between two configs."""
+    changed_gateway_ids = [
+        gid for gid in pgw.GATEWAY_META
+        if _normalise_gateway_for_audit(
+            gid, before.get('gateways', {}).get(gid, {})
+        ) != _normalise_gateway_for_audit(
+            gid, after.get('gateways', {}).get(gid, {})
+        )
+    ]
+
+    before_custom = {
+        str(item.get('id')): _normalise_custom_for_audit(item)
+        for item in before.get('custom_gateways', [])
+        if item.get('id')
+    }
+    after_custom = {
+        str(item.get('id')): _normalise_custom_for_audit(item)
+        for item in after.get('custom_gateways', [])
+        if item.get('id')
+    }
+    custom_changes = []
+    for custom_id in dict.fromkeys([*before_custom.keys(), *after_custom.keys()]):
+        old_item = before_custom.get(custom_id)
+        new_item = after_custom.get(custom_id)
+        if old_item != new_item:
+            custom_changes.append({
+                'id': custom_id,
+                'before': copy.deepcopy(old_item),
+                'after': copy.deepcopy(new_item),
+            })
+
+    return {
+        'gateway_ids': changed_gateway_ids,
+        'custom': custom_changes,
+        'primary': before.get('primary_gateway') != after.get('primary_gateway'),
+    }
+
+
+def _gateway_change_snapshot(before: dict, after: dict, side: str) -> dict:
+    """Build a masked audit snapshot containing changed sections only."""
+    parts = _gateway_change_parts(before, after)
+    source = before if side == 'before' else after
+    snapshot = {'gateways': {
+        gid: copy.deepcopy(source.get('gateways', {}).get(gid, {}))
+        for gid in parts['gateway_ids']
+    }}
+    if parts['custom']:
+        snapshot['custom_gateways'] = [
+            copy.deepcopy(item.get(side))
+            for item in parts['custom']
+            if item.get(side) is not None
+        ]
+    if parts['primary']:
+        snapshot['primary_gateway'] = source.get('primary_gateway')
+    return snapshot
+
+
+def _annotate_gateway_change_request(item: dict) -> dict:
+    """Add display metadata without changing the stored request payload."""
+    parts = _gateway_change_parts(item['before_cfg'], item['proposed_cfg'])
+    item['changed_gateway_ids'] = parts['gateway_ids']
+    item['changed_custom_gateways'] = parts['custom']
+    item['primary_changed'] = parts['primary']
+    return item
+
+
+def _gateway_diff_detail(before: dict, after: dict, pending: bool) -> str:
+    scope = _gateway_change_scope(before, after)
+    status = 'Aguardando aprovação do Owner' if pending else 'Aplicada pelo Owner'
+    before_safe = json.dumps(
+        _masked_gateway_config(_gateway_change_snapshot(before, after, 'before'), False),
+        ensure_ascii=False, sort_keys=True
+    )
+    after_safe = json.dumps(
+        _masked_gateway_config(_gateway_change_snapshot(before, after, 'after'), False),
+        ensure_ascii=False, sort_keys=True
+    )
+    return (
+        '```diff\n'
+        f'- Estado anterior ({scope}): {before_safe}\n'
+        f'+ Valor proposto ({scope}): {after_safe}\n'
+        f'``` {status}'
+    )
+
+
+def _save_or_queue_gateway_config(admin: dict, before: dict, proposed: dict) -> dict:
+    """Owners publish immediately; other authorized users enter the queue."""
+    scope = _gateway_change_scope(before, proposed)
+    if scope == 'nenhuma alteração':
+        return {'queued': False, 'changed': False, 'scope': scope}
+
+    if admin.get('role') == 'owner':
+        pgw.save_config(proposed)
+        detail = _gateway_diff_detail(before, proposed, False)
+        admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                          'Gateway salvo diretamente', detail,
+                          json.dumps(_masked_gateway_config(
+                              _gateway_change_snapshot(before, proposed, 'before'), False
+                          ), ensure_ascii=False),
+                          json.dumps(_masked_gateway_config(
+                              _gateway_change_snapshot(before, proposed, 'after'), False
+                          ), ensure_ascii=False),
+                          _get_client_ip())
+        return {'queued': False, 'changed': True, 'scope': scope}
+
+    request_id = admin_store.create_gateway_change_request(
+        admin['id'], admin['display_name'], admin['role'], scope, before, proposed)
+    detail = _gateway_diff_detail(before, proposed, True)
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f'Alteração de gateway enviada #{request_id}', detail,
+                      json.dumps(_masked_gateway_config(
+                          _gateway_change_snapshot(before, proposed, 'before'), False
+                      ), ensure_ascii=False),
+                      json.dumps(_masked_gateway_config(
+                          _gateway_change_snapshot(before, proposed, 'after'), False
+                      ), ensure_ascii=False),
+                      _get_client_ip())
+    admin_store.add_notification(
+        'payment',
+        f'⏳ Nova solicitação de gateway de {admin["display_name"]}: {scope}',
+        min_role='owner')
+    return {'queued': True, 'changed': True, 'request_id': request_id, 'scope': scope}
+
+
 @app.route('/payment/admin/disable-all', methods=['POST'])
 def payment_admin_disable_all():
     admin, _ = _get_admin()
     if not _has_gateway_access(admin):
         return jsonify({'error': 'Não autorizado'}), 403
-    cfg = pgw.load_config()
+    before = pgw.load_config()
+    cfg = copy.deepcopy(before)
     # Save which were active before disabling
     prev_active = [gid for gid, gdata in cfg.get('gateways', {}).items() if gdata.get('enabled')]
     prev_active += [cg['id'] for cg in cfg.get('custom_gateways', []) if cg.get('enabled')]
@@ -1643,15 +2550,8 @@ def payment_admin_disable_all():
         cfg['gateways'][gid]['enabled'] = False
     for cg in cfg.get('custom_gateways', []):
         cg['enabled'] = False
-    pgw.save_config(cfg)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           'Desativar Todos Gateways', None, _get_client_ip())
-    admin_store.add_notification(
-        'warning',
-        f'🚫 Todos os meios de pagamento foram desativados por {admin["display_name"]}',
-        min_role='admin'
-    )
-    return jsonify({'ok': True, 'previously_active': prev_active})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'previously_active': prev_active, **result})
 
 
 @app.route('/payment/admin/reactivate-all', methods=['POST'])
@@ -1659,7 +2559,8 @@ def payment_admin_reactivate_all():
     admin, _ = _get_admin()
     if not _has_gateway_access(admin):
         return jsonify({'error': 'Não autorizado'}), 403
-    cfg = pgw.load_config()
+    before = pgw.load_config()
+    cfg = copy.deepcopy(before)
     prev = cfg.get('previously_active_ids', [])
     if not prev:
         return jsonify({'error': 'Nenhum gateway para reativar'}), 400
@@ -1671,15 +2572,8 @@ def payment_admin_reactivate_all():
                 if cg['id'] == gid:
                     cg['enabled'] = True
     cfg['previously_active_ids'] = []
-    pgw.save_config(cfg)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           'Reativar Gateways Anteriores', None, _get_client_ip())
-    admin_store.add_notification(
-        'payment',
-        f'✅ Meios de pagamento reativados por {admin["display_name"]}',
-        min_role='owner'
-    )
-    return jsonify({'ok': True, 'reactivated': prev})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'reactivated': prev, **result})
 
 
 @app.route('/payment/admin/set-primary-gateway', methods=['POST'])
@@ -1695,16 +2589,15 @@ def payment_admin_set_primary_gateway():
     if not gid:
         return jsonify({'error': 'gid obrigatório'}), 400
     # Lê config sob lock para não colidir com saves simultâneos
-    cfg = pgw.load_config_locked()
+    before = pgw.load_config_locked()
+    cfg = copy.deepcopy(before)
     # Verifica se o gid é um gateway válido (padrão ou personalizado)
     known = list(pgw._GATEWAY_CLASSES.keys()) + [cg['id'] for cg in cfg.get('custom_gateways', [])]
     if gid not in known:
         return jsonify({'error': 'Gateway desconhecido'}), 400
     cfg['primary_gateway'] = gid
-    pgw.save_config(cfg)  # save_config já usa o mesmo Lock internamente
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           f'Alterar Gateway Padrão → {gid}', None, _get_client_ip())
-    return jsonify({'ok': True, 'primary_gateway': gid})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'primary_gateway': gid, **result})
 
 
 @app.route('/payment/admin/toggle-gateway', methods=['POST'])
@@ -1714,10 +2607,17 @@ def payment_admin_toggle_gateway():
         return jsonify({'error': 'Não autorizado'}), 403
     data = request.get_json(silent=True) or {}
     gid = data.get('gid', '').strip()
-    enabled = bool(data.get('enabled', False))
+    raw_enabled = data.get('enabled')
+    if isinstance(raw_enabled, bool):
+        enabled = raw_enabled
+    elif raw_enabled in (0, 1, '0', '1'):
+        enabled = str(raw_enabled) == '1'
+    else:
+        return jsonify({'ok': False, 'error': 'Estado da permissão inválido.'}), 400
     if not gid:
         return jsonify({'error': 'gid obrigatório'}), 400
-    cfg = pgw.load_config()
+    before = pgw.load_config()
+    cfg = copy.deepcopy(before)
     found = False
     if gid in cfg.get('gateways', {}):
         cfg['gateways'][gid]['enabled'] = enabled
@@ -1731,8 +2631,8 @@ def payment_admin_toggle_gateway():
         return jsonify({'error': 'Gateway não encontrado'}), 404
     # Clear previously_active_ids when manually toggling
     cfg['previously_active_ids'] = []
-    pgw.save_config(cfg)
-    return jsonify({'ok': True, 'gid': gid, 'enabled': enabled})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'gid': gid, 'enabled': enabled, **result})
 
 
 @app.route('/payment/admin/toggle-stripe-pix', methods=['POST'])
@@ -1744,12 +2644,11 @@ def payment_admin_toggle_stripe_pix():
         return jsonify({'error': 'Não autorizado'}), 403
     data = request.get_json(silent=True) or {}
     enabled = bool(data.get('enabled', False))
-    cfg = pgw.load_config_locked()
+    before = pgw.load_config_locked()
+    cfg = copy.deepcopy(before)
     cfg.setdefault('gateways', {}).setdefault('stripe', {})['stripe_pix_enabled'] = enabled
-    pgw.save_config(cfg)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           f'Pix via Stripe → {"ativado" if enabled else "desativado"}', None, _get_client_ip())
-    return jsonify({'ok': True, 'enabled': enabled})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'enabled': enabled, **result})
 
 
 @app.route('/payment/admin/paypal-sandbox-toggle', methods=['POST'])
@@ -1760,12 +2659,11 @@ def payment_admin_paypal_sandbox_toggle():
         return jsonify({'error': 'Não autorizado'}), 403
     data = request.get_json(silent=True) or {}
     sandbox = bool(data.get('sandbox', True))
-    cfg = pgw.load_config_locked()
+    before = pgw.load_config_locked()
+    cfg = copy.deepcopy(before)
     cfg.setdefault('gateways', {}).setdefault('paypal', {})['sandbox'] = sandbox
-    pgw.save_config(cfg)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           f'PayPal Sandbox → {"ativado" if sandbox else "desativado (produção)"}', None, _get_client_ip())
-    return jsonify({'ok': True, 'sandbox': sandbox})
+    result = _save_or_queue_gateway_config(admin, before, cfg)
+    return jsonify({'ok': True, 'sandbox': sandbox, **result})
 
 
 @app.route('/payment/disabled-status')
@@ -1774,14 +2672,8 @@ def payment_disabled_status():
 
 
 def _has_gateway_access(admin) -> bool:
-    """Gateway access: owner sempre; admin somente se allow_admin_gateway=True."""
-    if not admin:
-        return False
-    if admin['role'] == 'owner':
-        return True
-    if admin['role'] == 'admin' and admin_store.get_allow_admin_gateway():
-        return True
-    return False
+    """Gateway access is controlled by the target user's permission flag."""
+    return admin_store.has_admin_permission(admin, 'manageGateways')
 
 
 @app.route('/payment/admin/pix-status', methods=['GET'])
@@ -1853,117 +2745,287 @@ def payment_admin():
         return render_template('admin/gateway_denied.html', admin=admin,
                                role_meta=admin_store.ROLE_META), 403
     if request.method == 'POST':
-        cfg = pgw.load_config()
-        cfg['primary_gateway'] = request.form.get('primary_gateway', 'manual')
-        enabled = set(request.form.getlist('enabled_gateways'))
-
-        # ── Gateways padrão ──
-        for gid in list(pgw._GATEWAY_CLASSES.keys()):
-            if gid not in cfg['gateways']:
-                cfg['gateways'][gid] = {}
-            cfg['gateways'][gid]['enabled'] = gid in enabled
-            if gid == 'manual':
-                cfg['gateways'][gid]['pix_key'] = request.form.get('manual_pix_key', '')
-                cfg['gateways'][gid]['pix_key_type'] = request.form.get('manual_pix_key_type', 'email')
-                cfg['gateways'][gid]['city'] = request.form.get('manual_city', 'Brasil')
-                cfg['gateways'][gid]['beneficiary_name'] = request.form.get('manual_beneficiary_name', 'Doação')
-            elif gid == 'mercadopago':
-                cfg['gateways'][gid]['access_token'] = request.form.get('mercadopago_access_token', '').strip()
-            elif gid == '99pay':
-                cfg['gateways'][gid]['client_id']     = request.form.get('99pay_client_id', '').strip()
-                cfg['gateways'][gid]['client_secret'] = request.form.get('99pay_client_secret', '').strip()
-            elif gid == 'stripe':
-                cfg['gateways'][gid]['api_key'] = request.form.get('stripe_api_key', '').strip()
-                cfg['gateways'][gid]['stripe_pix_enabled'] = 'stripe_pix_enabled' in request.form
-            elif gid == 'paypal':
-                cfg['gateways'][gid]['client_id']     = request.form.get('paypal_client_id', '').strip()
-                cfg['gateways'][gid]['client_secret'] = request.form.get('paypal_client_secret', '').strip()
-                cfg['gateways'][gid]['sandbox']       = 'paypal_sandbox' in request.form
-
-        # ── Gateways personalizados (parallel arrays via getlist) ──
-        cg_ids             = request.form.getlist('cg_id')
-        cg_names           = request.form.getlist('cg_name')
-        cg_pix_keys        = request.form.getlist('cg_pix_key')
-        cg_pix_key_types   = request.form.getlist('cg_pix_key_type')
-        cg_beneficiaries   = request.form.getlist('cg_beneficiary_name')
-        cg_cities          = request.form.getlist('cg_city')
-        cg_colors          = request.form.getlist('cg_color')
-        cg_icons           = request.form.getlist('cg_icon')
-        cg_enabled_flags   = request.form.getlist('cg_enabled')  # "1" ou "0" por posição
-
-        custom_gateways = []
-        for i, raw_id in enumerate(cg_ids):
-            raw_id = raw_id.strip()
-            if not raw_id:
-                continue
-            # Gera ID permanente para novos gateways (prefixo "new_")
-            if raw_id.startswith('new_'):
-                slug = ''.join(c for c in cg_names[i].lower() if c.isalnum() or c == '_')[:16] or 'custom'
-                final_id = f'custom_{slug}_{uuid.uuid4().hex[:6]}'
-            else:
-                final_id = raw_id
-            is_enabled = (cg_enabled_flags[i] == '1') if i < len(cg_enabled_flags) else False
-            custom_gateways.append({
-                'id':               final_id,
-                'name':             (cg_names[i] if i < len(cg_names) else 'Personalizado')[:40],
-                'pix_key':          cg_pix_keys[i]      if i < len(cg_pix_keys)      else '',
-                'pix_key_type':     cg_pix_key_types[i] if i < len(cg_pix_key_types) else 'email',
-                'beneficiary_name': (cg_beneficiaries[i] if i < len(cg_beneficiaries) else 'Doação')[:25],
-                'city':             (cg_cities[i]         if i < len(cg_cities)        else 'Brasil')[:15],
-                'color':            cg_colors[i] if i < len(cg_colors) else '#32d296',
-                'icon':             cg_icons[i]  if i < len(cg_icons)  else 'fa-qrcode',
-                'enabled':          is_enabled,
-            })
-
-        cfg['custom_gateways'] = custom_gateways
-        pgw.save_config(cfg)
-        session['_debug_msg'] = 'Configurações de pagamento salvas!'
+        before = pgw.load_config_locked()
+        cfg = _gateway_config_from_form(before, request.form)
+        test_key = cfg.get('gateways', {}).get('stripe', {}).get('stripe_test_secret_key', '')
+        if test_key and not test_key.startswith('sk_test_'):
+            session['_debug_msg'] = 'Erro: a STRIPE TEST SECRET KEY deve começar com sk_test_.'
+            return redirect('/payment/admin')
+        result = _save_or_queue_gateway_config(admin, before, cfg)
+        if not result.get('changed', True):
+            session['_debug_msg'] = 'Nenhuma alteração detectada. A solicitação não foi criada.'
+            return redirect('/payment/admin')
+        if result.get('queued'):
+            session['_gateway_notice'] = (
+                '⚠️ Alteração enviada com sucesso! Como esta é uma configuração crítica de pagamento, '
+                'as novas credenciais foram retidas e estão aguardando a aprovação manual do Proprietário (Owner) '
+                'para entrarem em vigor.'
+            )
+        session['_debug_msg'] = (
+            'Configurações de pagamento salvas!'
+            if not result.get('queued') else
+            'Alteração enviada para aprovação do Owner.'
+        )
         return redirect('/payment/admin')
 
-    cfg = pgw.load_config()
+    cfg = _masked_gateway_config(pgw.load_config(), admin.get('role') == 'owner')
     admin_msg = session.pop('_debug_msg', None)
+    gateway_notice = session.pop('_gateway_notice', None)
     pix_payments        = admin_store.get_pix_payments(50) if admin['role'] == 'owner' else []
     gateway_backups     = admin_store.get_gateway_backups(10) if admin['role'] == 'owner' else []
-    allow_admin_gateway = admin_store.get_allow_admin_gateway() if admin['role'] == 'owner' else False
     any_active = not pgw.are_payments_disabled()
     has_previously_active = bool(cfg.get('previously_active_ids'))
     return render_template('payment_admin.html', cfg=cfg,
-                           allow_admin_gateway=allow_admin_gateway,
                            meta=pgw.GATEWAY_META,
                            custom_icons=pgw.CUSTOM_ICONS,
                            custom_colors=pgw.CUSTOM_COLORS,
                            admin_msg=admin_msg,
+                           gateway_notice=gateway_notice,
                            admin=admin,
                            pix_payments=pix_payments,
                            gateway_backups=gateway_backups,
                            any_active=any_active,
-                           has_previously_active=has_previously_active)
+                           has_previously_active=has_previously_active,
+                           gateway_requests=(
+                               admin_store.get_pending_gateway_change_requests()
+                               if admin.get('role') == 'owner' else []
+                           ))
 
-def _ping_job():
-    """BackgroundScheduler job: pings own URL to keep Hugging Face Space awake."""
-    url = os.environ.get("APP_URL", "https://a187e2f1-2c9e-49e0-a777-a72c08c34826-00-2l1eepd6uepb0.janeway.replit.dev/ping")
-    wait = random.randint(300, 600)
-    stats_store.set_val('next_ping', time.time() + wait)
-    start = time.time()
-    try:
-        response = requests.get(url, timeout=10)
-        latency_ms = int((time.time() - start) * 1000)
-        stats_store.set_val('last_ping_latency', latency_ms)
-        app_logger.info(f"🏓 Auto-ping — Status: {response.status_code} ({latency_ms}ms)")
-    except Exception as e:
-        app_logger.error(f"❌ Ping falhou: {e}")
+
+@app.route('/admin/gateway/requests')
+def admin_gateway_requests():
+    admin = g.admin
+    if admin.get('role') != 'owner':
+        abort(404)
+    requests_pending = [
+        _annotate_gateway_change_request(item)
+        for item in admin_store.get_pending_gateway_change_requests()
+    ]
+    return render_template(
+        'admin/gateway_requests.html',
+        admin=admin,
+        requests=requests_pending,
+        gateway_meta=pgw.GATEWAY_META,
+        masked_config=_masked_gateway_config,
+    )
+
+
+@app.route('/admin/gateway/requests/<int:request_id>/details')
+def admin_gateway_request_details(request_id):
+    """Owner-only reveal endpoint for the before/after gateway comparison."""
+    admin = g.admin
+    if admin.get('role') != 'owner':
+        return jsonify({'ok': False, 'error': 'Apenas o Owner pode visualizar os dados completos.'}), 403
+    change = admin_store.get_gateway_change_request(request_id)
+    if not change:
+        return jsonify({'ok': False, 'error': 'Solicitação não encontrada.'}), 404
+    response = jsonify({
+        'ok': True,
+        'before': change['before_cfg'],
+        'after': change['proposed_cfg'],
+    })
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
+
+
+@app.route('/admin/gateway/requests/<int:request_id>/decision', methods=['POST'])
+def admin_gateway_request_decision(request_id):
+    admin = g.admin
+    if admin.get('role') != 'owner':
+        return jsonify({'ok': False, 'error': 'Apenas o Owner pode decidir.'}), 403
+    data = request.get_json(silent=True) or {}
+    decision = str(data.get('decision', '')).strip().lower()
+    change = admin_store.get_gateway_change_request(request_id)
+    if not change or change.get('status') != 'pending':
+        return jsonify({'ok': False, 'error': 'Solicitação já decidida ou não encontrada.'}), 404
+    if decision == 'approved':
+        try:
+            pgw.save_config(change['proposed_cfg'])
+        except Exception as exc:
+            return jsonify({'ok': False, 'error': f'Não foi possível aplicar: {str(exc)[:120]}'}), 500
+    elif decision != 'rejected':
+        return jsonify({'ok': False, 'error': 'Decisão inválida.'}), 400
+    decided = admin_store.decide_gateway_change_request(
+        request_id, decision, admin['display_name'],
+        'Aprovado e publicado' if decision == 'approved' else 'Rejeitado e descartado')
+    if not decided:
+        return jsonify({'ok': False, 'error': 'Solicitação já decidida.'}), 409
+    scope = decided.get('scope', 'gateway')
+    action = 'Alteração de gateway aprovada' if decision == 'approved' else 'Alteração de gateway rejeitada'
+    detail = (
+        f'{scope} — {"credenciais propostas publicadas" if decision == "approved" else "configuração anterior preservada"}'
+    )
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f'{action} #{request_id}', detail,
+        json.dumps(_masked_gateway_config(
+            _gateway_change_snapshot(
+                decided['before_cfg'], decided['proposed_cfg'], 'before'
+            ), False
+        ), ensure_ascii=False),
+        json.dumps(_masked_gateway_config(
+            _gateway_change_snapshot(
+                decided['before_cfg'], decided['proposed_cfg'], 'after'
+            ), False
+        ), ensure_ascii=False),
+                      _get_client_ip())
+    admin_store.add_notification(
+        'payment',
+        f'{"✅" if decision == "approved" else "❌"} Solicitação de gateway #{request_id} '
+        f'{"aprovada e publicada" if decision == "approved" else "rejeitada"} por {admin["display_name"]}',
+        min_role='owner')
+    return jsonify({'ok': True, 'status': decision})
+
+
+def _ping_loop():
+    """Daemon thread: DB-driven keep-alive loop for Hugging Face / Replit.
+
+    Reads `next_ping` timestamp from the database at startup.
+    • If the stored timestamp is still in the future → sleeps precisely until
+      that moment (checking every 5 s so it can react to manual changes).
+    • When the time arrives → fires the HTTP ping → writes a fresh
+      `next_ping` timestamp back to the DB → sleeps again.
+
+    Because the target timestamp lives in the DB, server restarts resume
+    from where they left off — the browser countdown never resets on F5.
+    """
+    configured_url = (
+        os.environ.get('KEEPALIVE_URL')
+        or os.environ.get('APP_URL')
+        or os.environ.get('SPACE_URL')
+        or os.environ.get('SPACE_HOST')
+        or os.environ.get('REPLIT_DEV_DOMAIN')
+        or os.environ.get('REPLIT_DOMAINS')
+    )
+    if configured_url:
+        configured_url = configured_url.strip()
+        if not configured_url.startswith(('http://', 'https://')):
+            configured_url = 'https://' + configured_url
+        url = configured_url.rstrip('/')
+        if not url.endswith('/ping'):
+            url += '/ping'
+    else:
+        # Local fallback keeps the loop useful in development. Deployments
+        # should set KEEPALIVE_URL to their public Space/app URL.
+        url = 'http://127.0.0.1:5000/ping'
+
+    INTERVAL_MIN = 240   # minimum seconds between pings (4 min)
+    INTERVAL_MAX = 300   # maximum seconds between pings (5 min)
+    CHECK_EVERY  = 5     # polling granularity in seconds
+
+    while True:
+        try:
+            now      = time.time()
+            real     = stats_store.get_real()
+            next_ts  = real.get('next_ping')
+
+            # ── If a valid future timestamp exists, keep sleeping ──────────
+            if next_ts and next_ts > now:
+                # Sleep até, no máximo, CHECK_EVERY s — ou exatamente o
+                # tempo restante se for menor, para não disparar cedo.
+                time.sleep(min(CHECK_EVERY, next_ts - now))
+                continue
+
+            # ── Time to ping ──────────────────────────────────────────────
+            wait = random.randint(INTERVAL_MIN, INTERVAL_MAX)
+            # Write the next target BEFORE the request so the countdown
+            # is visible on the dashboard immediately after the ping.
+            stats_store.set_val('next_ping', time.time() + wait)
+
+            start = time.time()
+            try:
+                response = requests.get(
+                    url,
+                    params={'_keepalive': int(time.time())},
+                    headers={'User-Agent': 'MediaScraper-KeepAlive/1.0'},
+                    timeout=15,
+                )
+                latency_ms = int((time.time() - start) * 1000)
+                stats_store.set_val('last_ping_latency', latency_ms)
+                # Successful keep-alives are expected and happen every few
+                # minutes. Keep them available for troubleshooting without
+                # spamming the Hugging Face/debug console at INFO level.
+                app_logger.debug(
+                    f"🏓 Auto-ping — Status: {response.status_code} ({latency_ms}ms)"
+                )
+            except Exception as exc:
+                app_logger.error(f"❌ Ping falhou: {exc}")
+
+            # Sleep a full interval before checking again
+            time.sleep(CHECK_EVERY)
+
+        except Exception as exc:
+            app_logger.error(f"❌ Erro no loop de ping: {exc}")
+            time.sleep(30)
 
 
 def auto_ping():
-    """Initialises the BackgroundScheduler keep-alive engine (called once at startup)."""
-    # Fire immediately so next_ping is set right away
-    _ping_job()
-    scheduler = BackgroundScheduler(daemon=True)
-    # Schedule a recurring jittered ping every 5 minutes (interval) — _ping_job reschedules its
-    # own next_ping counter internally, so minute-level granularity is fine here.
-    scheduler.add_job(_ping_job, 'interval', minutes=7, jitter=120)
-    scheduler.start()
-    app_logger.info("🗓️  BackgroundScheduler keep-alive iniciado")
+    """Starts the DB-driven keep-alive daemon thread (called once at startup).
+
+    Waits for _boot_load to finish reading the DB before deciding whether a
+    fresh next_ping is needed — this prevents the race condition where
+    auto_ping() writes a value and _boot_load later overwrites it with a
+    stale DB snapshot.
+    """
+    # Wait up to 8 s for the async DB boot-load to complete so we read the
+    # correct persisted next_ping before touching it.
+    loaded = stats_store.wait_for_boot(timeout=8.0)
+    if not loaded:
+        app_logger.warning("⚠️  stats boot-load não terminou em 8 s — continuando sem ele")
+
+    real     = stats_store.get_real()
+    existing = real.get('next_ping')
+    now      = time.time()
+    if not existing or existing <= now:
+        # No valid future timestamp in DB — set one so the dashboard can
+        # display a countdown right away; _ping_loop does the real work.
+        stats_store.set_val('next_ping', now + random.randint(300, 540))
+
+    t = threading.Thread(target=_ping_loop, daemon=True, name='ping-loop')
+    t.start()
+    app_logger.info("🗓️  Thread de auto-ping (DB-driven) iniciada")
+
+
+_auto_ping_start_lock = threading.Lock()
+_auto_ping_started = False
+
+
+def _auto_ping_bootstrap():
+    """Run auto-ping initialization outside the first WSGI request."""
+    global _auto_ping_started
+    try:
+        auto_ping()
+    except Exception:
+        app_logger.exception("❌ Falha ao iniciar o auto-ping")
+        with _auto_ping_start_lock:
+            _auto_ping_started = False
+
+
+def _ensure_auto_ping():
+    """Start the ping worker once per process, including under WSGI servers."""
+    global _auto_ping_started
+    if _auto_ping_started:
+        return
+    with _auto_ping_start_lock:
+        if _auto_ping_started:
+            return
+        _auto_ping_started = True
+        threading.Thread(
+            target=_auto_ping_bootstrap,
+            daemon=True,
+            name='auto-ping-bootstrap',
+        ).start()
+
+
+def _ensure_next_ping_timestamp():
+    """Seed a visible countdown while the async worker is bootstrapping."""
+    real = stats_store.get_real()
+    existing = real.get('next_ping')
+    if existing and existing > time.time():
+        return existing
+    next_ping = time.time() + 420
+    stats_store.set_val('next_ping', next_ping)
+    return next_ping
 
 
 def _pix_expiry_worker():
@@ -2003,6 +3065,8 @@ def _get_session_vip_level():
 
 def _get_effective_max_urls() -> int:
     """Base max_urls boosted by VIP level, pulling tier bonuses from vip_tiers_config DB."""
+    if _developer_admin():
+        return math.inf
     base = _get_batch_config()['max_urls']
     try:
         vip = _get_session_vip_level()
@@ -2023,22 +3087,43 @@ def inject_max_urls():
     donor_nickname = None
     donor_vip_level = None
     donor_discriminator = None
+    donor_total_donated = None
+    donor_font_id = 'default'
+    donor_text_effect = 'solid'
+    donor_name_color = '#f3f4f6'
     try:
         token = request.cookies.get('donation_token', '')
         if token:
             row = admin_store.get_vip_by_token(token)
             if row:
-                donor_nickname     = row.get('nickname')      or None
-                donor_vip_level    = row.get('vip_level')     or None
+                donor_nickname      = row.get('nickname')      or None
+                donor_vip_level     = row.get('vip_level')     or None
                 donor_discriminator = row.get('discriminator') or None
+                donor_total_donated = float(row.get('total_donated') or 0.0)
+                donor_font_id = row.get('font_id') or 'default'
+                donor_text_effect = row.get('text_effect') or 'solid'
+                donor_name_color = row.get('name_color') or '#f3f4f6'
     except Exception:
         pass
+    developer_admin, developer_available, developer_enabled = _developer_ui_state()
     return {
         'max_urls': _get_effective_max_urls(),
+        'max_urls_display': '∞' if developer_enabled else _get_effective_max_urls(),
         'session_vip_level': _get_session_vip_level(),
         'donor_nickname': donor_nickname,
         'donor_vip_level': donor_vip_level,
         'donor_discriminator': donor_discriminator,
+        'donor_total_donated': donor_total_donated,
+        'donor_font_id': donor_font_id,
+        'donor_text_effect': donor_text_effect,
+        'donor_name_color': donor_name_color,
+        'developer_admin': developer_admin,
+        'developer_available': developer_available,
+        'developer_enabled': developer_enabled,
+        'developer_role_label': (
+            admin_store.ROLE_META.get(developer_admin.get('role'), {}).get('label')
+            if developer_admin else None
+        ),
     }
 
 
@@ -2064,13 +3149,16 @@ def batch_stream():
     data = request.get_json(silent=True) or {}
     raw_urls = data.get('urls', [])
     bc       = _get_batch_config()
-    max_urls = _get_effective_max_urls()   # respects VIP cookie boost
+    developer_admin = _developer_admin()
+    max_urls = math.inf if developer_admin else _get_effective_max_urls()
     delay_ms = bc['delay_ms']
 
-    urls = [u.strip() for u in raw_urls if u.strip()]
+    if not isinstance(raw_urls, list):
+        return jsonify({'error': 'Lista de URLs inválida.'}), 400
+    urls = [str(u).strip() for u in raw_urls if str(u).strip()]
     if len(urls) < 2:
         return jsonify({'error': 'Mínimo de 2 URLs.'}), 400
-    if len(urls) > max_urls:
+    if developer_admin is None and len(urls) > max_urls:
         urls = urls[:max_urls]
 
     scraper = MediaScraper()
@@ -2159,6 +3247,19 @@ def admin_login():
                 admin_store.set_status(user['id'], 'online')
                 admin_store.log_action(user['id'], user['display_name'], user['role'],
                                        'Login', None, ip)
+                # ── Auto-register device fingerprint in WAF whitelist ──────────────
+                # Derive a keyed SHA-256 so the raw canvas FP is never
+                # stored in the DB.  The WAF derives the same hash on every request
+                # and looks it up via is_ip_whitelisted(ip, device_sig).
+                _canvas_fp = request.headers.get('X-Canvas-FP', '').strip()[:128]
+                _device_sig = _staff_device_signature(_canvas_fp)
+                if _device_sig:
+                    _role_label = user.get('role', 'staff').upper()
+                    admin_store.auto_register_staff_whitelist(
+                        nome_dev=f"[{_role_label}] {user['display_name']}",
+                        ip=ip,
+                        dispositivo_id=_device_sig,
+                    )
                 # Fire login webhook (geo in background to not block)
                 _ua = request.headers.get('User-Agent', '')[:200] or None
                 def _fire_login(name, role, _ip, ua):
@@ -2422,14 +3523,55 @@ def admin_ranking_view():
     admin = g.admin
     rows  = admin_store.get_ranking()
     tiers = admin_store.get_vip_tiers()
+    now = time.time()
+
+    # Intercepta e recalcula os níveis antigos em tempo de execução
+    updated_rows = []
+    for r in rows:
+        r_dict = dict(r)  # Evita erros de objeto protegido contra escrita
+        try:
+            r_dict['online'] = bool(
+                r_dict.get('last_seen_at') and now - float(r_dict['last_seen_at']) <= 120
+            )
+        except (TypeError, ValueError):
+            r_dict['online'] = False
+        total = float(r_dict.get('total_donated') or 0.0)
+        
+        # Enforça a nova hierarquia cronológica estrita de 7 níveis (>=)
+        if total >= 500.00:
+            r_dict['vip_level'] = 0  # VIP SUPREME
+        elif total >= 100.00:
+            r_dict['vip_level'] = 1  # VIP DIAMANTE
+        elif total >= 80.00:
+            r_dict['vip_level'] = 2  # VIP RUBI
+        elif total >= 60.00:
+            r_dict['vip_level'] = 3  # VIP OURO
+        elif total >= 35.00:
+            r_dict['vip_level'] = 4  # VIP PRATA
+        elif total >= 15.00:
+            r_dict['vip_level'] = 5  # VIP BRONZE
+        else:
+            r_dict['vip_level'] = 6  # VIP ESTELAR
+
+        updated_rows.append(r_dict)
+
+    internal_access_mod    = admin_store.get_internal_access_moderator()
+    internal_access_helper = admin_store.get_internal_access_helper()
+    all_active  = admin_store.list_admins()
+    chat_admins = [{'id': a['id'], 'username': a['username'], 'display_name': a['display_name'],
+                    'role': a['role'], 'avatar': a['avatar']}
+                   for a in all_active
+                   if a['active'] and a['id'] != admin['id']]
     return render_template(
         'admin/ranking.html',
         admin=admin,
         role_meta=admin_store.ROLE_META,
-        rows=rows,
+        rows=updated_rows,
         tiers=tiers,
+        internal_access_mod=internal_access_mod,
+        internal_access_helper=internal_access_helper,
+        chat_admins=chat_admins,
     )
-
 
 @app.route('/admin/ranking/config/update/<int:tier_id>', methods=['POST'])
 def admin_ranking_config_update(tier_id):
@@ -2518,6 +3660,11 @@ def admin_ranking_create_manual():
 def donation_register():
     import uuid as _uuid
     data       = request.get_json(silent=True) or {}
+    style      = (
+        _clean_donor_style(data)
+        if any(key in data for key in ('font_id', 'text_effect', 'name_color'))
+        else {'font_id': None, 'text_effect': None, 'name_color': None}
+    )
     payment_id = str(data.get('payment_id', '')).strip()
     is_returning = bool(data.get('returning', False))
 
@@ -2557,7 +3704,11 @@ def donation_register():
                 try:
                     result = admin_store.register_donation(nickname, avatar_id, amount, token,
                                                            payment_id=payment_id,
-                                                           ip=client_ip, ua=client_ua)
+                                                       ip=client_ip, ua=client_ua,
+                                                        font_id=style['font_id'],
+                                                        text_effect=style['text_effect'],
+                                                         name_color=style['name_color'],
+                                                         currency=payment_row.get('currency', 'BRL'))
                 except admin_store.DuplicatePaymentError:
                     return jsonify({'error': 'Este pagamento já foi vinculado a outro perfil.'}), 409
                 except Exception as exc:
@@ -2618,7 +3769,11 @@ def donation_register():
         # Atomically claim payment + upsert ranking in one transaction
         result = admin_store.register_donation(nickname, avatar_id, amount, token,
                                                payment_id=payment_id,
-                                               ip=client_ip, ua=client_ua)
+                                               ip=client_ip, ua=client_ua,
+                                               font_id=style['font_id'],
+                                               text_effect=style['text_effect'],
+                                               name_color=style['name_color'],
+                                               currency=payment_row.get('currency', 'BRL'))
     except admin_store.DuplicatePaymentError:
         return jsonify({'error': 'Este pagamento já foi vinculado a outro perfil.'}), 409
     except Exception as exc:
@@ -2692,6 +3847,13 @@ def api_donor_avatars():
 def api_public_ranking():
     """Public JSON endpoint for the ranking overlay modal."""
     rows = admin_store.get_ranking(limit=20)
+    now = time.time()
+    for row in rows:
+        last_seen = row.get('last_seen_at')
+        try:
+            row['online'] = bool(last_seen and now - float(last_seen) <= 120)
+        except (TypeError, ValueError):
+            row['online'] = False
     return jsonify(rows)
 
 
@@ -2715,6 +3877,8 @@ def api_ranking_latest():
 @app.route('/api/ping')
 def api_ping():
     """Returns keep-alive ping timing data for the dashboard countdown."""
+    _ensure_auto_ping()
+    _ensure_next_ping_timestamp()
     _real = stats_store.get_real()
     next_ping_ts = _real.get('next_ping')
     if next_ping_ts:
@@ -2750,7 +3914,7 @@ def admin_ranking_delete(user_id):
 def admin_payments_update_status(payment_id):
     """Admin/owner: update payment status via AJAX (pencil modal)."""
     admin = g.admin
-    if not admin_store.has_perm(admin.get('role'), 'gateway'):
+    if not _has_gateway_access(admin):
         return jsonify({'error': 'Sem permissão'}), 403
     data   = request.get_json(silent=True) or {}
     status = str(data.get('status', '')).strip().lower()
@@ -2787,15 +3951,82 @@ def api_check_returning_donor():
         'returning':     True,
         'nickname':      donor.get('nickname', ''),
         'avatar_id':     donor.get('avatar_id', ''),
+        'font_id':       donor.get('font_id', 'default'),
+        'text_effect':   donor.get('text_effect', 'solid'),
+        'name_color':    donor.get('name_color', '#f3f4f6'),
         'vip_level':     donor.get('vip_level', 5),
         'total_donated': float(donor.get('total_donated', 0)),
     })
 
 
+@app.route('/api/supporter/presence', methods=['POST'])
+def api_supporter_presence():
+    """Heartbeat for the public supporter presence indicator.
+
+    The cookie is the normal session source. The localStorage copy is accepted
+    as a same-origin fallback because browsers/extensions can block or clear a
+    non-HttpOnly cookie while keeping localStorage intact.
+    """
+    data = request.get_json(silent=True) or {}
+    token = (
+        request.cookies.get('donation_token', '').strip()
+        or str(data.get('token', '')).strip()
+    )
+    if not token:
+        return jsonify({'ok': False}), 204
+    try:
+        admin_store.touch_supporter_presence(token)
+    except Exception as exc:
+        app_logger.warning(f'presence heartbeat failed: {exc}')
+        return jsonify({'ok': False}), 503
+    return jsonify({'ok': True})
+
+
+@app.route('/api/supporter/style', methods=['POST'])
+def api_supporter_style():
+    """Update only the authenticated supporter's public nickname style."""
+    token = request.cookies.get('donation_token', '').strip()
+    if not token:
+        return jsonify({'error': 'Apoiador não identificado'}), 401
+    style = _clean_donor_style(request.get_json(silent=True) or {})
+    if not admin_store.update_donor_style(token, **style):
+        return jsonify({'error': 'Apoiador não encontrado'}), 404
+    return jsonify({'ok': True, **style})
+
+
 @app.route('/ranking')
 def public_ranking_view():
     """Public leaderboard — accessible without admin auth."""
+    from datetime import datetime as _dt
     rows = admin_store.get_ranking()
+    now = time.time()
+    for row in rows:
+        # Recalculate from the accumulated amount so old/stale persisted
+        # vip_level values cannot show the wrong badge on the public page.
+        total = float(row.get('total_donated') or 0.0)
+        if total >= 500.00:
+            row['vip_level'] = 0  # VIP SUPREME
+        elif total >= 100.00:
+            row['vip_level'] = 1  # VIP DIAMANTE
+        elif total >= 80.00:
+            row['vip_level'] = 2  # VIP RUBI
+        elif total >= 60.00:
+            row['vip_level'] = 3  # VIP OURO
+        elif total >= 35.00:
+            row['vip_level'] = 4  # VIP PRATA
+        elif total >= 15.00:
+            row['vip_level'] = 5  # VIP BRONZE
+        else:
+            row['vip_level'] = 6  # VIP ESTELAR
+        try:
+            row['online'] = bool(row.get('last_seen_at') and now - float(row['last_seen_at']) <= 120)
+            if row.get('last_seen_at'):
+                row['last_seen_label'] = _dt.fromtimestamp(
+                    float(row['last_seen_at'])
+                ).strftime('%d/%m/%Y %H:%M')
+        except (TypeError, ValueError):
+            row['online'] = False
+            row['last_seen_label'] = ''
     return render_template('ranking.html', rows=rows)
 
 
@@ -2830,6 +4061,65 @@ def admin_manage_view():
         role_avatar_map=admin_store.ROLE_AVATAR_MAP,
         flash_msg=flash_msg,
     )
+
+
+@app.route('/admin/api/update-permissions/<int:target_id>', methods=['POST'])
+def admin_update_permissions(target_id):
+    """Only the Owner may update individual permission flags."""
+    admin = g.admin
+    if admin.get('role') != 'owner':
+        return jsonify({'ok': False, 'error': 'Apenas o Owner pode alterar permissões.'}), 403
+    data = request.get_json(silent=True) or {}
+    permission = str(data.get('permission', '')).strip()
+    if permission not in admin_store.ADMIN_PERMISSION_COLUMNS:
+        return jsonify({'ok': False, 'error': 'Permissão inválida.'}), 400
+    target = admin_store.get_admin_by_id(target_id)
+    if not target or target['id'] == admin['id']:
+        return jsonify({'ok': False, 'error': 'Usuário não pode ser alterado.'}), 404
+    if not admin_store.can_manage(admin['role'], target['role']):
+        return jsonify({'ok': False, 'error': 'Sem permissão para este usuário.'}), 403
+    enabled = bool(data.get('enabled', False))
+    permissions = admin_store.update_admin_permission(target_id, permission, enabled)
+    if permissions is None:
+        return jsonify({'ok': False, 'error': 'Usuário não encontrado.'}), 404
+    admin_store.audit(
+        admin['id'], admin['display_name'], admin['role'],
+        f'Permissão atualizada: @{target["username"]}',
+        f'{permission}={"ativada" if enabled else "desativada"}',
+        ip=_get_client_ip())
+    return jsonify({'ok': True, 'permissions': permissions})
+
+
+@app.route('/admin/api/staff-device', methods=['POST'])
+def admin_register_staff_device():
+    """Register the current staff device in the WAF whitelist after login.
+
+    The endpoint receives hardware hints only to prove this is the browser
+    registration flow; only the keyed canvas signature is persisted.
+    """
+    admin = g.admin
+    data = request.get_json(silent=True) or {}
+    canvas_fp = str(data.get('canvas_fp', '')).strip()[:128]
+    if not re.fullmatch(r'cnv_[a-z0-9]{4,64}', canvas_fp, re.I):
+        return jsonify({'ok': False, 'error': 'Fingerprint de dispositivo inválido.'}), 400
+
+    device_sig = _staff_device_signature(canvas_fp)
+    if not device_sig:
+        return jsonify({'ok': False, 'error': 'Não foi possível identificar este dispositivo.'}), 400
+
+    role_label = str(admin.get('role', 'staff')).upper()
+    created = admin_store.auto_register_staff_whitelist(
+        nome_dev=f'[{role_label}] {admin.get("display_name", "Equipe")}',
+        ip=_get_client_ip(),
+        dispositivo_id=device_sig,
+    )
+    admin_store.log_action(
+        admin['id'], admin['display_name'], admin['role'],
+        'Dispositivo da equipe identificado',
+        'Fingerprint protegido e sincronizado com o WAF',
+        _get_client_ip(),
+    )
+    return jsonify({'ok': True, 'registered': bool(created)})
 
 
 @app.route('/admin/manage/create', methods=['POST'])
@@ -3353,10 +4643,9 @@ def admin_gateway_restore():
 @app.route('/admin/notifications')
 def admin_notifications():
     admin = g.admin
-    allow_admin_gw = admin_store.get_allow_admin_gateway()
     notifications = admin_store.get_notifications(
         limit=50, viewer_role=admin['role'], admin_id=admin['id'],
-        allow_admin_gw=allow_admin_gw
+        manage_gateways=admin_store.has_admin_permission(admin, 'manageGateways')
     )
     # Mark all as read
     for n in notifications:
@@ -3393,11 +4682,11 @@ def admin_notifications_clear_all():
 @app.route('/admin/notifications/api')
 def admin_notifications_api():
     admin = g.admin
-    allow_admin_gw = admin_store.get_allow_admin_gateway()
-    count = admin_store.count_unread_notifications(admin['id'], admin['role'], allow_admin_gw)
+    manage_gateways = admin_store.has_admin_permission(admin, 'manageGateways')
+    count = admin_store.count_unread_notifications(admin['id'], admin['role'], manage_gateways)
     notifications = admin_store.get_notifications(
         limit=30, viewer_role=admin['role'],
-        admin_id=admin['id'], unread_only=False, allow_admin_gw=allow_admin_gw
+        admin_id=admin['id'], unread_only=False, manage_gateways=manage_gateways
     )
     return jsonify({
         'unread': count,
@@ -3480,8 +4769,36 @@ def admin_security_view():
     if admin['role'] != 'owner':
         abort(404)
     import json as _json
-    requests_list = admin_store.get_suspicious_requests(limit=200)
+    from collections import defaultdict as _defaultdict
+    requests_raw = admin_store.get_suspicious_requests(limit=500)
     suspicious_today = admin_store.count_suspicious_today()
+
+    # ── Group suspicious requests by IP for the accordion view ──────────────
+    groups_map: dict = _defaultdict(list)
+    for r in requests_raw:
+        groups_map[r['ip']].append(r)
+
+    grouped_requests = []
+    for ip, reqs in groups_map.items():
+        reqs.sort(key=lambda x: x.get('ts', ''), reverse=True)
+        total_count  = sum(r.get('count', 1) for r in reqs)
+        attack_types = list({r['attack_type'] for r in reqs})
+        latest_ts    = max(r.get('ts', '') for r in reqs)
+        linked_ips   = admin_store.get_linked_ips_for_ip(ip)
+        grouped_requests.append({
+            'ip':               ip,
+            'requests':         reqs,
+            'total_count':      total_count,
+            'attack_types':     attack_types,
+            'latest_ts':        latest_ts,
+            'linked_ips':       linked_ips,
+            'browser_name':     reqs[0].get('browser_name') or '—',
+            'operating_system': reqs[0].get('operating_system') or '—',
+        })
+    grouped_requests.sort(key=lambda g: g['latest_ts'], reverse=True)
+    requests_total = len(requests_raw)
+    # ────────────────────────────────────────────────────────────────────────
+
     incidents = admin_store.get_brute_force_incidents(limit=200)
     for inc in incidents:
         try:
@@ -3492,19 +4809,210 @@ def admin_security_view():
     forensics_today = admin_store.count_brute_force_today()
     unique_ips  = len({i['ip'] for i in incidents})
     proxy_count = sum(1 for i in incidents if i.get('geo_is_proxy'))
+    waf_bans    = admin_store.get_waf_bans(limit=200)
     flash_msg   = session.pop('_admin_flash', None)
     return render_template(
         'admin/security.html',
         admin=admin,
         role_meta=admin_store.ROLE_META,
-        requests_list=requests_list,
+        requests_list=requests_raw,        # kept for stat counter backward-compat
+        requests_total=requests_total,
+        grouped_requests=grouped_requests,
         suspicious_today=suspicious_today,
         incidents=incidents,
         forensics_today=forensics_today,
         unique_ips=unique_ips,
         proxy_count=proxy_count,
+        waf_bans=waf_bans,
         flash_msg=flash_msg,
         fmt_ts=admin_store.fmt_ts,
+    )
+
+
+@app.route('/admin/api/ip-tooltip/<ip>')
+def admin_api_ip_tooltip(ip: str):
+    """AJAX — returns geo + proxy metadata + WAF status for the IP hover tooltip.
+    Accessible to any logged-in admin (auth guard runs via before_request on /admin/*).
+    """
+    import re as _re
+    if not _re.match(r'^[\d\.:a-fA-F]+$', ip):
+        return jsonify({'error': 'invalid'}), 400
+    geo        = _get_geo(ip)
+    waf_status = admin_store.get_waf_status(ip)
+    return jsonify({
+        'city':       geo.get('city') or '?',
+        'region':     geo.get('region') or '?',
+        'country':    geo.get('country') or '?',
+        'flag':       geo.get('flag') or '🌐',
+        'isp':        geo.get('isp') or geo.get('org') or '—',
+        'is_proxy':   bool(geo.get('is_proxy')),
+        'is_hosting': bool(geo.get('is_hosting')),
+        'waf_status': waf_status['waf_status'],   # 'banned' | 'warning' | 'clean'
+        'waf_count':  waf_status['waf_count'],     # 0 | 1 | 2
+    })
+
+
+@app.route('/admin/waf/unban', methods=['POST'])
+def admin_waf_unban():
+    """Owner-only: lift a WAF ban by IP."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    ip = request.form.get('ip', '').strip()
+    if ip:
+        admin_store.unban_ip_waf(ip)
+        admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                          f'WAF ban removido para IP {ip}', None, ip=_get_client_ip())
+        session['_admin_flash'] = {'type': 'success', 'text': f'Ban WAF removido para {ip}.'}
+    return redirect('/admin/security')
+
+
+# ═══ FIREWALL / LISTA DE ACESSO (ADD02 / ADD03) ══════════════════════════
+
+@app.route('/admin/firewall')
+def admin_firewall_view():
+    """Owner-only: advanced firewall & access-list management page."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    waf_bans      = admin_store.get_waf_bans(limit=500)
+    whitelist     = admin_store.get_whitelist()
+    flash_msg     = session.pop('_admin_flash', None)
+    no_history    = session.pop('_firewall_no_history', None)
+    return render_template(
+        'admin/firewall.html',
+        admin=admin,
+        role_meta=admin_store.ROLE_META,
+        waf_bans=waf_bans,
+        whitelist=whitelist,
+        flash_msg=flash_msg,
+        no_history_ips=no_history or [],
+        fmt_ts=admin_store.fmt_ts,
+    )
+
+
+@app.route('/admin/firewall/ban', methods=['POST'])
+def admin_firewall_ban():
+    """Owner-only: manually ban an IP with a dropdown reason."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    import re as _re
+    ip     = request.form.get('ip', '').strip()
+    reason = request.form.get('reason', '').strip()
+    custom = request.form.get('custom_reason', '').strip()
+    if reason == '__custom__':
+        reason = custom or 'Outro (motivo não especificado)'
+    if not ip or not _re.match(r'^[\d\.:a-fA-F]+$', ip):
+        session['_admin_flash'] = {'type': 'danger', 'text': 'IP inválido.'}
+        return redirect('/admin/firewall')
+    if not reason:
+        session['_admin_flash'] = {'type': 'danger', 'text': 'Selecione um motivo.'}
+        return redirect('/admin/firewall')
+    admin_store.ban_ip_waf(ip, reason, '/admin/firewall (manual)', 'MANUAL', '')
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f'IP {ip} banido manualmente via Firewall — motivo: {reason}',
+                      None, ip=_get_client_ip())
+    session['_admin_flash'] = {'type': 'success', 'text': f'IP {ip} banido com sucesso.'}
+    return redirect('/admin/firewall')
+
+
+@app.route('/admin/firewall/unban', methods=['POST'])
+def admin_firewall_unban():
+    """Owner-only: unban an IP from the firewall page."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    ip = request.form.get('ip', '').strip()
+    if ip:
+        admin_store.unban_ip_waf(ip)
+        admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                          f'WAF ban removido para IP {ip} via Firewall', None,
+                          ip=_get_client_ip())
+        session['_admin_flash'] = {'type': 'success', 'text': f'IP {ip} desbanido.'}
+    return redirect('/admin/firewall')
+
+
+@app.route('/admin/firewall/whitelist/add', methods=['POST'])
+def admin_firewall_whitelist_add():
+    """Owner-only: add a developer/pentester to the whitelist."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    nome         = request.form.get('nome_dev', '').strip()
+    ip_wl        = request.form.get('ip_wl', '').strip()
+    fp_wl        = request.form.get('dispositivo_id', '').strip()
+    modo_teste   = request.form.get('modo_teste_ativo') == '1'
+    if not nome:
+        session['_admin_flash'] = {'type': 'danger', 'text': 'Nome obrigatório.'}
+        return redirect('/admin/firewall')
+    admin_store.add_to_whitelist(nome, ip_wl, fp_wl, modo_teste)
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f'Dev/Pentester "{nome}" adicionado à lista branca (modo_teste={modo_teste})',
+                      None, ip=_get_client_ip())
+    session['_admin_flash'] = {'type': 'success', 'text': f'"{nome}" adicionado à lista branca.'}
+    return redirect('/admin/firewall')
+
+
+@app.route('/admin/firewall/whitelist/remove', methods=['POST'])
+def admin_firewall_whitelist_remove():
+    """Owner-only: remove a developer/pentester from the whitelist."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    try:
+        entry_id = int(request.form.get('entry_id', 0))
+    except (ValueError, TypeError):
+        entry_id = 0
+    nome = request.form.get('nome_dev', '')
+    if entry_id:
+        admin_store.remove_from_whitelist(entry_id)
+        admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                          f'Dev/Pentester "{nome}" removido da lista branca (ID {entry_id})',
+                          None, ip=_get_client_ip())
+        session['_admin_flash'] = {'type': 'success', 'text': f'"{nome}" removido da lista branca.'}
+    return redirect('/admin/firewall')
+
+
+@app.route('/admin/firewall/sync', methods=['POST'])
+def admin_firewall_sync():
+    """Owner-only: auto-import attack dossiers into waf_bans (blacklist)."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+    result = admin_store.sync_waf_bans_from_history()
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f"Sincronização de dossiês: {result['imported']} importados, "
+                      f"{result['skipped']} já existiam",
+                      None, ip=_get_client_ip())
+    msg = (f"Sincronizado: {result['imported']} IPs importados, "
+           f"{result['skipped']} já estavam na lista negra.")
+    session['_admin_flash'] = {'type': 'success', 'text': msg}
+    # If some IPs had no history, return them so the UI can show the modal
+    no_hist = result.get('no_history', [])
+    if no_hist:
+        session['_firewall_no_history'] = no_hist[:50]
+    return redirect('/admin/firewall')
+
+
+@app.route('/debug-security-screen')
+def debug_security_screen():
+    """Preview the WAF block screen with fake data.
+    Only accessible when app.debug is True OR by a logged-in admin.
+    """
+    admin_ok = False
+    try:
+        a, _ = _get_admin()
+        admin_ok = bool(a)
+    except Exception:
+        pass
+    if not app.debug and not admin_ok:
+        abort(404)
+    return _render_waf_block(
+        ip='203.0.113.42',
+        reason='Credential Exfiltration (.env)',
+        ts='2026-08-03T19:45:00',
+        url_path='/.env.production',
     )
 
 
@@ -3516,6 +5024,23 @@ def admin_suspicious_view():
 @app.route('/admin/forensics')
 def admin_forensics_view():
     return redirect('/admin/security')
+
+
+@app.route('/admin/suspicious/delete-by-ip', methods=['POST'])
+def admin_suspicious_delete_by_ip():
+    """Owner-only: delete ALL suspicious_requests records for a specific IP."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    ip = request.json.get('ip', '').strip() if request.is_json else request.form.get('ip', '').strip()
+    import re as _re
+    if not ip or not _re.match(r'^[\d\.:a-fA-F]+$', ip):
+        return jsonify({'ok': False, 'error': 'invalid ip'}), 400
+    deleted = admin_store.delete_suspicious_by_ip(ip)
+    admin_store.audit(admin['id'], admin['display_name'], admin['role'],
+                      f'Registros suspeitos do IP {ip} apagados ({deleted} linhas)', None,
+                      ip=_get_client_ip())
+    return jsonify({'ok': True, 'deleted': deleted})
 
 
 @app.route('/admin/suspicious/clear', methods=['POST'])
@@ -3530,6 +5055,22 @@ def admin_suspicious_clear():
     return redirect('/admin/security')
 
 
+def _build_dossier_data(ip: str):
+    """Gather all dossier data for a given IP — shared by CSV and HTML exports."""
+    from datetime import datetime as _dt
+    data       = admin_store.get_all_events_by_ip(ip)
+    now_str    = _dt.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    total_events = (len(data['suspicious']) + len(data['brute_force']) +
+                    len(data['audit']))
+    # Enrich brute-force rows with parsed OS/browser where missing
+    for r in data['brute_force']:
+        if not r.get('operating_system'):
+            r['operating_system'] = _parse_os(r.get('ua', ''))
+        if not r.get('browser_name'):
+            r['browser_name'] = _parse_browser(r.get('ua', ''))
+    return data, now_str, total_events
+
+
 @app.route('/admin/forensics/export-dossier/<path:attacker_ip>')
 def admin_export_dossier(attacker_ip):
     """Owner-only: generate and download a forensic CSV dossier for a specific attacker IP."""
@@ -3540,12 +5081,8 @@ def admin_export_dossier(attacker_ip):
     import csv, io
     from datetime import datetime as _dt
 
-    ip   = attacker_ip.strip()
-    data = admin_store.get_all_events_by_ip(ip)
-    now_str = _dt.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
-
-    total_events = (len(data['suspicious']) + len(data['brute_force']) +
-                    len(data['audit']))
+    ip = attacker_ip.strip()
+    data, now_str, total_events = _build_dossier_data(ip)
 
     buf = io.StringIO()
     # UTF-8 BOM for Windows Excel compatibility
@@ -3561,6 +5098,28 @@ def admin_export_dossier(attacker_ip):
     w.writerow(['Gerado por:', f"{admin['display_name']} ({admin['role']})"])
     w.writerow([])
 
+    # ── IPs Vinculados (mesmo hardware) ────────────────────────────────────
+    w.writerow(['=== IPS VINCULADOS (MESMO HARDWARE / DISPOSITIVO FISICO) ==='])
+    if data.get('linked_ips'):
+        w.writerow(['IP Alternativo', 'Pais', 'Cidade', 'ISP', 'VPN/Proxy', 'SO', 'Navegador',
+                    'Primeira Ocorrencia', 'Ultima Ocorrencia', 'Canvas Fingerprint'])
+        for r in data['linked_ips']:
+            w.writerow([
+                r.get('ip', ''),
+                r.get('geo_country', ''),
+                r.get('geo_city', ''),
+                r.get('geo_isp', ''),
+                'Sim' if r.get('geo_is_proxy') else 'Nao',
+                r.get('operating_system', ''),
+                r.get('browser_name', ''),
+                r.get('first_seen', ''),
+                r.get('last_seen', ''),
+                r.get('canvas_fp', ''),
+            ])
+    else:
+        w.writerow(['(nenhum IP alternativo detectado para o mesmo hardware)'])
+    w.writerow([])
+
     # ── Secao 1: Ataques Suspeitos na URL ──────────────────────────────────
     w.writerow(['=== SECAO 1: ATAQUES SUSPEITOS NA URL ==='])
     if data['suspicious']:
@@ -3568,14 +5127,11 @@ def admin_export_dossier(attacker_ip):
                     'Payload URL Malicioso (Completo)', 'Ocorrencias'])
         for r in data['suspicious']:
             w.writerow([
-                r.get('ts', ''),
-                ip,
+                r.get('ts', ''), ip,
                 r.get('operating_system') or _NO_UA_LABEL,
                 r.get('browser_name') or _NO_UA_LABEL,
-                r.get('attack_type', ''),
-                r.get('method', ''),
-                r.get('url_path', ''),
-                r.get('count', 1),
+                r.get('attack_type', ''), r.get('method', ''),
+                r.get('url_path', ''), r.get('count', 1),
             ])
     else:
         w.writerow(['(nenhum registro de ataque suspeito encontrado para este IP)'])
@@ -3592,28 +5148,18 @@ def admin_export_dossier(attacker_ip):
         ])
         for r in data['brute_force']:
             w.writerow([
-                r.get('ts', ''),
-                ip,
-                r.get('operating_system') or _parse_os(r.get('ua', '')),
-                r.get('browser_name') or _parse_browser(r.get('ua', '')),
-                r.get('hardware_gpu', ''),
-                r.get('hardware_ram', ''),
-                r.get('hardware_cores', ''),
-                r.get('screen_resolution', ''),
-                r.get('username_tried', ''),
-                r.get('failures', 0),
-                r.get('geo_country', ''),
-                r.get('geo_region', ''),
-                r.get('geo_city', ''),
-                r.get('geo_lat', ''),
-                r.get('geo_lon', ''),
-                r.get('geo_isp', ''),
-                r.get('geo_asn', ''),
+                r.get('ts', ''), ip,
+                r.get('operating_system') or _NO_UA_LABEL,
+                r.get('browser_name') or _NO_UA_LABEL,
+                r.get('hardware_gpu', ''), r.get('hardware_ram', ''),
+                r.get('hardware_cores', ''), r.get('screen_resolution', ''),
+                r.get('username_tried', ''), r.get('failures', 0),
+                r.get('geo_country', ''), r.get('geo_region', ''),
+                r.get('geo_city', ''), r.get('geo_lat', ''), r.get('geo_lon', ''),
+                r.get('geo_isp', ''), r.get('geo_asn', ''),
                 'Sim' if r.get('geo_is_proxy') else 'Nao',
                 'Sim' if r.get('geo_is_hosting') else 'Nao',
-                r.get('canvas_fp', ''),
-                r.get('webrtc_ip', ''),
-                r.get('ua', ''),
+                r.get('canvas_fp', ''), r.get('webrtc_ip', ''), r.get('ua', ''),
             ])
     else:
         w.writerow(['(nenhum incidente de forca bruta encontrado para este IP)'])
@@ -3625,11 +5171,8 @@ def admin_export_dossier(attacker_ip):
         w.writerow(['Timestamp', 'Administrador', 'Cargo', 'Acao', 'Detalhes'])
         for r in data['audit']:
             w.writerow([
-                r.get('ts', ''),
-                r.get('admin_name', ''),
-                r.get('role', ''),
-                r.get('action', ''),
-                r.get('detail', ''),
+                r.get('ts', ''), r.get('admin_name', ''),
+                r.get('role', ''), r.get('action', ''), r.get('detail', ''),
             ])
     else:
         w.writerow(['(nenhuma entrada de auditoria encontrada para este IP)'])
@@ -3638,7 +5181,7 @@ def admin_export_dossier(attacker_ip):
 
     admin_store.audit(
         admin['id'], admin['display_name'], admin['role'],
-        'dossier_export', f'Dossie exportado para IP {ip} ({total_events} eventos)',
+        'dossier_export_csv', f'Dossiê CSV exportado para IP {ip} ({total_events} eventos)',
         ip=_get_client_ip()
     )
 
@@ -3648,6 +5191,49 @@ def admin_export_dossier(attacker_ip):
     from flask import make_response as _make_response
     resp = _make_response(buf.getvalue())
     resp.headers['Content-Type']        = 'text/csv; charset=utf-8-sig'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    resp.headers['Cache-Control']       = 'no-store'
+    return resp
+
+
+@app.route('/admin/forensics/export-dossier-html/<path:attacker_ip>')
+def admin_export_dossier_html(attacker_ip):
+    """Owner-only: generate and download a professional HTML forensic dossier."""
+    admin = g.admin
+    if admin['role'] != 'owner':
+        abort(404)
+
+    from datetime import datetime as _dt
+
+    ip = attacker_ip.strip()
+    data, now_str, total_events = _build_dossier_data(ip)
+
+    # First brute-force incident holds the primary geo + hardware fingerprint
+    primary = data['brute_force'][0] if data['brute_force'] else {}
+
+    admin_store.audit(
+        admin['id'], admin['display_name'], admin['role'],
+        'dossier_export_html', f'Dossiê HTML exportado para IP {ip} ({total_events} eventos)',
+        ip=_get_client_ip()
+    )
+
+    safe_ip  = ip.replace('.', '_').replace(':', '_')
+    filename = f'dossie_forensico_{safe_ip}_{_dt.utcnow().strftime("%Y%m%d_%H%M%S")}.html'
+
+    html = render_template(
+        'admin/dossier_report.html',
+        ip=ip,
+        now_str=now_str,
+        total_events=total_events,
+        generated_by=f"{admin['display_name']} ({admin['role']})",
+        data=data,
+        primary=primary,
+        no_ua=_NO_UA_LABEL,
+    )
+
+    from flask import make_response as _make_response
+    resp = _make_response(html)
+    resp.headers['Content-Type']        = 'text/html; charset=utf-8'
     resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     resp.headers['Cache-Control']       = 'no-store'
     return resp
@@ -3864,21 +5450,6 @@ def admin_chat_room_create_api():
                     'title': f"{admin['display_name']} ↔ {target['display_name']}"})
 
 
-@app.route('/admin/gateway-access', methods=['POST'])
-def admin_gateway_access_toggle():
-    """Owner-only: habilita/desabilita o acesso de Admins ao painel de gateway."""
-    admin = g.admin
-    if admin['role'] != 'owner':
-        return jsonify({'error': 'Sem permissão'}), 403
-    data    = request.get_json(silent=True) or {}
-    enabled = bool(data.get('enabled', False))
-    admin_store.set_allow_admin_gateway(enabled)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           f"{'Ativou' if enabled else 'Desativou'} acesso de Admins ao gateway",
-                           None, request.remote_addr)
-    return jsonify({'ok': True, 'enabled': enabled})
-
-
 @app.route('/admin/chat/internal-access', methods=['POST'])
 def admin_chat_internal_access():
     """Owner-only: toggle moderator access to the internal channel."""
@@ -3963,9 +5534,6 @@ def admin_chat_room_delete(room_id):
     if not room.get('closed'):
         return jsonify({'error': 'Só é possível apagar conversas encerradas'}), 400
     admin_store.delete_room(room_id)
-    admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
-                           f'Apagou permanentemente a conversa privada #{room_id}',
-                           None, request.remote_addr)
     return jsonify({'ok': True})
 
 
@@ -4219,6 +5787,7 @@ def admin_webhooks():
     webhooks = admin_store.get_webhooks()
     import json as _json
     for wh in webhooks:
+        wh['url'] = dwh.normalize_webhook_url(wh.get('url', ''))
         try:
             wh['events_list'] = _json.loads(wh['events'])
         except Exception:
@@ -4235,7 +5804,7 @@ def admin_webhooks_add():
     if admin['role'] != 'owner':
         abort(404)
     name   = request.form.get('name', '').strip()[:80]
-    url    = request.form.get('url', '').strip()[:500]
+    url    = dwh.normalize_webhook_url(request.form.get('url', '').strip())[:500]
     events = request.form.getlist('events')
     if not name or not url:
         session['_admin_flash'] = {'type': 'danger', 'text': 'Nome e URL são obrigatórios.'}
@@ -4255,7 +5824,7 @@ def admin_webhooks_update():
         abort(404)
     wh_id   = int(request.form.get('wh_id', 0))
     name    = request.form.get('name', '').strip()[:80]
-    url     = request.form.get('url', '').strip()[:500]
+    url     = dwh.normalize_webhook_url(request.form.get('url', '').strip())[:500]
     enabled = request.form.get('enabled', '0') == '1'
     events  = request.form.getlist('events')
     if not wh_id or not name or not url:
@@ -4303,7 +5872,7 @@ def admin_webhooks_test():
     admin = g.admin
     if admin['role'] != 'owner':
         abort(404)
-    url = request.form.get('url', '').strip()
+    url = dwh.normalize_webhook_url(request.form.get('url', '').strip())
     if not url:
         return jsonify({'ok': False, 'error': 'URL vazia'})
     ok, code = dwh.test_webhook(url)
@@ -4313,24 +5882,15 @@ def admin_webhooks_test():
 if __name__ == '__main__':
     app_logger.info("🚀 Iniciando Media Scraper...")
     app_logger.info("🌐 Servidor disponível em: http://localhost:5000")
-
-    # Com debug=True o Werkzeug usa um processo "watcher" que reexecuta este
-    # arquivo num processo filho para de fato servir requisições. Se a thread
-    # de auto-ping for iniciada no watcher, seus dados (next_ping) ficam presos
-    # num processo diferente do que atende o dashboard — por isso só iniciamos
-    # threads quando WERKZEUG_RUN_MAIN='true' (processo filho real) OU quando
-    # o reloader não está ativo (produção sem debug).
-    # Nota: app.debug ainda é False aqui (antes de app.run), então usamos a
-    # variável de ambiente WERKZEUG_RUN_MAIN diretamente.
     _run_main = os.environ.get('WERKZEUG_RUN_MAIN')
     # _run_main == 'true'  → processo filho do reloader (arrancar threads)
     # _run_main is None    → sem reloader ativo (produção) OU 1º boot do watcher
     # Para distinguir produção do watcher: watcher define WERKZEUG_SERVER_FD
     _is_watcher = (_run_main is None and os.environ.get('WERKZEUG_SERVER_FD') is not None)
     if _run_main == 'true' or (not _is_watcher and _run_main is None):
-        auto_ping()  # initialises BackgroundScheduler keep-alive engine
-        app_logger.info("🏓 Auto-ping BackgroundScheduler ativado para manter o servidor online")
+        _ensure_auto_ping()  # starts DB-driven ping daemon thread
+        app_logger.info("🏓 Auto-ping DB-driven iniciado (sobrevive a restarts)")
         threading.Thread(target=_pix_expiry_worker, daemon=True).start()
         app_logger.info("⏰ Thread de expiração de PIX ativada")
-    is_debug = os.environ.get('RENDER_DEBUG', 'false').lower() == 'true'
+
     app.run(host="0.0.0.0", port=5000, debug=True)

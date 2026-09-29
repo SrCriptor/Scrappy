@@ -30,7 +30,8 @@ _DEFAULT_CONFIG = {
         },
         'stripe': {
             'enabled': False,
-            'api_key': '',
+            'stripe_test_enabled': False,
+            'stripe_test_secret_key': '',
             'stripe_pix_enabled': True,
         },
         'paypal': {
@@ -215,7 +216,10 @@ class MercadoPagoGateway(BaseGateway):
 
     def create_pix_payment(self, amount_brl: float, description: str = 'Doação') -> PaymentResult:
         if not self.access_token:
-            return PaymentResult(success=False, error='Token do Mercado Pago não configurado')
+            return PaymentResult(
+                success=False,
+                error='⚠️ Credenciais Mercado Pago não configuradas. Preencha o Access Token nas configurações.',
+            )
         try:
             resp = requests.post(
                 f'{self.BASE}/v1/payments',
@@ -226,9 +230,9 @@ class MercadoPagoGateway(BaseGateway):
                 },
                 json={
                     'transaction_amount': round(amount_brl, 2),
-                    'description': description[:100],
+                    'description': 'Apoio ao Projeto - Scrapy',
                     'payment_method_id': 'pix',
-                    'payer': {'email': 'doador@doacao.com'},
+                    'payer': {'email': 'sistema_scrapy_pix@test.com'},
                 },
                 timeout=30,
             )
@@ -253,15 +257,22 @@ class MercadoPagoGateway(BaseGateway):
                     raw_err = {'raw': resp.text[:500]}
                 return PaymentResult(
                     success=False,
-                    error='Não implementado',
+                    error='⚠️ Erro ao gerar o Pix com o Mercado Pago. Verifique as credenciais ou tente mais tarde.',
                     is_auth_error=True,
                     raw_api_error=raw_err,
                 )
-            return PaymentResult(success=False, error=resp.json().get('message', f'Erro HTTP {resp.status_code}'))
+            return PaymentResult(
+                success=False,
+                error='⚠️ Erro ao gerar o Pix com o Mercado Pago. Verifique as credenciais ou tente mais tarde.',
+                raw_api_error={'status_code': resp.status_code},
+            )
         except requests.Timeout:
             return PaymentResult(success=False, error='Timeout ao conectar com Mercado Pago')
         except Exception as e:
-            return PaymentResult(success=False, error=str(e))
+            return PaymentResult(
+                success=False,
+                error='⚠️ Erro ao gerar o Pix com o Mercado Pago. Verifique as credenciais ou tente mais tarde.',
+            )
 
     def check_payment_status(self, payment_id: str) -> dict:
         if not self.access_token:
@@ -305,8 +316,18 @@ class NovenovePagGateway(BaseGateway):
 
 class StripeGateway(BaseGateway):
     def __init__(self, config: dict):
-        # Prioridade: valor salvo no painel (banco) > variável de ambiente como fallback
-        self.api_key = config.get('api_key', '') or os.environ.get('STRIPE_SECRET_KEY', '')
+        # A chave de produção nunca é persistida: ela vem exclusivamente da
+        # variável oculta STRIPE_SECRET_KEY. A chave de teste é opt-in e fica
+        # no config persistido do painel.
+        legacy_test_key = config.get('api_key', '')
+        if not str(legacy_test_key).startswith('sk_test_'):
+            legacy_test_key = ''
+        self.test_enabled = bool(config.get('stripe_test_enabled', False))
+        self.test_secret_key = config.get('stripe_test_secret_key', '') or legacy_test_key
+        self.api_key = (
+            self.test_secret_key if self.test_enabled
+            else os.environ.get('STRIPE_SECRET_KEY', '')
+        )
         # Admin-controlled toggle: allow disabling the Pix tab for Stripe
         # specifically (its Pix support is region-limited / under review),
         # routing customers straight to the standard card checkout instead.
@@ -382,6 +403,8 @@ class StripeGateway(BaseGateway):
             return PaymentResult(success=False, error=f'Stripe: {e}')
 
     def validate_credentials(self) -> bool:
+        if self.test_enabled:
+            return bool(self.api_key) and self.api_key.startswith('sk_test_')
         return bool(self.api_key)
 
 
@@ -641,6 +664,42 @@ def _gateway_supports_pix(gid: str, gw_cfg: dict, meta: dict) -> bool:
     return meta.get('pix', True)
 
 
+def gateway_credential_status(gid: str, cfg: dict | None = None) -> dict:
+    """Return only public-safe credential state for the checkout.
+
+    The checkout needs to explain why Stripe is unavailable, but must never
+    receive the key itself.  Production Stripe credentials intentionally come
+    from the server environment and are therefore checked here without being
+    serialized into the response.
+    """
+    cfg = cfg or load_config()
+    gw_cfg = cfg.get('gateways', {}).get(gid, {})
+    if gid == 'stripe':
+        if bool(gw_cfg.get('stripe_test_enabled', False)):
+            key = str(gw_cfg.get('stripe_test_secret_key', '') or '').strip()
+            if not key or not key.startswith('sk_test_'):
+                return {
+                    'ready': False,
+                    'error': '⚠️ Credenciais Stripe Teste não configuradas. Preencha a Stripe Test Secret Key no painel de pagamentos.',
+                }
+        elif not str(os.environ.get('STRIPE_SECRET_KEY', '') or '').strip():
+            return {
+                'ready': False,
+                'error': '⚠️ Credenciais Stripe Produção não configuradas. Insira a STRIPE_SECRET_KEY nas configurações do servidor.',
+            }
+    elif gid == 'mercadopago':
+        token = str(
+            gw_cfg.get('access_token', '') or
+            os.environ.get('MERCADOPAGO_ACCESS_TOKEN', '')
+        ).strip()
+        if not token:
+            return {
+                'ready': False,
+                'error': '⚠️ Credenciais Mercado Pago não configuradas. Preencha o Access Token nas configurações.',
+            }
+    return {'ready': True, 'error': None}
+
+
 def get_enabled_pix_gateways() -> list[dict]:
     cfg = load_config()
     primary = cfg.get('primary_gateway', 'manual')
@@ -651,7 +710,13 @@ def get_enabled_pix_gateways() -> list[dict]:
             continue
         if not _gateway_supports_pix(gid, gw_cfg, meta):
             continue  # gateway sem Pix habilitado não aparece na aba Pix
-        result.append({'id': gid, 'name': meta['name'], 'icon': meta['icon'], 'primary': gid == primary})
+        status = gateway_credential_status(gid, cfg)
+        result.append({
+            'id': gid, 'name': meta['name'], 'icon': meta['icon'],
+            'primary': gid == primary,
+            'credentials_ready': status['ready'],
+            'credential_error': status['error'],
+        })
     # Gateways personalizados (sempre Pix)
     for cg in cfg.get('custom_gateways', []):
         if cg.get('enabled', False) and cg.get('pix_key'):
@@ -660,12 +725,19 @@ def get_enabled_pix_gateways() -> list[dict]:
                 'primary': cg['id'] == primary,
                 'name': cg.get('name', 'Personalizado'),
                 'icon': cg.get('icon', 'fa-qrcode'),
+                'credentials_ready': True,
+                'credential_error': None,
             })
     if not result:
         # Fallback para manual somente se estiver explicitamente habilitado (ou sem config)
         manual_cfg = cfg.get('gateways', {}).get('manual', {})
         if manual_cfg.get('enabled', True):
-            result.append({'id': 'manual', 'name': 'PIX Manual', 'icon': 'fa-qrcode', 'primary': 'manual' == primary})
+            result.append({
+                'id': 'manual', 'name': 'PIX Manual', 'icon': 'fa-qrcode',
+                'primary': 'manual' == primary,
+                'credentials_ready': gateway_credential_status('manual', cfg)['ready'],
+                'credential_error': None,
+            })
     return result
 
 
@@ -683,5 +755,11 @@ def get_enabled_card_gateways() -> list[dict]:
         gw_cfg = cfg.get('gateways', {}).get(gid, {})
         if not gw_cfg.get('enabled', False):
             continue
-        result.append({'id': gid, 'name': meta['name'], 'icon': meta['icon'], 'primary': gid == primary})
+        status = gateway_credential_status(gid, cfg)
+        result.append({
+            'id': gid, 'name': meta['name'], 'icon': meta['icon'],
+            'primary': gid == primary,
+            'credentials_ready': status['ready'],
+            'credential_error': status['error'],
+        })
     return result

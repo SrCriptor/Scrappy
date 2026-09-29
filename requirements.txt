@@ -15,5 +15,5 @@ Pillow
 oci
 stripe
 numpy
-oci
 scipy
+yt-dlp

@@ -3,13 +3,12 @@ import time
 
 import admin_store as _store
 
-_lock = threading.Lock()
+_lock      = threading.Lock()
+_boot_done = threading.Event()   # fired when _boot_load finishes
 
 start_time = time.time()
 
 # ── Chaves que persistem no banco (tabela dashboard_metrics) ───────────────
-# 'next_ping' agora também persiste — evita que o cronômetro "Próximo Ping"
-# reinicie do zero quando o processo reinicia (ex.: restart do workflow).
 _PERSISTENT_KEYS = ('views', 'searches', 'images', 'videos', 'downloads', 'last_scrape', 'next_ping')
 
 # ── Estado em memória (cache local, espelha o banco) ────────────────────────
@@ -32,12 +31,29 @@ def _boot_load():
         saved = _store.get_all_metrics()
     except Exception:
         saved = {}
+    now = time.time()
     with _lock:
         for k in _PERSISTENT_KEYS:
-            if k in saved and saved[k] is not None:
-                _real[k] = saved[k]
+            if k not in saved or saved[k] is None:
+                continue
+            val = saved[k]
+            # next_ping: só restaura se ainda estiver no futuro E se ainda
+            # não foi sobrescrito por código que rodou após o boot (valor
+            # já em memória maior que o do banco → banco está desatualizado).
+            if k == 'next_ping':
+                if val <= now:
+                    continue               # timestamp expirado — ignora
+                if _real[k] is not None and _real[k] >= val:
+                    continue               # memória já tem valor mais novo
+            _real[k] = val
+    _boot_done.set()
 
 threading.Thread(target=_boot_load, daemon=True, name='stats-boot-load').start()
+
+
+def wait_for_boot(timeout: float = 8.0) -> bool:
+    """Bloqueia até _boot_load terminar (ou timeout). Retorna True se concluiu."""
+    return _boot_done.wait(timeout=timeout)
 
 # ── API pública ───────────────────────────────────────────────────────────
 def increment(key, amount=1):

@@ -1,6 +1,9 @@
 """Discord webhook dispatcher — rich embeds for admin events."""
+import json
+import re
 import threading, requests
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 
 EVENTS = {
@@ -14,11 +17,123 @@ EVENTS = {
 }
 
 _ROLE_LABEL = {
-    'owner':     'Owner',
-    'admin':     'Admin',
+    'owner':     'Proprietário (Owner)',
+    'admin':     'Administrador',
     'moderator': 'Moderador',
     'helper':    'Ajudante',
 }
+
+_GATEWAY_LABEL = {
+    'manual': 'PIX Manual',
+    'mercadopago': 'Mercado Pago',
+    '99pay': '99Pay',
+    'stripe': 'Stripe',
+    'paypal': 'PayPal',
+}
+
+_GATEWAY_FIELD_LABEL = {
+    'enabled': 'Status',
+    'pix_key': 'Chave PIX',
+    'pix_key_type': 'Tipo da chave',
+    'beneficiary_name': 'Beneficiário',
+    'city': 'Cidade',
+    'access_token': 'Access Token',
+    'client_id': 'Client ID',
+    'client_secret': 'Client Secret',
+    'stripe_test_enabled': 'Modo de teste',
+    'stripe_test_secret_key': 'Stripe Key Test',
+    'stripe_pix_enabled': 'Pix via Stripe',
+    'sandbox': 'Sandbox',
+    'name': 'Nome',
+    'color': 'Cor',
+    'icon': 'Ícone',
+}
+
+
+def _parse_gateway_diff(detail: str) -> dict | None:
+    """Parse the compact masked diff written by the gateway audit flow."""
+    if not detail or 'Estado anterior (' not in detail:
+        return None
+    before_line = next(
+        (line for line in detail.splitlines()
+         if line.startswith('- Estado anterior (')),
+        None,
+    )
+    after_line = next(
+        (line for line in detail.splitlines()
+         if line.startswith('+ Valor proposto (')),
+        None,
+    )
+    if not before_line or not after_line:
+        return None
+    match = re.match(r'- Estado anterior \((.*?)\): (.*)$', before_line)
+    after_match = re.match(r'\+ Valor proposto \(.*?\): (.*)$', after_line)
+    if not match or not after_match:
+        return None
+    try:
+        before = json.loads(match.group(2))
+        after = json.loads(after_match.group(1))
+    except (TypeError, ValueError):
+        return None
+    status = 'Aguardando aprovação'
+    for line in detail.splitlines():
+        if line.startswith('``` ') and line[4:].strip():
+            status = line[4:].strip()
+            break
+    return {
+        'scope': match.group(1),
+        'before': before,
+        'after': after,
+        'status': status,
+    }
+
+
+def _display_gateway_value(key: str, value) -> str:
+    if isinstance(value, bool):
+        if key in ('enabled', 'stripe_pix_enabled'):
+            return 'Ativo' if value else 'Desativado'
+        return 'Sim' if value else 'Não'
+    if value is None or value == '':
+        return '—'
+    return str(value)
+
+
+def _gateway_sections(config: dict) -> list[tuple[str, str]]:
+    """Turn a masked gateway snapshot into small, readable embed sections."""
+    sections = []
+    for gateway_id, gateway in (config or {}).get('gateways', {}).items():
+        if not isinstance(gateway, dict):
+            continue
+        title = _GATEWAY_LABEL.get(gateway_id, gateway_id)
+        lines = []
+        for key, value in gateway.items():
+            label = _GATEWAY_FIELD_LABEL.get(key)
+            if label:
+                lines.append(
+                    f'**{label}:** {_display_gateway_value(key, value)}'
+                )
+        if lines:
+            sections.append((title, '\n'.join(lines)[:1000]))
+
+    custom_gateways = (config or {}).get('custom_gateways', [])
+    for custom in custom_gateways:
+        if not isinstance(custom, dict):
+            continue
+        title = custom.get('name') or 'Gateway personalizado'
+        lines = []
+        for key, value in custom.items():
+            label = _GATEWAY_FIELD_LABEL.get(key)
+            if label and key != 'id':
+                lines.append(
+                    f'**{label}:** {_display_gateway_value(key, value)}'
+                )
+        if lines:
+            sections.append((str(title)[:80], '\n'.join(lines)[:1000]))
+
+    primary = (config or {}).get('primary_gateway')
+    if primary:
+        sections.append(('Gateway padrão', f'**Selecionado:** `{primary}`'))
+    return sections
 
 
 def _now_iso() -> str:
@@ -27,6 +142,131 @@ def _now_iso() -> str:
 
 def _role_label(role: str) -> str:
     return _ROLE_LABEL.get(role, role)
+
+
+_ACTION_LABEL = {
+    'developer_mode_toggle': 'Modo Desenvolvedor',
+    'regenerate_access_key': 'Chave de acesso de apoiador',
+    'vip_tier_update': 'Configuração de nível VIP',
+    'manual_donation_created': 'Doação manual',
+    'ranking_delete': 'Entrada no ranking',
+    'payment_status_update': 'Status de pagamento',
+    'dossier_export_csv': 'Exportação de dossiê de segurança (CSV)',
+    'dossier_export_html': 'Exportação de dossiê de segurança (HTML)',
+}
+
+
+def _extract_boolean_detail(detail: str):
+    """Read common audit booleans without exposing the internal True/False text."""
+    if not detail:
+        return None
+    match = re.search(
+        r'(?:ativo|enabled|active)\s*=\s*(true|false|1|0)',
+        str(detail),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return match.group(1).lower() in ('true', '1')
+
+
+def _humanize_detail(detail: str) -> str:
+    """Make legacy audit details readable while retaining useful context."""
+    text = str(detail or '').strip()
+    if not text:
+        return ''
+    text = re.sub(r'\bativo\s*=\s*True\b', 'Situação: Ativado', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bativo\s*=\s*False\b', 'Situação: Desativado', text, flags=re.IGNORECASE)
+    text = re.sub(r'\benabled\s*=\s*True\b', 'Situação: Ativado', text, flags=re.IGNORECASE)
+    text = re.sub(r'\benabled\s*=\s*False\b', 'Situação: Desativado', text, flags=re.IGNORECASE)
+    text = text.replace('=', ': ')
+    return text[:800]
+
+
+def _admin_action_copy(action: str, detail: str) -> dict:
+    """Return user-facing copy for an audit event.
+
+    The stored audit action remains untouched. This only changes the language
+    used in Discord, where the reader may not be a programmer.
+    """
+    raw_action = str(action or '').strip()
+    action_key = raw_action.lower()
+    label = _ACTION_LABEL.get(action_key)
+    if not label:
+        label = raw_action.replace('_', ' ').strip().capitalize() or 'Ação administrativa'
+
+    if action_key == 'developer_mode_toggle':
+        enabled = _extract_boolean_detail(detail)
+        if enabled is True:
+            return {
+                'label': label,
+                'status': '✅ Ativado',
+                'description': 'O Modo Desenvolvedor foi ativado pelo responsável.',
+                'explanation': 'As ferramentas de desenvolvimento estão disponíveis nesta sessão.',
+                'context': '',
+            }
+        if enabled is False:
+            return {
+                'label': label,
+                'status': '⛔ Desativado',
+                'description': 'O Modo Desenvolvedor foi desativado pelo responsável.',
+                'explanation': (
+                    'As funções de desenvolvedor foram interrompidas nesta sessão. '
+                    'As permissões administrativas permanecem inalteradas.'
+                ),
+                'context': '',
+            }
+
+    if raw_action.startswith('Permissão atualizada:'):
+        target = raw_action.split(':', 1)[1].strip()
+        enabled = _extract_boolean_detail(detail)
+        permission_match = re.search(r'^([^=]+)=', str(detail or ''))
+        permission = permission_match.group(1).strip() if permission_match else 'permissão administrativa'
+        state = 'concedida' if enabled is not False else 'removida'
+        return {
+            'label': 'Permissão de administrador',
+            'status': f'✅ Permissão {state}',
+            'description': f'A permissão de {target} foi atualizada.',
+            'explanation': f'O acesso configurado foi {state} para este administrador.',
+            'context': f'Permissão afetada: {permission}',
+        }
+
+    if raw_action.startswith('Webhook Discord '):
+        operation = raw_action[len('Webhook Discord '):].strip()
+        return {
+            'label': 'Configuração de webhook do Discord',
+            'status': f'✅ {operation.capitalize()}',
+            'description': f'Um webhook do Discord foi {operation}.',
+            'explanation': 'Essa alteração modifica o recebimento das notificações administrativas.',
+            'context': _humanize_detail(detail),
+        }
+
+    return {
+        'label': label,
+        'status': '✅ Ação registrada',
+        'description': f'Foi realizada a ação: **{label}**.',
+        'explanation': 'O evento foi registrado para acompanhamento administrativo.',
+        'context': _humanize_detail(detail),
+    }
+
+
+def normalize_webhook_url(url: str) -> str:
+    """Convert the current Discord hostname to the working legacy hostname.
+
+    Only the exact HTTPS host is changed; the webhook path, query string and
+    any other URL are preserved.
+    """
+    raw = (url or '').strip()
+    try:
+        parts = urlsplit(raw)
+        if parts.scheme.lower() != 'https' or parts.hostname.lower() != 'discord.com':
+            return raw
+        netloc = 'discordapp.com'
+        if parts.port is not None:
+            netloc += f':{parts.port}'
+        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    except (AttributeError, ValueError):
+        return raw
 
 
 def _geo_fields(ip: str, geo=None) -> list:
@@ -110,22 +350,68 @@ def build_brute_force_embed(ip: str, fails: int, geo=None, ua: str = None,
 
 def build_action_embed(admin_name: str, role: str, action: str,
                        detail: str = None, ip: str = None) -> dict:
+    copy = _admin_action_copy(action, detail)
     fields = [
         {'name': '👤 Responsável', 'value': f'`{admin_name}`',          'inline': True},
         {'name': '🎭 Cargo',       'value': f'`{_role_label(role)}`',   'inline': True},
-        {'name': '⚙️ Ação',        'value': f'`{action}`',              'inline': False},
+        {'name': '🛠️ O que foi alterado', 'value': f'`{copy["label"]}`', 'inline': False},
     ]
-    if detail:
-        fields.append({'name': '📝 Detalhe', 'value': f'{detail[:300]}', 'inline': False})
+    gateway_diff = _parse_gateway_diff(detail)
+    if gateway_diff:
+        status = gateway_diff['status']
+        if 'Rejeitado' in status or 'rejeitada' in action:
+            color = EVENTS['brute_force']['color']
+        elif 'Aprovado' in status or 'aprovada' in action:
+            color = EVENTS['maintenance']['color']
+        else:
+            color = EVENTS['admin_action']['color']
+        fields.extend([
+            {'name': '📦 Escopo', 'value': f'`{gateway_diff["scope"]}`', 'inline': True},
+            {'name': '📌 Status', 'value': f'**{status}**', 'inline': True},
+        ])
+        before_sections = _gateway_sections(gateway_diff['before'])
+        after_sections = _gateway_sections(gateway_diff['after'])
+        for title, value in before_sections:
+            fields.append({
+                'name': f'🔴 ANTES · {title}',
+                'value': value,
+                'inline': True,
+            })
+        for title, value in after_sections:
+            fields.append({
+                'name': f'🟢 DEPOIS · {title}',
+                'value': value,
+                'inline': True,
+            })
+    else:
+        color = EVENTS['admin_action']['color']
+        fields.extend([
+            {'name': '📌 Resultado', 'value': copy['status'], 'inline': True},
+            {'name': '💡 O que isso significa', 'value': copy['explanation'], 'inline': False},
+        ])
+        if copy['context']:
+            fields.append({
+                'name': '📝 Contexto',
+                'value': copy['context'],
+                'inline': False,
+            })
     if ip:
-        fields.append({'name': '🌐 IP', 'value': f'`{ip}`', 'inline': True})
-    return {
-        'title': '⚙️ Ação Administrativa',
-        'color': EVENTS['admin_action']['color'],
+        fields.append({
+            'name': '🔎 Registro técnico',
+            'value': f'IP de origem registrado: `{ip}`',
+            'inline': False,
+        })
+    embed = {
+        'title': '🔌 Alteração de Gateway' if gateway_diff else '⚙️ Ação Administrativa',
+        'color': color,
         'fields': fields,
-        'footer': {'text': 'Painel Admin · Auditoria'},
+        'footer': {'text': 'Painel Admin · Auditoria de Gateway' if gateway_diff else 'Painel Admin · Auditoria'},
         'timestamp': _now_iso(),
     }
+    if not gateway_diff:
+        embed['title'] = f'⚙️ {copy["label"]}'
+        embed['description'] = copy['description'][:1000]
+    return embed
 
 
 def build_payment_embed(action: str, description: str = None,
@@ -225,7 +511,7 @@ def build_gateway_backup_embed(action: str, admin_name: str,
 
 def _post_to_discord(url: str, embed: dict) -> int | None:
     try:
-        r = requests.post(url, json={'embeds': [embed]}, timeout=6)
+        r = requests.post(normalize_webhook_url(url), json={'embeds': [embed]}, timeout=6)
         return r.status_code
     except Exception:
         return None
