@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debug — URLs Falhas</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .badge-domain { font-size: 0.75rem; }
+        .url-cell { font-size: 0.8rem; word-break: break-all; color: #8b949e; }
+        .error-badge { font-size: 0.7rem; }
+        .resolved-row { opacity: 0.4; }
+        .domain-card { border-left: 3px solid #e74c3c; }
+        .domain-card.resolved { border-left-color: #27ae60; }
+        .stat-card { border: 1px solid #30363d; border-radius: 8px; padding: 1rem; text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: bold; }
+        .filter-bar { background: #161b22; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+        .action-btn { font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+
+<!-- Profile bubble (fixed bottom-right) -->
+<div class="profile-bubble" id="profileBubble" style="position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;align-items:center;gap:10px;background:#161b22;border:1px solid #30363d;border-radius:50px;padding:6px 14px 6px 6px;box-shadow:0 4px 20px rgba(0,0,0,.5);cursor:pointer;">
+    <img src="/static/avatars/{{ admin.avatar }}.svg" style="width:36px;height:36px;border-radius:50%;" />
+    <div>
+        <div style="font-size:.82rem;font-weight:600;line-height:1;">{{ admin.display_name }}</div>
+        <span style="font-size:.67rem;padding:1px 7px;border-radius:20px;color:#fff;margin-top:3px;display:inline-block;background:{{'#c0392b' if admin.role=='owner' else '#2d6be4' if admin.role=='admin' else '#d4a017' if admin.role=='moderator' else '#555'}};">
+            {{ role_meta[admin.role].label }}
+        </span>
+    </div>
+    <i class="fas fa-chevron-up ms-1 text-muted" style="font-size:.7rem;"></i>
+</div>
+<ul class="dropdown-menu dropdown-menu-end" id="profileMenu" style="min-width:180px;display:none;">
+    <li><a class="dropdown-item" href="/admin/"><i class="fas fa-shield-halved me-2"></i>Painel Admin</a></li>
+    <li><a class="dropdown-item" href="/admin/profile"><i class="fas fa-user-circle me-2"></i>Meu Perfil</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item text-danger" href="/admin/logout"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+</ul>
+
+<div class="container-fluid py-4 px-4">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h3 class="mb-0">
+                <i class="fas fa-bug text-danger me-2"></i>
+                Debug — URLs com Falha
+            </h3>
+            <small class="text-muted">Sem dados de cliente. Apenas URLs que falharam no download.</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/admin/" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> Voltar
+            </a>
+            <a href="/admin/logout" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-sign-out-alt me-1"></i> Sair
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-white" id="stat-total">{{ summary.total }}</div>
+                <div class="text-muted small">Total de entradas</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-danger" id="stat-unresolved">{{ summary.unresolved }}</div>
+                <div class="text-muted small">Não resolvidas</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-success" id="stat-resolved">{{ summary.resolved }}</div>
+                <div class="text-muted small">Resolvidas</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-info" id="stat-domains">{{ summary.domains | length }}</div>
+                <div class="text-muted small">Domínios afetados</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensagem de ação (consumida da sessão — URL permanece limpa) -->
+    {% if debug_msg %}
+    <div class="alert alert-success alert-dismissible fade show py-2 mb-3" role="alert">
+        <i class="fas fa-check-circle me-2"></i>{{ debug_msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Filter + Actions -->
+    <div class="filter-bar d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-light filter-btn active" data-filter="unresolved">
+                <i class="fas fa-times-circle me-1"></i> Não resolvidas
+            </button>
+            <button class="btn btn-sm btn-outline-light filter-btn" data-filter="all">
+                <i class="fas fa-list me-1"></i> Todas
+            </button>
+            <button class="btn btn-sm btn-outline-success filter-btn" data-filter="resolved">
+                <i class="fas fa-check-circle me-1"></i> Resolvidas
+            </button>
+        </div>
+        {% if admin.role in ('owner', 'admin') %}
+        <div class="d-flex gap-2">
+            <form method="POST" action="/debug/clean" style="display:inline" id="cleanResolvedForm">
+                <button type="button" class="btn btn-sm btn-outline-warning action-btn"
+                        onclick="confirmCleanResolved()">
+                    <i class="fas fa-broom me-1"></i> Limpar resolvidas
+                </button>
+            </form>
+            <form method="POST" action="/debug/clear" style="display:inline" id="clearAllLogForm">
+                <button type="button" class="btn btn-sm btn-outline-danger action-btn"
+                        onclick="confirmClearAllLog()">
+                    <i class="fas fa-trash me-1"></i> Apagar tudo
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if summary.total == 0 %}
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+        <h5>Nenhuma URL com falha registrada.</h5>
+        <p>Ótimo! Nenhum erro de download foi detectado ainda.</p>
+    </div>
+    {% else %}
+
+    <!-- Por domínio -->
+    <div id="domain-view">
+        {% for domain_data in summary.domains %}
+        <div class="card mb-3 domain-card" data-domain="{{ domain_data.domain }}">
+            <div class="card-header d-flex align-items-center justify-content-between py-2">
+                <div>
+                    <i class="fas fa-globe me-2 text-warning"></i>
+                    <strong>{{ domain_data.domain }}</strong>
+                    <span class="badge bg-danger ms-2">{{ domain_data.urls | length }} URL(s)</span>
+                    <span class="badge bg-secondary ms-1">{{ domain_data.count }} ocorrência(s)</span>
+                </div>
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-success btn-sm" onclick="resolverDominio('{{ domain_data.domain }}')"><i class="fas fa-check me-1"></i>Resolver domínio</button>
+                    <button class="btn btn-danger btn-sm ms-2 delete-domain-btn"
+                        onclick="excluirTudoDoDominio('{{ domain_data.domain }}')"
+                        title="Apagar todas as ocorrências deste domínio"
+                        data-domain="{{ domain_data.domain }}"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-hover mb-0 table-sm">
+                    <thead>
+                        <tr>
+                            <th style="width:42%">URL</th>
+                            <th>Erro</th>
+                            <th>Visto</th>
+                            <th class="text-center">×</th>
+                            <th class="text-end" style="width:90px">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for entry in domain_data.urls %}
+                    <tr class="entry-row {% if entry.resolved %}resolved-row{% endif %}"
+                        data-status="{{ 'resolved' if entry.resolved else 'unresolved' }}">
+                        <td class="url-cell">{{ entry.url }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'danger' if 'http' in entry.error_type else 'warning' }} error-badge">
+                                {{ entry.error_type }}
+                            </span>
+                            <br><small class="text-muted">{{ entry.error[:60] }}{% if entry.error|length > 60 %}…{% endif %}</small>
+                        </td>
+                        <td>
+                            <small class="text-muted d-block">{{ entry.last_seen[:10] }}</small>
+                            <small class="text-muted">{{ entry.last_seen[11:16] }}</small>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">{{ entry.count }}</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="d-flex gap-1 justify-content-end">
+                                {% if not entry.resolved %}
+                                <form method="POST" action="/debug/resolve">
+                                    <input type="hidden" name="url" value="{{ entry.url }}" />
+                                    <button type="submit" class="btn btn-outline-success" title="Marcar como resolvida"
+                                        style="font-size:0.68rem;padding:2px 7px">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form method="POST" action="/debug/unresolve">
+                                    <input type="hidden" name="url" value="{{ entry.url }}" />
+                                    <button type="submit" class="btn btn-outline-warning" title="Desfazer — mover para não resolvida"
+                                        style="font-size:0.68rem;padding:2px 7px">
+                                        <i class="fas fa-rotate-left"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if has_perm(admin.role, 'debug') %}
+                                <form method="POST" action="/debug/delete_url" class="delete-form">
+                                    <input type="hidden" name="url" value="{{ entry.url }}" />
+                                    <button type="button" class="btn btn-outline-danger delete-btn" title="Apagar permanentemente"
+                                        style="font-size:0.68rem;padding:2px 7px"
+                                        data-url="{{ entry.url }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Entradas resolvidas sem domínio ativo -->
+        {% set resolved_only = summary.all_entries | selectattr('resolved') | list %}
+        {% if resolved_only %}
+        <div class="card mb-3 domain-card resolved" data-domain="__resolved">
+            <div class="card-header py-2 text-success">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Resolvidas</strong>
+                <span class="badge bg-success ms-2">{{ resolved_only | length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-dark mb-0 table-sm">
+                    <thead>
+                        <tr>
+                            <th style="width:42%">URL</th>
+                            <th>Domínio</th>
+                            <th>Visto</th>
+                            <th class="text-center">×</th>
+                            <th class="text-end" style="width:90px">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for entry in resolved_only %}
+                    <tr class="entry-row resolved-row" data-status="resolved">
+                        <td class="url-cell">{{ entry.url }}</td>
+                        <td><small class="text-muted">{{ entry.domain }}</small></td>
+                        <td>
+                            <small class="text-muted d-block">{{ entry.last_seen[:10] }}</small>
+                            <small class="text-muted">{{ entry.last_seen[11:16] }}</small>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">{{ entry.count }}</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="d-flex gap-1 justify-content-end">
+                                <form method="POST" action="/debug/unresolve">
+                                    <input type="hidden" name="url" value="{{ entry.url }}" />
+                                    <button type="submit" class="btn btn-outline-warning" title="Desfazer — mover para não resolvida"
+                                        style="font-size:0.68rem;padding:2px 7px">
+                                        <i class="fas fa-rotate-left"></i>
+                                    </button>
+                                </form>
+                                {% if has_perm(admin.role, 'debug') %}
+                                <form method="POST" action="/debug/delete_url" class="delete-form">
+                                    <input type="hidden" name="url" value="{{ entry.url }}" />
+                                    <button type="button" class="btn btn-outline-danger delete-btn" title="Apagar permanentemente"
+                                        style="font-size:0.68rem;padding:2px 7px"
+                                        data-url="{{ entry.url }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Modal de confirmação de exclusão -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+            <div class="modal-header border-0 pb-0">
+                <div class="d-flex align-items-center gap-2">
+                    <div style="width:36px;height:36px;background:rgba(231,76,60,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                        <i class="fas fa-trash text-danger" style="font-size:0.85rem"></i>
+                    </div>
+                    <h6 class="modal-title mb-0">Remover do log</h6>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p class="text-muted small mb-2">A seguinte URL será removida permanentemente:</p>
+                <div id="deleteModalUrl"
+                    style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:0.6rem 0.8rem;font-size:0.75rem;word-break:break-all;color:#8b949e;"></div>
+                <p class="text-muted small mt-3 mb-0">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-danger" id="deleteModalConfirm">
+                    <i class="fas fa-trash me-1"></i> Remover
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de motivo para Ajudante ao excluir domínio -->
+<div class="modal fade" id="helperAuditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+            <div class="modal-header border-0 pb-0">
+                <div class="d-flex align-items-center gap-2">
+                    <div style="width:36px;height:36px;background:rgba(234,88,12,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                        <i class="fas fa-shield-halved text-warning" style="font-size:0.85rem"></i>
+                    </div>
+                    <h6 class="modal-title mb-0">Excluir Domínio — Motivo Obrigatório</h6>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p class="text-muted small mb-2">Domínio a ser excluído:</p>
+                <div id="helperAuditDomain" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:0.5rem 0.8rem;font-size:0.8rem;font-weight:600;color:#e6edf3;margin-bottom:1rem;word-break:break-all;"></div>
+                <label for="helperAuditReason" class="form-label" style="font-size:.82rem;">Motivo da exclusão <span class="text-danger">*</span></label>
+                <textarea id="helperAuditReason" class="form-control form-control-sm" rows="3" maxlength="300"
+                    style="background:#0d1117;border:1px solid #30363d;color:#e6edf3;font-size:.82rem;resize:none;"
+                    placeholder="Descreva o motivo da exclusão deste domínio…"></textarea>
+                <div id="helperAuditReasonError" class="text-danger mt-1" style="font-size:.75rem;display:none;">O motivo é obrigatório.</div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-warning" id="helperAuditConfirm">
+                    <i class="fas fa-trash me-1"></i> Confirmar Exclusão
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    const ADMIN_ROLE = {{ admin.role | tojson }};
+    // Modal de confirmação de exclusão
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    let pendingDeleteForm = null;
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.delete-btn');
+        if (!btn) return;
+        pendingDeleteForm = btn.closest('.delete-form');
+        document.getElementById('deleteModalUrl').textContent = btn.dataset.url;
+        deleteModal.show();
+    });
+
+    document.getElementById('deleteModalConfirm').addEventListener('click', function() {
+        if (pendingDeleteForm) {
+            pendingDeleteForm.submit();
+            pendingDeleteForm = null;
+        }
+        deleteModal.hide();
+    });
+</script>
+<script>
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const filter = this.dataset.filter;
+            document.querySelectorAll('.entry-row').forEach(row => {
+                if (filter === 'all') {
+                    row.style.display = '';
+                } else {
+                    row.style.display = row.dataset.status === filter ? '' : 'none';
+                }
+            });
+            // Esconde cards de domínio que ficaram vazios
+            // NOTE: use .domain-card[data-domain] — not bare [data-domain] — to avoid
+            // accidentally hiding buttons/spans that also carry a data-domain attribute.
+            document.querySelectorAll('.domain-card[data-domain]').forEach(card => {
+                if (card.dataset.domain === '__resolved') {
+                    card.style.display = filter === 'resolved' || filter === 'all' ? '' : 'none';
+                    return;
+                }
+                const visibleRows = card.querySelectorAll('.entry-row:not([style*="none"])').length;
+                card.style.display = visibleRows > 0 ? '' : 'none';
+            });
+        });
+    });
+
+    // Aplica filtro padrão (unresolved)
+    document.querySelector('[data-filter="unresolved"]').click();
+</script>
+<script>
+    /* ── Exclusão em massa por domínio (AJAX) ── */
+
+    function confirmCleanResolved() {
+        showConfirmModal({
+            title: 'Limpar Entradas Resolvidas',
+            message: 'Remover todas as entradas resolvidas? Esta ação é irreversível.',
+            confirmText: 'Confirmar e Remover',
+            onConfirm: () => document.getElementById('cleanResolvedForm').submit()
+        });
+    }
+
+    function confirmClearAllLog() {
+        showConfirmModal({
+            title: 'Apagar Todo o Log',
+            message: 'Apagar TODO o log? Isso não pode ser desfeito.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: () => document.getElementById('clearAllLogForm').submit()
+        });
+    }
+
+    /** Resolve todas as URLs de um domínio via POST (mantendo compatibilidade com a action de formulário) */
+    function resolverDominio(domain) {
+        showConfirmModal({
+            title: 'Resolver Domínio',
+            message: 'Marcar todas as URLs do domínio "' + domain + '" como resolvidas?',
+            confirmText: 'Confirmar',
+            onConfirm: () => {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/debug/resolve_domain';
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = 'domain'; inp.value = domain;
+                form.appendChild(inp);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    }
+
+    /** Apaga todas as URLs de um domínio inteiro.
+     *  Moderadores e Ajudantes precisam preencher motivo antes de executar. */
+    function excluirTudoDoDominio(domain) {
+        if (ADMIN_ROLE === 'helper' || ADMIN_ROLE === 'moderator') {
+            // Moderador / Ajudante: exibe modal de auditoria com campo de motivo obrigatório
+            document.getElementById('helperAuditDomain').textContent = domain;
+            document.getElementById('helperAuditReason').value = '';
+            document.getElementById('helperAuditReasonError').style.display = 'none';
+            _pendingHelperDomain = domain;
+            helperAuditModalInstance.show();
+            return;
+        }
+        // Owner / Admin: confirmação direta sem obrigatoriedade de motivo
+        showConfirmModal({
+            title: 'Excluir Domínio',
+            message: 'Confirmar exclusão de TODAS as URLs deste domínio? Domínio: ' + domain + '. Esta ação não pode ser desfeita.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: () => executarExclusaoDominio(domain, '')
+        });
+    }
+
+    // Inicializa o modal de auditoria do Ajudante
+    let _pendingHelperDomain = null;
+    const helperAuditModalInstance = new bootstrap.Modal(document.getElementById('helperAuditModal'));
+
+    document.getElementById('helperAuditConfirm').addEventListener('click', function() {
+        const reason = document.getElementById('helperAuditReason').value.trim();
+        if (!reason) {
+            document.getElementById('helperAuditReasonError').style.display = 'block';
+            return;
+        }
+        document.getElementById('helperAuditReasonError').style.display = 'none';
+        helperAuditModalInstance.hide();
+        if (_pendingHelperDomain) {
+            executarExclusaoDominio(_pendingHelperDomain, reason);
+            _pendingHelperDomain = null;
+        }
+    });
+
+    function executarExclusaoDominio(domain, reason) {
+        const btn = document.querySelector('.delete-domain-btn[data-domain="' + CSS.escape(domain) + '"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+        const payload = { domain: domain };
+        if (reason) payload.reason = reason;
+        fetch('/debug/delete-domain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                alert('Erro: ' + (data.error || 'Falha na exclusão.'));
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
+                return;
+            }
+            const card = btn ? btn.closest('.domain-card') : document.querySelector('.domain-card[data-domain="' + CSS.escape(domain) + '"]');
+            if (card) {
+                card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(-8px)';
+                setTimeout(function() { card.remove(); updateCounters(); }, 260);
+            } else {
+                updateCounters();
+            }
+        })
+        .catch(function() {
+            alert('Erro de rede ao tentar excluir o domínio.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
+        });
+    }
+
+    // No delegated click handler needed — all .delete-domain-btn buttons use onclick= directly.
+
+    /** Recalcula e atualiza os contadores do topo da página após exclusão em massa. */
+    function updateCounters() {
+        // Conta domínios não-resolvidos que ainda existem no DOM
+        var domainCards = Array.from(document.querySelectorAll('.domain-card:not([data-domain="__resolved"])'));
+        var totalUnresolved = 0;
+        domainCards.forEach(function(card) {
+            card.querySelectorAll('.entry-row').forEach(function() { totalUnresolved++; });
+        });
+
+        // Contagem de resolvidas — lê o que está no card especial de resolvidas
+        var resolvedCard = document.querySelector('.domain-card[data-domain="__resolved"]');
+        var totalResolved = resolvedCard
+            ? resolvedCard.querySelectorAll('.entry-row').length
+            : 0;
+
+        var totalAll = totalUnresolved + totalResolved;
+
+        // Aplica nos stat-cards com os IDs adicionados no template
+        var elTotal      = document.getElementById('stat-total');
+        var elUnresolved = document.getElementById('stat-unresolved');
+        var elDomains    = document.getElementById('stat-domains');
+        // Nota: stat-resolved não muda com exclusão de domínios não-resolvidos
+        if (elTotal)      elTotal.textContent      = totalAll;
+        if (elUnresolved) elUnresolved.textContent = totalUnresolved;
+        if (elDomains)    elDomains.textContent    = domainCards.length;
+
+        // Se não houver mais domínios, exibe mensagem de lista vazia
+        if (domainCards.length === 0) {
+            var domainView = document.getElementById('domain-view');
+            if (domainView && !document.getElementById('empty-msg')) {
+                domainView.insertAdjacentHTML('beforeend',
+                    '<div class="text-center py-5 text-muted" id="empty-msg">' +
+                    '<i class="fas fa-check-circle fa-3x mb-3 text-success"></i>' +
+                    '<h5>Nenhuma URL com falha registrada.</h5>' +
+                    '<p>Todos os domínios foram limpos.</p></div>');
+            }
+        }
+    }
+</script>
+<script>
+    /* ── Bootstrap tooltips ── */
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+    // Profile bubble dropdown
+    (function() {
+        const bubble = document.getElementById('profileBubble');
+        const menu   = document.getElementById('profileMenu');
+        if (!bubble || !menu) return;
+        document.addEventListener('click', e => {
+            if (bubble.contains(e.target)) {
+                const show = menu.style.display !== 'block';
+                menu.style.display = show ? 'block' : 'none';
+                if (show) {
+                    const rect = bubble.getBoundingClientRect();
+                    menu.style.position = 'fixed';
+                    menu.style.bottom   = (window.innerHeight - rect.top + 8) + 'px';
+                    menu.style.right    = (window.innerWidth - rect.right) + 'px';
+                    menu.style.top      = 'auto';
+                    menu.classList.add('show');
+                }
+            } else if (!menu.contains(e.target)) {
+                menu.style.display = 'none';
+                menu.classList.remove('show');
+            }
+        });
+    })();
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

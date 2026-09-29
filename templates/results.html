@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+  <head>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resultados - Scraper de Mídia Web</title>
+
+    <!-- Bootstrap Dark Theme -->
+    <link
+      href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css"
+      rel="stylesheet"
+    />
+    <!-- FontAwesome -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <!-- Custom Styles -->
+    <link
+      href="{{ url_for('static', filename='style.css') }}"
+      rel="stylesheet"
+    />
+
+    <style>
+      /*
+       * ═══════════════════════════════════════════════════════════
+       *  CHIBI ERROR OVERLAY — Troca automática por tipo de erro
+       *  Para personalizar os Chibis, substitua os arquivos em:
+       *    static/images/chibi-generico.gif  → erro desconhecido
+       *    static/images/chibi-404.gif       → vídeo não encontrado
+       *    static/images/chibi-403.gif       → acesso bloqueado (CDN 403)
+       *    static/images/chibi-copyright.gif → removido por direitos autorais
+       *  Não é necessário alterar nenhum código — apenas substitua os arquivos!
+       * ═══════════════════════════════════════════════════════════
+       */
+      .video-card-wrap { position: relative; }
+      .video-error-overlay {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(13,17,23,0.94);
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: .4rem;
+        z-index: 10;
+        border-radius: 0 0 .375rem .375rem;
+        text-align: center;
+        padding: .75rem;
+      }
+      .video-error-overlay.active { display: flex; }
+      .video-error-overlay img.chibi-img {
+        max-height: 96px; max-width: 110px;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,.8));
+      }
+      .video-error-overlay .err-title {
+        font-size: .72rem; font-weight: 700; color: #f87171; margin: 0;
+      }
+      .video-error-overlay .err-sub {
+        font-size: .62rem; color: #8b949e; margin: 0;
+      }
+
+      #toggleErrorsBtn { display: none; }
+      @keyframes olhinho-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(255,152,0,0.7); border-color: #ff9800; }
+        50%      { box-shadow: 0 0 8px 4px rgba(255,152,0,0.5); border-color: #ff9800; }
+      }
+      .olhinho-alerta { animation: olhinho-pulse 1.5s ease-in-out infinite; border-color: #ff9800 !important; }
+
+      /* ── Shake animation — feedback de bloqueio de download ── */
+      @keyframes shake-block {
+        0%   { transform: translateX(0); }
+        15%  { transform: translateX(-6px); }
+        30%  { transform: translateX(6px); }
+        45%  { transform: translateX(-5px); }
+        60%  { transform: translateX(5px); }
+        75%  { transform: translateX(-3px); }
+        90%  { transform: translateX(3px); }
+        100% { transform: translateX(0); }
+      }
+      .shake-animation {
+        animation: shake-block 0.3s ease-in-out;
+        border-color: #f87171 !important;
+        box-shadow: 0 0 0 2px rgba(248,113,113,0.4) !important;
+      }
+
+      /* ── Selection Mode — card highlight + checkmark badge ───────────── */
+      @keyframes select-flash {
+        0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0.7); }
+        50%  { box-shadow: 0 0 0 8px rgba(59,130,246,0.25); }
+        100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+      }
+      [data-media-url] .card { position: relative; transition: border-color .15s; }
+      [data-media-url] .card.card-selected {
+        border: 2px solid #3b82f6 !important;
+        animation: select-flash .35s ease-out;
+      }
+      .selection-check {
+        position: absolute; top: 7px; right: 7px; z-index: 25;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #3b82f6; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .68rem; font-weight: 700;
+        box-shadow: 0 2px 8px rgba(59,130,246,.55);
+        opacity: 0; transition: opacity .18s ease;
+        pointer-events: none;
+      }
+      .card-selected .selection-check { opacity: 1; }
+      /* In selection mode: block video controls + show grab cursor on cards */
+      .selection-mode-active [data-media-url] .card { cursor: pointer !important; }
+      .selection-mode-active [data-media-url] video  { pointer-events: none !important; }
+      .selection-mode-active [data-media-url] .image-container img {
+        cursor: pointer !important; transform: none !important;
+      }
+      /* Prevent individual download/open buttons from being clicked in selection mode */
+      .selection-mode-active [data-media-url] .card-body .btn,
+      .selection-mode-active [data-media-url] .card-header .btn,
+      .selection-mode-active [data-media-url] .card-header a.btn {
+        pointer-events: none !important; opacity: .4 !important;
+      }
+
+      /* Pequenas melhorias visuais */
+      .image-container {
+        overflow: hidden;
+        height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #212529;
+      }
+      .image-container img {
+        max-height: 100%;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+        cursor: pointer;
+      }
+      .image-container img:hover {
+        transform: scale(1.05);
+      }
+      .placeholder-image {
+        height: 180px;
+        color: #6c757d;
+        font-size: 3rem;
+      }
+      .card-body .btn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        text-align: center;
+        line-height: 32px;
+        font-size: 1rem;
+      }
+      .toast-container {
+        z-index: 1100;
+      }
+      /* Full-width content column — mirrors #mainColWrap.batch-wide from
+         index.html, so this page renders at the exact same scale as the
+         Múltiplas URLs results view. */
+      #mainColWrap { flex: 0 0 100%; max-width: 100%; }
+    </style>
+  </head>
+  <body>
+    <div class="container py-5">
+      <div class="row justify-content-center">
+        <div class="col-lg-8" id="mainColWrap">
+          <!-- Nova Pesquisa (topo absoluto, alinhado à direita) -->
+          <div class="d-flex justify-content-end mb-3">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+              <i class="fas fa-arrow-left me-2"></i>Nova Pesquisa
+            </a>
+          </div>
+
+          <!-- Brand Header -->
+          <div class="mb-5">
+            <div class="text-center">
+              <h1 class="display-4 mb-3">
+                <i class="fas fa-search text-primary me-3"></i>
+                Scraper de Mídia Web
+              </h1>
+              <p class="lead text-muted">
+                Extraia e visualize imagens e vídeos de qualquer página da web
+              </p>
+            </div>
+          </div>
+
+          <!-- Header -->
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+              <i class="fas fa-search-plus text-primary me-2"></i>
+              Resultados da Extração
+            </h1>
+          </div>
+
+          <!-- URL analisada -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <h6 class="card-title">
+                <i class="fas fa-link me-2"></i>URL Analisada
+              </h6>
+              <p class="card-text">
+                <a
+                  href="{{ original_url }}"
+                  target="_blank"
+                  class="text-decoration-none"
+                >
+                  {{ original_url }} <i class="fas fa-external-link-alt ms-1"></i>
+                </a>
+              </p>
+            </div>
+          </div>
+
+          <!-- Estatísticas -->
+          <div class="row mb-4 text-center">
+            <div class="col-md-4 mb-3">
+              <div class="card bg-primary bg-opacity-10">
+                <div class="card-body">
+                  <i class="fas fa-images fa-2x text-primary mb-2"></i>
+                  <h4 class="card-title">{{ media_data.images|length }}</h4>
+                  <p class="card-text fw-semibold">Imagens Encontradas</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="card bg-success bg-opacity-10">
+                <div class="card-body">
+                  <i class="fas fa-video fa-2x text-success mb-2"></i>
+                  <h4 class="card-title">{{ media_data.videos|length }}</h4>
+                  <p class="card-text fw-semibold">Vídeos Encontrados</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="card bg-info bg-opacity-10">
+                <div class="card-body">
+                  <i class="fas fa-layer-group fa-2x text-info mb-2"></i>
+                  <h4 class="card-title">{{ media_data.total_media }}</h4>
+                  <p class="card-text fw-semibold">Total de Mídia</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+      <!-- Download em Massa -->
+      <div class="card mb-4">
+        <div
+          class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3"
+        >
+          <div>
+            <h6 class="card-title mb-1">
+              <i class="fas fa-download me-2"></i>Download em Massa
+            </h6>
+            <p class="text-muted mb-0">Baixe todos os arquivos encontrados</p>
+          </div>
+          <div
+            class="btn-group flex-wrap"
+            role="group"
+            aria-label="Download Buttons"
+          >
+            {% if media_data.images %}
+            <button
+              id="btnDownloadImages"
+              class="btn btn-primary"
+              onclick="downloadAllImages()"
+              data-bs-toggle="tooltip"
+              data-bs-placement="top"
+              title="Baixar todas as imagens"
+            >
+              <i class="fas fa-images"></i>
+            </button>
+            {% endif %} {% if media_data.videos %}
+            <button
+              id="btnDownloadVideos"
+              class="btn btn-success"
+              onclick="downloadAllVideos()"
+              data-bs-toggle="tooltip"
+              data-bs-placement="top"
+              title="Baixar todos os vídeos"
+            >
+              <i class="fas fa-video"></i>
+            </button>
+            {% endif %} {% if media_data.images and media_data.videos %}
+            <button
+              id="btnDownloadAll"
+              class="btn btn-info"
+              onclick="downloadAllMedia()"
+              data-bs-toggle="tooltip"
+              data-bs-placement="top"
+              title="Baixar tudo"
+            >
+              <i class="fas fa-download"></i>
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <ul class="nav nav-tabs d-flex align-items-center" id="mediaTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="images-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#images"
+            type="button"
+            role="tab"
+            aria-controls="images"
+            aria-selected="true"
+          >
+            <i class="fas fa-image me-2"></i>Imagens ({{
+            media_data.images|length }})
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="videos-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#videos"
+            type="button"
+            role="tab"
+            aria-controls="videos"
+            aria-selected="false"
+          >
+            <i class="fas fa-video me-2"></i>Vídeos ({{ media_data.videos|length
+            }})
+          </button>
+        </li>
+        <!-- Botões de controle — alinhados à direita -->
+        <li class="ms-auto d-flex align-items-center gap-2 pe-1" style="border-bottom: none;">
+          <button
+            id="toggleSelectionModeBtn"
+            class="btn btn-sm btn-outline-secondary"
+            title="Ativar seleção de mídias"
+            onclick="toggleSelectionMode()"
+            style="font-size:0.78rem; padding:4px 10px; line-height:1.2;"
+          >
+            <i class="fas fa-list-check me-1"></i><span id="selectionBtnText">Selecionar Imagens</span>
+          </button>
+          <button
+            id="toggleErrorsBtn"
+            class="btn btn-sm btn-outline-secondary"
+            title="Ocultar mídias não encontradas / bloqueadas"
+            onclick="toggleErrorCards()"
+            style="font-size:0.78rem; padding:4px 10px; line-height:1.2;"
+          >
+            <i id="toggleErrorsIcon" class="fas fa-eye"></i>
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content" id="mediaTabContent">
+        <!-- Imagens -->
+        <div
+          class="tab-pane fade show active"
+          id="images"
+          role="tabpanel"
+          aria-labelledby="images-tab"
+        >
+          <div class="mt-4">
+            {% if media_data.images %}
+            <div class="row g-3">
+              {% for image_url in media_data.images %}
+              <div class="col-lg-3 col-md-4 col-sm-6" data-media-url="{{ image_url }}" data-media-type="image">
+                <div class="card h-100 shadow-sm">
+                  <div class="image-container" title="Clique para ampliar">
+                    <img
+                      src="{{ image_url }}"
+                      alt="Imagem extraída"
+                      loading="lazy"
+                      onerror="this.parentElement.innerHTML='<div class=\'placeholder-image d-flex align-items-center justify-content-center\'><i class=\'fas fa-image-slash fa-2x\'></i></div>';updateEyeButtonVisibility()"
+                      onclick="openImageModal('{{ image_url }}')"
+                    />
+                  </div>
+                  <div
+                    class="card-body p-2 d-flex justify-content-between align-items-center"
+                  >
+                    <button
+                      class="btn btn-sm btn-outline-primary"
+                      title="Ampliar imagem"
+                      onclick="openImageModal('{{ image_url }}')"
+                    >
+                      <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button
+                      onclick="baixarImagem('{{ image_url }}', this)"
+                      class="btn btn-sm btn-outline-success"
+                      title="Baixar imagem"
+                    >
+                      <i class="fas fa-download"></i>
+                    </button>
+
+                    <script>
+                      function baixarImagem(imageUrl, btn) {
+                        // ── Trava de download: bloqueia se a imagem falhou (placeholder ativo) ──
+                        // Quando o onerror da imagem dispara, ele substitui o innerHTML do
+                        // .image-container por um div.placeholder-image. Só verificamos isso.
+                        var card = btn ? btn.closest('.card') : null;
+                        var container = card ? card.querySelector('.image-container') : null;
+                        var placeholder = container ? container.querySelector('.placeholder-image') : null;
+                        if (placeholder) {
+                          shakeAndBlock(card);
+                          return; // bloqueia o download
+                        }
+                        // ── Download normal ──
+                        const finalUrl =
+                          "/force-download?url=" + encodeURIComponent(imageUrl);
+                        const link = document.createElement("a");
+                        link.href = finalUrl;
+                        link.download = ""; // Vai tentar forçar o download
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }
+                    </script>
+                    <button
+                      class="btn btn-sm btn-outline-secondary"
+                      title="Copiar URL"
+                      onclick="copyToClipboard('{{ image_url }}')"
+                    >
+                      <i class="fas fa-copy"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+              <i class="fas fa-image-slash fa-3x mb-3"></i>
+              <h4>Nenhuma imagem encontrada</h4>
+              <p>A página não contém imagens nos formatos suportados.</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Vídeos -->
+        <div
+          class="tab-pane fade"
+          id="videos"
+          role="tabpanel"
+          aria-labelledby="videos-tab"
+        >
+          <div class="mt-4">
+            {% if media_data.videos %}
+            <div class="row g-3">
+              {% for video_url in media_data.videos %}
+              <div class="col-lg-4 col-md-6 col-sm-12" data-media-url="{{ video_url }}" data-media-type="video">
+                <div class="card shadow-sm">
+                  <div
+                    class="card-header d-flex justify-content-between align-items-center p-2"
+                  >
+                    <small
+                      class="text-muted text-truncate"
+                      style="max-width: 80%"
+                      >{{ video_url }}</small
+                    >
+                    <div
+                      class="btn-group btn-group-sm"
+                      role="group"
+                      aria-label="Video actions"
+                    >
+                      <a
+                        href="{{ video_url }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="btn btn-outline-primary"
+                        title="Abrir vídeo"
+                      >
+                        <i class="fas fa-external-link-alt"></i>
+                      </a>
+                      <a
+                        href="{{ video_url }}"
+                        onclick="event.preventDefault(); baixarVideo('{{ video_url }}')"
+                        class="btn btn-outline-success"
+                        title="Baixar vídeo"
+                      >
+                        <i class="fas fa-download"></i>
+                      </a>
+                      <script>
+                        function baixarVideo(videoUrl) {
+                          // ── Trava de download: bloqueia se o vídeo está com erro ──
+                          // Procura por overlay ativo cujo data-src corresponde à URL
+                          var activeOverlays = document.querySelectorAll('.video-error-overlay.active');
+                          var bloqueado = false;
+                          var overlayEncontrado = null;
+                          activeOverlays.forEach(function(ov) {
+                            if (ov.getAttribute('data-src') === videoUrl) {
+                              bloqueado = true;
+                              overlayEncontrado = ov;
+                            }
+                          });
+                          if (bloqueado) {
+                            var card = overlayEncontrado ? (overlayEncontrado.closest('.card') || overlayEncontrado.parentElement) : null;
+                            shakeAndBlock(card);
+                            return; // bloqueia o download
+                          }
+                          // ── Download normal ──
+                          const finalUrl =
+                            "/force-download?url=" +
+                            encodeURIComponent(videoUrl);
+                          const link = document.createElement("a");
+                          link.href = finalUrl;
+                          link.download = ""; // força download se o servidor der o header certo - Baixar video
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }
+                      </script>
+                      <button
+                        class="btn btn-outline-secondary"
+                        title="Copiar URL"
+                        onclick="copyToClipboard('{{ video_url }}')"
+                      >
+                        <i class="fas fa-copy"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="video-card-wrap">
+                    <video class="w-100" controls preload="metadata" muted
+                      style="max-height: 180px; object-fit: contain; background:#000;"
+                      data-src="{{ video_url }}"
+                      onerror="handleVideoError(this, '{{ video_url | url_encode }}')">
+                      <source src="/proxy-media?url={{ video_url | url_encode }}" type="video/mp4"
+                              onerror="handleVideoError(this.parentElement, '{{ video_url | url_encode }}')" />
+                      Seu navegador não suporta o elemento de vídeo.
+                    </video>
+                    <!-- Chibi error overlay — ativado automaticamente por handleVideoError() -->
+                    <div class="video-error-overlay" data-src="{{ video_url }}">
+                      <!-- Para trocar os Chibis: substitua os arquivos em static/images/ com os mesmos nomes -->
+                      <img
+                        class="chibi-img"
+                        src="{{ url_for('static', filename='images/chibi-generico.gif') }}"
+                        alt="Erro"
+                        onerror="this.alt='⚠️'; this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.style.display='block');"
+                      />
+                      <span class="err-title">Vídeo Indisponível</span>
+                      <span class="err-sub">Verifique o link ou tente baixar diretamente.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+              <i class="fas fa-video-slash fa-3x mb-3"></i>
+              <h4>Nenhum vídeo encontrado</h4>
+              <p>A página não contém vídeos nos formatos suportados.</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Imagem Modal -->
+      <div
+        class="modal fade"
+        id="imageModal"
+        tabindex="-1"
+        aria-labelledby="imageModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+          <div class="modal-content bg-dark text-light">
+            <div class="modal-header border-0">
+              <h5 class="modal-title" id="imageModalLabel">
+                Visualização da Imagem
+              </h5>
+              <button
+                type="button"
+                class="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+                aria-label="Fechar"
+              ></button>
+            </div>
+            <div class="modal-body d-flex justify-content-center">
+              <img
+                id="modalImage"
+                src=""
+                alt="Imagem ampliada"
+                class="img-fluid rounded"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast para feedback -->
+      <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div
+          id="copyToast"
+          class="toast align-items-center text-bg-success border-0"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <div class="d-flex">
+            <div class="toast-body">
+              URL copiada para a área de transferência!
+            </div>
+            <button
+              type="button"
+              class="btn-close btn-close-white me-2 m-auto"
+              data-bs-dismiss="toast"
+              aria-label="Fechar"
+            ></button>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      var tooltipTriggerList = [].slice.call(
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      );
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+    </script>
+    <!-- ── Controle Global de Play Único Simultâneo ─────────────────────────────
+         Sempre que qualquer <video> começar a tocar, pausa (apenas .pause(),
+         sem alterar src/load ou resetar o timeline) todos os outros vídeos
+         que estejam rodando. Delegação na fase de captura em 'document',
+         pois o evento 'play' não faz bubbling.
+    ─────────────────────────────────────────────────────────────────────────── -->
+    <script>
+      document.addEventListener('play', function(e) {
+        var playedVideo = e.target;
+        if (!playedVideo || playedVideo.tagName !== 'VIDEO') return;
+
+        document.querySelectorAll('video').forEach(function(video) {
+          if (video !== playedVideo && !video.paused) {
+            video.pause();
+          }
+        });
+      }, true);
+    </script>
+
+    <script>
+      // Modal para visualizar imagem ampliada
+      const imageModal = new bootstrap.Modal(
+        document.getElementById("imageModal")
+      );
+      const modalImage = document.getElementById("modalImage");
+      function openImageModal(url) {
+        modalImage.src = url;
+        imageModal.show();
+      }
+
+      // Copiar URL para área de transferência e mostrar toast
+      function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+          const toastEl = document.getElementById("copyToast");
+          const toast = bootstrap.Toast.getOrCreateInstance(toastEl);
+          toast.show();
+        });
+      }
+    </script>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════════════
+    //  SELECTION MODE + SEQUENTIAL DOWNLOAD SYSTEM
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── All URLs injected server-side (used for "download all" mode) ─────
+    var ALL_IMAGE_URLS = {{ media_data.images | tojson }};
+    var ALL_VIDEO_URLS = {{ media_data.videos | tojson }};
+
+    // ── Global state ──────────────────────────────────────────────────────
+    var isSelectionMode = false;
+    var selectedMedia   = { images: new Set(), videos: new Set() };
+
+    // ── Sequential download engine ────────────────────────────────────────
+    // Downloads each URL one at a time via /force-download, 300 ms apart.
+    // Zero server RAM: the browser pipeline handles each file natively.
+    async function downloadMediaSequentially(urlsArray) {
+      if (!urlsArray || urlsArray.length === 0) {
+        Swal.fire({ toast: true, position: 'bottom-end', icon: 'warning',
+          title: 'Nenhuma mídia selecionada para baixar.',
+          showConfirmButton: false, timer: 2800 });
+        return;
+      }
+      Swal.fire({ toast: true, position: 'bottom-end', icon: 'info',
+        title: 'Iniciando download de ' + urlsArray.length + ' arquivo(s)…',
+        showConfirmButton: false, timer: 3200, timerProgressBar: true });
+
+      for (var i = 0; i < urlsArray.length; i++) {
+        var link = document.createElement('a');
+        link.href = '/force-download?url=' + encodeURIComponent(urlsArray[i]);
+        link.download = '';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        if (i < urlsArray.length - 1) {
+          await new Promise(function(r) { setTimeout(r, 300); });
+        }
+      }
+    }
+
+    // ── Active-tab helper ─────────────────────────────────────────────────
+    function _activeTab() {
+      return document.getElementById('images-tab').classList.contains('active')
+        ? 'images' : 'videos';
+    }
+
+    // ── Header button actions — respect selection mode ────────────────────
+    function downloadAllImages() {
+      var urls = isSelectionMode ? Array.from(selectedMedia.images) : ALL_IMAGE_URLS;
+      downloadMediaSequentially(urls);
+    }
+    function downloadAllVideos() {
+      var urls = isSelectionMode ? Array.from(selectedMedia.videos) : ALL_VIDEO_URLS;
+      downloadMediaSequentially(urls);
+    }
+    function downloadAllMedia() {
+      var urls = isSelectionMode
+        ? Array.from(selectedMedia.images).concat(Array.from(selectedMedia.videos))
+        : ALL_IMAGE_URLS.concat(ALL_VIDEO_URLS);
+      downloadMediaSequentially(urls);
+    }
+
+    // ── Live tooltip update for the three header buttons ─────────────────
+    function _updateHeaderTooltips() {
+      var specs = [
+        { id: 'btnDownloadImages', set: selectedMedia.images,
+          all: 'Baixar todas as imagens',
+          sel: function(n) { return 'Baixar ' + n + ' imagem(ns) selecionada(s)'; } },
+        { id: 'btnDownloadVideos', set: selectedMedia.videos,
+          all: 'Baixar todos os vídeos',
+          sel: function(n) { return 'Baixar ' + n + ' vídeo(s) selecionado(s)'; } },
+        { id: 'btnDownloadAll',
+          set: { size: selectedMedia.images.size + selectedMedia.videos.size },
+          all: 'Baixar tudo',
+          sel: function(n) { return 'Baixar ' + n + ' arquivo(s) selecionado(s)'; } },
+      ];
+      specs.forEach(function(s) {
+        var el = document.getElementById(s.id);
+        if (!el) return;
+        var newTitle = (isSelectionMode && s.set.size > 0) ? s.sel(s.set.size) : s.all;
+        el.title = newTitle;
+        el.setAttribute('data-bs-original-title', newTitle);
+      });
+    }
+
+    // ── Selection button label ────────────────────────────────────────────
+    function _updateSelectionBtnText() {
+      var span = document.getElementById('selectionBtnText');
+      if (!span) return;
+      if (isSelectionMode) {
+        span.textContent = 'Cancelar Seleção';
+        return;
+      }
+      span.textContent = _activeTab() === 'images' ? 'Selecionar Imagens' : 'Selecionar Vídeos';
+    }
+
+    // ── Re-apply / clear visual selection on cards ────────────────────────
+    function _reapplySelectionUI() {
+      document.querySelectorAll('[data-media-url]').forEach(function(col) {
+        var url  = col.getAttribute('data-media-url');
+        var type = col.getAttribute('data-media-type');
+        var card = col.querySelector('.card');
+        if (!card) return;
+        var set = type === 'image' ? selectedMedia.images : selectedMedia.videos;
+        if (isSelectionMode && set.has(url)) {
+          card.classList.add('card-selected');
+        } else {
+          card.classList.remove('card-selected');
+        }
+      });
+    }
+
+    // ── Toggle selection mode ─────────────────────────────────────────────
+    function toggleSelectionMode() {
+      isSelectionMode = !isSelectionMode;
+      var btn = document.getElementById('toggleSelectionModeBtn');
+      var tab = _activeTab();
+
+      if (isSelectionMode) {
+        document.body.classList.add('selection-mode-active');
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-danger');
+      } else {
+        // Cancel: clear current tab set, remove visuals
+        selectedMedia[tab].clear();
+        _reapplySelectionUI();
+        document.body.classList.remove('selection-mode-active');
+        btn.classList.remove('btn-outline-danger');
+        btn.classList.add('btn-outline-secondary');
+      }
+      _updateSelectionBtnText();
+      _updateHeaderTooltips();
+    }
+
+    // ── Card toggle logic ─────────────────────────────────────────────────
+    function _toggleCardSelection(col) {
+      var url  = col.getAttribute('data-media-url');
+      var type = col.getAttribute('data-media-type');
+      var card = col.querySelector('.card');
+      if (!card || !url) return;
+
+      var set = type === 'image' ? selectedMedia.images : selectedMedia.videos;
+      if (set.has(url)) {
+        set.delete(url);
+        card.classList.remove('card-selected');
+      } else {
+        set.add(url);
+        card.classList.add('card-selected');
+      }
+      _updateHeaderTooltips();
+    }
+
+    // ── Boot: inject checkmarks + click interceptors ──────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      // Inject checkmark badge into every media card
+      document.querySelectorAll('[data-media-url]').forEach(function(col) {
+        var card = col.querySelector('.card');
+        if (!card) return;
+        var chk = document.createElement('div');
+        chk.className = 'selection-check';
+        chk.innerHTML = '<i class="fas fa-check"></i>';
+        card.appendChild(chk);
+
+        // Capture-phase listener: intercept every click on the card
+        // when selection mode is active, preventing play / modal / downloads
+        card.addEventListener('click', function(e) {
+          if (!isSelectionMode) return;
+          e.preventDefault();
+          e.stopPropagation();
+          _toggleCardSelection(col);
+        }, true /* capture */);
+      });
+
+      // Tab switch: update button label + restore selection visuals
+      var tabsEl = document.getElementById('mediaTabs');
+      if (tabsEl) {
+        tabsEl.addEventListener('shown.bs.tab', function() {
+          _updateSelectionBtnText();
+          _reapplySelectionUI();
+        });
+      }
+    });
+    </script>
+
+    <!-- ── Trava de Download — shakeAndBlock() ─────────────────────────────────
+         Utility compartilhada por baixarVideo() e baixarImagem().
+         Aplica vibração no card e exibe alerta via SweetAlert2.
+    ─────────────────────────────────────────────────────────────────────────── -->
+    <script>
+      // ── Anti-spam por elemento: cada card tem sua própria trava independente ──
+      // WeakSet é ideal: sem vazamento de memória, sem colisão entre cards distintos.
+      var _shakingElements = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+
+      /**
+       * Agita visualmente o card e exibe alerta de bloqueio.
+       * A trava é por elemento — cards diferentes podem agitar em paralelo,
+       * mas cliques rápidos no MESMO card são descartados durante os 300ms.
+       * Usa setTimeout(300) para sincronizar exatamente com a duração da CSS.
+       *
+       * @param {HTMLElement|null} card — o elemento .card a ser agitado
+       */
+      function shakeAndBlock(card) {
+        var target = card || document.body;
+
+        // Anti-spam por elemento: ignora se este card já está agitando
+        if (_shakingElements && _shakingElements.has(target)) return;
+        if (_shakingElements) _shakingElements.add(target);
+
+        target.classList.add('shake-animation');
+
+        // Remove a classe e libera a trava exatamente após 300ms (duração da CSS)
+        setTimeout(function() {
+          target.classList.remove('shake-animation');
+          if (_shakingElements) _shakingElements.delete(target);
+        }, 300);
+
+        // Alerta via SweetAlert2 (já carregado nesta página)
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            toast: true,
+            position: 'bottom-end',
+            icon: 'error',
+            title: 'Download indisponível: Esta mídia foi removida ou está bloqueada no site de origem.',
+            showConfirmButton: false,
+            timer: 4000,
+            timerProgressBar: true,
+          });
+        }
+      }
+    </script>
+
+    <!-- ── Botão Olhinho — toggle de cards com erro ─────────────────────────────
+         Oculta/mostra cards de vídeo com overlay ativo e imagens com placeholder.
+         Debounce de 250ms evita trepidação visual em cliques rápidos.
+    ─────────────────────────────────────────────────────────────────────────── -->
+    <script>
+      // Estado atual do toggle: true = exibindo erros, false = ocultando
+      var _eyeShowingErrors = true;
+      // Anti-spam: impede cliques durante a transição
+      var _isTogglingEye = false;
+
+      /**
+       * Varre TODOS os col-wrappers do grid de mídia e oculta/exibe os que
+       * possuem qualquer sinal de erro — por overlay ativo, imagem quebrada
+       * ou texto de erro visível.
+       *
+       * Estratégia top-down: parte dos cols (não dos elementos de erro),
+       * eliminando dependência de closest() e corridas com handleVideoError.
+       *
+       * Condições de erro (basta uma):
+       *   1. Contém .video-error-overlay.active  — overlay confirmado pelo handler
+       *   2. Contém .placeholder-image           — imagem que falhou ao carregar
+       *   3. Texto visível contém palavra-chave de erro (catch-all para qualquer
+       *      variação de mensagem exibida na tela)
+       */
+      function toggleErrorCards() {
+        if (_isTogglingEye) return;
+        _isTogglingEye = true;
+
+        _eyeShowingErrors = !_eyeShowingErrors;
+
+        var btn  = document.getElementById('toggleErrorsBtn');
+        var icon = document.getElementById('toggleErrorsIcon');
+
+        // Ao clicar, o alerta piscante para permanentemente.
+        if (btn) btn.classList.remove('olhinho-alerta');
+
+        // Palavras-chave que identificam erro em qualquer texto dentro do card
+        var ERROR_KEYWORDS = ['404', '403', 'Bloqueado', 'Não Encontrado', 'Indisponível', 'Removido', 'Copyright'];
+
+        // Seleciona APENAS filhos diretos de .row dentro das abas —
+        // evita false-positives em colunas de layout fora do grid de mídia
+        var allMediaCols = document.querySelectorAll(
+          '#images .row > [class*="col-"], #videos .row > [class*="col-"]'
+        );
+
+        allMediaCols.forEach(function(col) {
+          var isError = false;
+
+          // Condição 1 — overlay de vídeo ativo (definido por handleVideoError)
+          if (!isError && col.querySelector('.video-error-overlay.active')) {
+            isError = true;
+          }
+
+          // Condição 2 — imagem quebrada (onerror substituiu <img> por .placeholder-image)
+          if (!isError && col.querySelector('.placeholder-image')) {
+            isError = true;
+          }
+
+          // Condição 3 — qualquer texto de erro visível (catch-all: 404, 403, etc.)
+          // Usa .innerText (respeita display:none) para não disparar em overlays ocultos
+          if (!isError) {
+            var visibleText = col.innerText || '';
+            for (var k = 0; k < ERROR_KEYWORDS.length; k++) {
+              if (visibleText.indexOf(ERROR_KEYWORDS[k]) !== -1) {
+                isError = true;
+                break;
+              }
+            }
+          }
+
+          if (_eyeShowingErrors) {
+            // Direção "mostrar": restaura TODOS os cols incondicionalmente.
+            // Garante que cols previamente escondidos mas cujo estado de erro
+            // foi resolvido pela corrida assíncrona também apareçam de volta.
+            col.style.display = '';
+          } else {
+            // Direção "ocultar": esconde apenas os cols que possuem erro.
+            if (isError) col.style.display = 'none';
+          }
+        });
+
+        // Atualiza ícone e tooltip do botão
+        if (_eyeShowingErrors) {
+          icon.className = 'fas fa-eye';
+          btn.title = 'Ocultar mídias não encontradas / bloqueadas';
+        } else {
+          icon.className = 'fas fa-eye-slash';
+          btn.title = 'Mostrar mídias não encontradas / bloqueadas';
+        }
+
+        // Libera debounce após 250ms (tempo da transição visual do grid)
+        setTimeout(function() { _isTogglingEye = false; }, 250);
+      }
+    </script>
+
+    <!-- ── Chibi Video Error Handler ───────────────────────────────────────────
+         Detecta o tipo real do erro (404 / 403 / copyright) via HEAD assíncrono
+         e troca o GIF do overlay dinamicamente. Para personalizar as imagens,
+         basta substituir os arquivos em static/images/ com os mesmos nomes.
+    ─────────────────────────────────────────────────────────────────────────── -->
+    <script>
+      // Base URL dos chibis via Flask url_for (injetada pelo Jinja2)
+      var CHIBI_BASE = "{{ url_for('static', filename='images/') }}";
+
+      // Mapa de tipo de erro → nome do arquivo chibi
+      var CHIBI_MAP = {
+        'copyright': 'chibi-copyright.gif',
+        '403':       'chibi-403.gif',
+        '404':       'chibi-404.gif',
+        'generico':  'chibi-generico.gif',
+      };
+
+      /**
+       * Detecta o tipo de erro de um vídeo externo e ativa o overlay correto.
+       * Ignora erros locais de decodificação/codecs — só reage a falhas de rede/servidor.
+       *
+       * @param {HTMLElement} el  - elemento <video> ou <source> que disparou onerror
+       * @param {string} encodedUrl - URL do vídeo codificada via url_encode
+       */
+      async function handleVideoError(el, encodedUrl) {
+        // Encontra o elemento <video> (pode vir do <source>)
+        const video = (el.tagName === 'VIDEO') ? el : el.closest('video') || el.parentElement?.querySelector('video');
+        if (!video) return;
+
+        // Evita ativar o overlay por erros locais de codec (readyState > 0 e networkState ok)
+        if (video.networkState === 0 || video.networkState === 1) return;
+
+        // Encontra o wrapper e o overlay
+        const wrap    = video.closest('.video-card-wrap');
+        const overlay = wrap ? wrap.querySelector('.video-error-overlay') : null;
+        if (!overlay) return;
+
+        // Decodifica a URL original
+        let srcUrl = '';
+        try { srcUrl = decodeURIComponent(encodedUrl); } catch(e) { srcUrl = encodedUrl; }
+
+        // Determina o tipo de erro via endpoint server-side (evita CORS)
+        let errType = 'generico';
+        try {
+          const checkUrl = '/api/check-media?url=' + encodeURIComponent(srcUrl);
+          const r = await fetch(checkUrl, { signal: AbortSignal.timeout(7000) });
+          const d = await r.json();
+          if (d.error_type === 'ok') {
+            // URL acessível — o erro pode ser de codec/formato; não ativa overlay
+            return;
+          }
+          errType = d.error_type || 'generico';
+        } catch (_) {
+          // Endpoint inacessível — continua com 'generico'
+          errType = 'generico';
+        }
+
+        // Atualiza imagem do chibi
+        const chibiImg = overlay.querySelector('img.chibi-img');
+        if (chibiImg) {
+          const filename = CHIBI_MAP[errType] || CHIBI_MAP['generico'];
+          chibiImg.src = CHIBI_BASE + filename;
+          // Fallback se o GIF específico não existir no servidor
+          chibiImg.onerror = function() {
+            if (this.src.indexOf('chibi-generico.gif') === -1) {
+              this.src = CHIBI_BASE + CHIBI_MAP['generico'];
+            } else {
+              // Último recurso: ícone textual
+              this.style.display = 'none';
+              const icon = document.createElement('span');
+              icon.style.cssText = 'font-size:2rem;';
+              icon.textContent   = '⚠️';
+              this.parentNode.insertBefore(icon, this);
+            }
+          };
+        }
+
+        // Atualiza mensagem do overlay
+        const errTitle = overlay.querySelector('.err-title');
+        const errSub   = overlay.querySelector('.err-sub');
+        const errMessages = {
+          'copyright': { title: 'Removido por Direitos Autorais', sub: 'Este vídeo foi retirado do ar (DMCA/Copyright).' },
+          '403':       { title: 'Acesso Bloqueado (403)',          sub: 'O servidor recusou a entrega deste vídeo.' },
+          '404':       { title: 'Vídeo Não Encontrado (404)',      sub: 'O arquivo de vídeo não existe mais neste endereço.' },
+          'generico':  { title: 'Vídeo Indisponível',              sub: 'Verifique o link ou tente baixar diretamente.' },
+        };
+        const msg = errMessages[errType] || errMessages['generico'];
+        if (errTitle) errTitle.textContent = msg.title;
+        if (errSub)   errSub.textContent   = msg.sub;
+
+        // Ativa o overlay
+        overlay.classList.add('active');
+        // Oculta o player com erro
+        video.style.opacity = '0';
+        video.style.pointerEvents = 'none';
+        updateEyeButtonVisibility();
+      }
+
+      /* ── Exibição inteligente do botão olhinho ──────────────────────────
+         Só aparece (com o glow laranja piscando) quando houver ao menos uma
+         mídia com erro na página. Fica oculto por padrão. ── */
+      function updateEyeButtonVisibility() {
+        var btn = document.getElementById('toggleErrorsBtn');
+        if (!btn) return;
+        var errorCount = document.querySelectorAll('.video-error-overlay.active, .placeholder-image').length;
+        if (errorCount > 0) {
+          btn.style.display = 'inline-flex';
+          btn.classList.add('olhinho-alerta');
+        } else {
+          btn.style.display = 'none';
+          btn.classList.remove('olhinho-alerta');
+        }
+      }
+    </script>
+
+    <!-- Scripts Testes -->
+    <!--
+  <script>
+    // Aqui você pode adicionar comandos temporários para teste, por exemplo:
+    // console.log("Teste de script...");
+  </script>
+  --></body>
+</html>

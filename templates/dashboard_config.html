@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — Configurações</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .cfg-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+        .section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            color: #8b949e;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: .4rem;
+            margin-bottom: 1rem;
+        }
+        .badge-real {
+            font-size: 0.68rem;
+            color: #8b949e;
+            background: #21262d;
+            border-radius: 4px;
+            padding: 1px 6px;
+        }
+        .total-preview {
+            font-size: 0.72rem;
+            color: #3fb950;
+            margin-top: 3px;
+        }
+        /* Read-only system info grid */
+        .sys-info-item {
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            padding: .6rem .8rem;
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+        }
+        .sys-info-item .sys-label { font-size: .72rem; color: #8b949e; }
+        .sys-info-item .sys-value { font-size: .85rem; font-weight: 600; color: #e6edf3; }
+    </style>
+</head>
+<body>
+<div class="container py-4" style="max-width:660px;">
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h5 class="mb-0">
+            <i class="fas fa-sliders me-2 text-primary"></i>Configurações do Dashboard
+        </h5>
+        <div class="d-flex gap-2">
+            <a href="/admin/ranking" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Voltar
+            </a>
+            <a href="/dashboard" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-chart-line me-1"></i>Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if cfg_msg %}
+    <div class="alert alert-success py-2 small mb-3">
+        <i class="fas fa-check-circle me-1"></i>{{ cfg_msg }}
+    </div>
+    {% endif %}
+
+    <!-- Estatísticas personalizáveis -->
+    <form method="POST" action="/dashboard/config">
+        <div class="cfg-card mb-3">
+            <div class="section-title"><i class="fas fa-chart-bar me-1"></i>Estatísticas de Uso</div>
+            <p class="small text-muted mb-3">
+                Defina um valor extra a ser <strong>somado</strong> ao valor real.
+                Deixe em branco para mostrar apenas o valor real.
+                Quando quiser remover o bônus, clique em <em>Limpar Extras</em>.
+            </p>
+            <div class="row g-3">
+                {% set fields = [
+                    ('views',     'Visualizações', 'fa-eye',              'a371f7'),
+                    ('searches',  'Buscas',         'fa-magnifying-glass', '58a6ff'),
+                    ('images',    'Imagens',         'fa-images',          '3fb950'),
+                    ('videos',    'Vídeos',          'fa-film',            'f0883e'),
+                    ('downloads', 'Downloads',       'fa-download',        'e3b341'),
+                ] %}
+                {% for key, label, icon, color in fields %}
+                {% set real_val = real.get(key, 0) | int %}
+                {% set bonus = overrides.get(key, '') %}
+                {% set total = real_val + (bonus | int if bonus != '' else 0) %}
+                <div class="col-6">
+                    <label class="form-label small mb-1">
+                        <i class="fas {{ icon }} me-1" style="color:#{{ color }};"></i>{{ label }}
+                        <span class="badge-real ms-1">real: {{ real_val }}</span>
+                    </label>
+                    <input type="number" name="{{ key }}" class="form-control form-control-sm"
+                           placeholder="0 (sem bônus)"
+                           value="{{ bonus }}"
+                           min="0" step="1"
+                           data-real="{{ real_val }}"
+                           oninput="updateTotal(this)" />
+                    <div class="total-preview" id="total_{{ key }}">
+                        {% if bonus != '' %}
+                        Total exibido: {{ total }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="fas fa-save me-1"></i>Salvar
+            </button>
+            <a href="/dashboard/config/reset" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-rotate-left me-1"></i>Limpar Extras
+            </a>
+        </div>
+    </form>
+
+    <!-- Informações do sistema — somente leitura -->
+    <div class="cfg-card mt-4">
+        <div class="section-title"><i class="fas fa-circle-info me-1"></i>Informações do Sistema <span class="text-muted fw-normal text-lowercase" style="font-size:.7rem;">(automático)</span></div>
+        <div class="row g-2">
+            <div class="col-6">
+                <div class="sys-info-item">
+                    <i class="fas fa-gears text-primary"></i>
+                    <div>
+                        <div class="sys-label">Versão</div>
+                        <div class="sys-value">{{ app_version }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sys-info-item">
+                    <i class="fas fa-shield-halved text-success"></i>
+                    <div>
+                        <div class="sys-label">Status</div>
+                        <div class="sys-value" style="color:#3fb950;">{{ sys_status }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sys-info-item">
+                    <i class="fas fa-memory text-warning"></i>
+                    <div>
+                        <div class="sys-label">Memória</div>
+                        <div class="sys-value">{{ sys_memoria }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sys-info-item">
+                    <i class="fas fa-gauge-high" style="color:#f0883e;"></i>
+                    <div>
+                        <div class="sys-label">Performance</div>
+                        <div class="sys-value">{{ sys_performance }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Latência em Tempo Real -->
+    <div class="cfg-card mt-4">
+        <div class="section-title">
+            <i class="fas fa-wave-square me-1" style="color:#00f0ff;"></i>Latência do Servidor
+            <span class="text-muted fw-normal text-lowercase" style="font-size:.7rem;">(últimas 10 medições)</span>
+            <span id="latencyLiveVal" class="ms-auto float-end" style="font-size:.7rem;color:#00f0ff;font-weight:600;letter-spacing:.5px;"></span>
+        </div>
+        <canvas id="latencyLineChart" style="max-height:220px;width:100%;"></canvas>
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    function updateTotal(input) {
+        const real  = parseInt(input.dataset.real) || 0;
+        const bonus = parseInt(input.value) || 0;
+        const key   = input.name;
+        const el    = document.getElementById('total_' + key);
+        if (input.value === '') {
+            el.textContent = '';
+        } else {
+            el.textContent = 'Total exibido: ' + (real + bonus).toLocaleString('pt-BR');
+        }
+    }
+
+    /* ── Latency Line Chart ─────────────────────────────────────────────── */
+    (function () {
+        const MAX_POINTS = 10;
+        const labels     = [];
+        const latencies  = [];
+
+        const ctx = document.getElementById('latencyLineChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Latência (ms)',
+                    data: latencies,
+                    borderColor: '#00f0ff',
+                    backgroundColor: 'rgba(0,240,255,0.07)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#00f0ff',
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.4,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: { duration: 400, easing: 'easeInOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#161b22',
+                        borderColor: '#30363d',
+                        borderWidth: 1,
+                        titleColor: '#8b949e',
+                        bodyColor: '#00f0ff',
+                        callbacks: { label: ctx => ctx.parsed.y + ' ms' }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#8b949e', font: { size: 10 } },
+                        grid:  { color: 'rgba(48,54,61,0.5)' }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#8b949e',
+                            font: { size: 10 },
+                            callback: v => v + ' ms'
+                        },
+                        grid: { color: 'rgba(48,54,61,0.5)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        function addPoint(ms) {
+            const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            labels.push(now);
+            latencies.push(ms);
+            if (labels.length > MAX_POINTS) { labels.shift(); latencies.shift(); }
+            chart.update();
+            const lv = document.getElementById('latencyLiveVal');
+            if (lv) lv.textContent = ms + ' ms';
+        }
+
+        async function pollLatency() {
+            try {
+                const t0 = performance.now();
+                const r  = await fetch('/api/ping');
+                const ms = Math.round(performance.now() - t0);
+                if (r.ok) addPoint(ms);
+            } catch {}
+        }
+
+        pollLatency();
+        setInterval(pollLatency, 7000);
+    })();
+</script>
+</body>
+</html>

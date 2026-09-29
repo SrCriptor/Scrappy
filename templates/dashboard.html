@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard do Sistema</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <style>
+        body { background: #0d1117; min-height: 100vh; }
+
+        /* ── Header ── */
+        .dash-header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .dash-header h4 { margin: 0; font-weight: 600; color: #e6edf3; }
+        .dash-header .btn-sm { font-size: 0.78rem; }
+
+        /* ── Status bar ── */
+        .status-bar {
+            background: linear-gradient(135deg, #1a1060 0%, #3b2399 50%, #6f3fcb 100%);
+            border-radius: 10px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .status-dot {
+            width: 10px; height: 10px;
+            background: #3fb950;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 6px #3fb950;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 6px #3fb950; }
+            50%       { box-shadow: 0 0 14px #3fb950; }
+        }
+        .uptime-display {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+            letter-spacing: 2px;
+        }
+        .uptime-label { font-size: 0.72rem; color: rgba(255,255,255,.65); text-align: right; }
+
+        /* ── Stat cards ── */
+        .stat-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 1.25rem 1rem;
+            text-align: center;
+            height: 100%;
+            transition: border-color .2s;
+        }
+        .stat-card:hover { border-color: #58a6ff; }
+        .stat-icon { font-size: 1.6rem; margin-bottom: .5rem; }
+        .stat-value { font-size: 1.4rem; font-weight: 700; color: #e6edf3; }
+        .stat-label { font-size: 0.73rem; color: #8b949e; margin-top: .15rem; }
+
+        /* ── Panels ── */
+        .panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 1.25rem;
+            height: 100%;
+        }
+        .panel-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 1rem;
+            padding-bottom: .5rem;
+            border-bottom: 1px solid #30363d;
+        }
+        .info-item { text-align: center; padding: .5rem 0; }
+        .info-icon { font-size: 1.4rem; margin-bottom: .35rem; }
+        .info-label { font-size: 0.72rem; color: #8b949e; }
+        .info-value { font-size: 0.88rem; font-weight: 600; color: #e6edf3; margin-top: .1rem; }
+        .info-value.text-success-custom { color: #3fb950; }
+
+        .usage-item { text-align: center; padding: .5rem 0; }
+        .usage-icon { font-size: 1.4rem; margin-bottom: .3rem; }
+        .usage-label { font-size: 0.72rem; color: #8b949e; }
+        .usage-value { font-size: 1.1rem; font-weight: 700; color: #e6edf3; }
+
+        /* ── Relógio digital ── */
+        .clock-wrap {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+            font-family: 'Courier New', monospace;
+            font-size: 2.05rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 2px;
+            line-height: 1;
+        }
+        .clock-seg {
+            background: rgba(0,0,0,.25);
+            border-radius: 6px;
+            padding: 2px 5px;
+        }
+        .clock-sep { color: rgba(255,255,255,.5); animation: blink 1s step-start infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+        .uptime-label { font-size: 0.72rem; color: rgba(255,255,255,.65); text-align: right; margin-top: 4px; letter-spacing: .4px; text-transform: uppercase; }
+
+        /* ── Countdown do próximo ping ── */
+        #statNextPing { font-family: 'Courier New', monospace; font-size: 1.2rem; letter-spacing: 1px; }
+
+        /* Memória com badge de nível */
+        .mem-badge { font-size: .65rem; padding: 1px 6px; border-radius: 8px; margin-left: 5px; vertical-align: middle; font-weight: 700; }
+        .mem-excellent { background: #1f6b35; color: #3fb950; }
+        .mem-boa       { background: #1a4a6b; color: #58a6ff; }
+        .mem-moderada  { background: #6b4d10; color: #f0883e; }
+        .mem-alta      { background: #6b1a1a; color: #f85149; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="dash-header">
+    <h4><i class="fas fa-chart-line me-2 text-primary"></i>Dashboard do Sistema</h4>
+    <div class="d-flex gap-2">
+        <a href="/" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-home me-1"></i>Início
+        </a>
+        <button class="btn btn-outline-secondary btn-sm" onclick="fetchStats()">
+            <i class="fas fa-rotate-right"></i>
+        </button>
+    </div>
+</div>
+
+<div class="container-fluid p-3">
+
+    <!-- Status bar -->
+    <div class="status-bar mb-3">
+        <div>
+            <div class="fw-semibold" style="color:#fff; font-size:1rem;">
+                <span class="status-dot"></span>Sistema Operacional
+            </div>
+            <div style="color:rgba(255,255,255,.7); font-size:.8rem; margin-top:.15rem;">
+                Todos os serviços estão funcionando normalmente
+            </div>
+        </div>
+        <div class="text-end">
+            <div class="clock-wrap justify-content-end" id="uptimeDisplay">
+                <span class="clock-seg" id="uptH">00</span>
+                <span class="clock-sep">:</span>
+                <span class="clock-seg" id="uptM">00</span>
+                <span class="clock-sep">:</span>
+                <span class="clock-seg" id="uptS">00</span>
+            </div>
+            <div class="uptime-label">Tempo Online</div>
+        </div>
+    </div>
+
+    <!-- 4 stat cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon text-primary"><i class="fas fa-server"></i></div>
+                <div class="stat-value">Ativo</div>
+                <div class="stat-label">Keep-Alive</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon text-success"><i class="fas fa-download"></i></div>
+                <div class="stat-value" id="statDownloads">—</div>
+                <div class="stat-label">Downloads Realizados</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon text-info"><i class="fas fa-clock"></i></div>
+                <div class="stat-value" id="statLastScrape">—</div>
+                <div class="stat-label">Última Atualização</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon text-danger"><i class="fas fa-heart-pulse"></i></div>
+                <div class="stat-value" id="statNextPing">—</div>
+                <div class="stat-label">Próximo Ping</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Two panels -->
+    <div class="row g-3">
+
+        <!-- System Info -->
+        <div class="col-12 col-lg-6">
+            <div class="panel">
+                <div class="panel-title">
+                    <i class="fas fa-circle-info me-1"></i>Informações do Sistema
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="info-item">
+                            <div class="info-icon text-primary"><i class="fas fa-gears"></i></div>
+                            <div class="info-label">Versão</div>
+                            <div class="info-value" id="sysVersao">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-item">
+                            <div class="info-icon text-success"><i class="fas fa-shield-halved"></i></div>
+                            <div class="info-label">Status</div>
+                            <div class="info-value text-success-custom" id="sysStatus">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-item">
+                            <div class="info-icon text-warning"><i class="fas fa-memory"></i></div>
+                            <div class="info-label">Memória</div>
+                            <div class="info-value" id="sysMemoria">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-item">
+                            <div class="info-icon" style="color:#f0883e;"><i class="fas fa-gauge-high"></i></div>
+                            <div class="info-label">Performance</div>
+                            <div class="info-value" id="sysPerformance">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Usage Stats -->
+        <div class="col-12 col-lg-6">
+            <div class="panel">
+                <div class="panel-title">
+                    <i class="fas fa-chart-bar me-1"></i>Estatísticas de Uso
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="usage-item">
+                            <div class="usage-icon" style="color:#a371f7;"><i class="fas fa-eye"></i></div>
+                            <div class="usage-label">Visualizações</div>
+                            <div class="usage-value" id="statViews">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="usage-item">
+                            <div class="usage-icon text-info"><i class="fas fa-magnifying-glass"></i></div>
+                            <div class="usage-label">Buscas</div>
+                            <div class="usage-value" id="statSearches">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="usage-item">
+                            <div class="usage-icon text-success"><i class="fas fa-images"></i></div>
+                            <div class="usage-label">Imagens</div>
+                            <div class="usage-value" id="statImages">—</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="usage-item">
+                            <div class="usage-icon text-warning"><i class="fas fa-film"></i></div>
+                            <div class="usage-label">Vídeos</div>
+                            <div class="usage-value" id="statVideos">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    /* ═══════════════════════════════════════════════════════
+       Estado sincronizado com o servidor (atualizado a cada fetch)
+       Todos os timers rodam localmente a cada segundo.
+    ═══════════════════════════════════════════════════════ */
+    let uptimeBase    = 0;       // segundos de uptime no momento do fetch
+    let lastScrapeTsServer = null;  // Unix timestamp da última scrape (servidor)
+    let nextPingTsServer   = null;  // Unix timestamp do próximo ping (servidor) — legado
+    let serverTsAtFetch    = 0;     // Unix timestamp do servidor no momento do fetch
+    let localFetchAt       = 0;     // Date.now() no momento do fetch (ms)
+    let pingCountdown      = null;  // client-side countdown seeded from /api/ping remaining_seconds
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function fmtNumber(n) { return typeof n === 'number' ? n.toLocaleString('pt-BR') : (n || '—'); }
+
+    /* ── Formato do relógio digital (atualiza os 3 spans separados) ── */
+    function setClockDisplay(totalSecs) {
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        document.getElementById('uptH').textContent = pad(h);
+        document.getElementById('uptM').textContent = pad(m);
+        document.getElementById('uptS').textContent = pad(s);
+    }
+
+    /* ── "Há X dias, Y horas" — humanizado ── */
+    function fmtAgo(secsAgo) {
+        if (secsAgo < 0) secsAgo = 0;
+        const d  = Math.floor(secsAgo / 86400);
+        const h  = Math.floor((secsAgo % 86400) / 3600);
+        const m  = Math.floor((secsAgo % 3600) / 60);
+        const s  = secsAgo % 60;
+        if (d > 0)  return `${d}d ${pad(h)}h atrás`;
+        if (h > 0)  return `${h}h ${pad(m)}min atrás`;
+        if (m > 0)  return `${m}min ${pad(s)}s atrás`;
+        return `${s}s atrás`;
+    }
+
+    /* ── Countdown "MM:SS" para próximo ping ── */
+    function fmtCountdown(secsLeft) {
+        if (secsLeft <= 0) return '00:00';
+        const m = Math.floor(secsLeft / 60);
+        const s = secsLeft % 60;
+        return `${pad(m)}:${pad(s)}`;
+    }
+
+    /* ── Badge de memória ── */
+    function memBadgeClass(label) {
+        if (!label) return '';
+        const map = { 'Excelente':'mem-excellent', 'Boa':'mem-boa', 'Moderada':'mem-moderada', 'Alta':'mem-alta' };
+        return map[label] || '';
+    }
+
+    /* ── Fetch da API ── */
+    function fetchStats() {
+        /* Caminho robusto: resolve contra a URL atual (funciona atrás de
+           proxies/subcaminhos, ex.: Hugging Face Spaces) + cache-busting
+           e 'no-store' para evitar resposta cacheada travando o cronômetro. */
+        const apiUrl = new URL('dashboard/api', window.location.href);
+        apiUrl.searchParams.set('_t', Date.now());
+        fetch(apiUrl.toString(), { cache: 'no-store' })
+            .then(r => r.json())
+            .then(d => {
+                localFetchAt    = Date.now();
+                serverTsAtFetch = d.server_ts || (Date.now() / 1000);
+                uptimeBase      = d.uptime     || 0;
+                lastScrapeTsServer = d.last_scrape_ts || null;
+                nextPingTsServer   = d.next_ping_ts   || null;
+
+                document.getElementById('statDownloads').textContent = fmtNumber(d.downloads);
+                document.getElementById('statViews').textContent     = fmtNumber(d.views);
+                document.getElementById('statSearches').textContent  = fmtNumber(d.searches);
+                document.getElementById('statImages').textContent    = fmtNumber(d.images);
+                document.getElementById('statVideos').textContent    = fmtNumber(d.videos);
+
+                const sys = d.system || {};
+                document.getElementById('sysVersao').textContent      = sys.versao || '—';
+                document.getElementById('sysStatus').textContent      = sys.status || '—';
+
+                tick(); // atualiza relógio e contadores imediatamente após fetch
+
+                /* Memória — valor + badge de nível */
+                const memEl = document.getElementById('sysMemoria');
+                const cls   = memBadgeClass(sys.memoria_label);
+                memEl.innerHTML = `${sys.memoria || '—'}<span class="mem-badge ${cls}">${sys.memoria_label || ''}</span>`;
+
+                /* Performance — cor por classificação */
+                const perfEl = document.getElementById('sysPerformance');
+                const perfColors = { 'Excelente':'#3fb950','Boa':'#58a6ff','Moderada':'#f0883e','Limitada':'#f85149','N/A':'#8b949e' };
+                perfEl.textContent = sys.performance || '—';
+                perfEl.style.color = perfColors[sys.performance] || '#e6edf3';
+            })
+            .catch(() => {});
+    }
+
+    /* ── Tick a cada segundo — atualiza tudo localmente ── */
+    function tick() {
+        const elapsedSecs = Math.floor((Date.now() - localFetchAt) / 1000);
+
+        /* Tempo Online — relógio digital */
+        setClockDisplay(uptimeBase + elapsedSecs);
+
+        /* Última Atualização — humanizado e crescendo */
+        const lastScrapeEl = document.getElementById('statLastScrape');
+        if (lastScrapeTsServer) {
+            const nowServer  = serverTsAtFetch + elapsedSecs;
+            const secsAgo    = Math.floor(nowServer - lastScrapeTsServer);
+            lastScrapeEl.textContent = fmtAgo(secsAgo);
+        } else {
+            lastScrapeEl.textContent = '—';
+        }
+
+        /* Próximo Ping — client-side countdown seeded from /api/ping */
+        const pingEl = document.getElementById('statNextPing');
+        if (pingCountdown !== null) {
+            pingEl.textContent = pingCountdown > 0 ? fmtCountdown(pingCountdown) : '⏳ Em breve…';
+            if (pingCountdown > 0) {
+                pingCountdown--;
+            } else {
+                pingCountdown = null;
+                fetchPing(); // re-seed silently when countdown expires
+            }
+        } else if (nextPingTsServer) {
+            // legacy fallback — used until first /api/ping response arrives
+            const nowServer  = serverTsAtFetch + elapsedSecs;
+            const secsLeft   = Math.floor(nextPingTsServer - nowServer);
+            pingEl.textContent = secsLeft > 0 ? fmtCountdown(secsLeft) : '⏳ Em breve…';
+        } else {
+            pingEl.textContent = '—';
+        }
+    }
+
+    /* ── Dedicated /api/ping fetch — seeds client-side MM:SS countdown ── */
+    function fetchPing() {
+        fetch('/api/ping', { cache: 'no-store' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.remaining_seconds != null) {
+                    pingCountdown = d.remaining_seconds > 0 ? d.remaining_seconds : 420;
+                } else if (d.next_ping_ts) {
+                    // legacy: server didn't return remaining_seconds, fall back to ts diff
+                    nextPingTsServer = d.next_ping_ts;
+                    localFetchAt    = Date.now();
+                    serverTsAtFetch = Date.now() / 1000;
+                }
+                tick();
+            })
+            .catch(function() {});
+    }
+
+    fetchStats();
+    fetchPing();
+    setInterval(tick, 1000);
+    setInterval(fetchStats, 8000);
+    setInterval(fetchPing, 10000);
+</script>
+</body>
+</html>

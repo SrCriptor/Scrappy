@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCI Manager - Admin Privado</title>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 12px;
+            margin-bottom: 15px;
+        }
+        .header h1 {
+            font-size: 20px;
+            color: #58a6ff;
+            margin: 0;
+        }
+        .badge {
+            background: #238636;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .card-header-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        @media (min-width: 600px) {
+            .card-header-area {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #f0f6fc;
+            margin: 0;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        @media (min-width: 600px) {
+            .btn-group {
+                width: auto;
+            }
+        }
+        .btn-copy {
+            background-color: #21262d;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            padding: 8px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-weight: 500;
+            flex: 1;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        @media (min-width: 600px) {
+            .btn-copy {
+                flex: none;
+            }
+        }
+        .btn-copy:hover {
+            background-color: #30363d;
+            border-color: #8b949e;
+        }
+        .btn-copy:active {
+            transform: scale(0.98);
+        }
+        .terminal-box {
+            background: #000000;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            height: 380px;
+            overflow-y: auto;
+            font-family: "Fira Code", "Courier New", Courier, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            box-shadow: inset 0 0 8px rgba(0,255,0,0.15);
+        }
+        .log-line {
+            margin: 0;
+            padding: 1px 0;
+            white-space: pre-wrap;
+        }
+        .log-sucesso { color: #39ff14; font-weight: bold; }
+        .log-erro { color: #ff4444; font-weight: bold; }
+        .log-alerta { color: #ffb700; }
+        .log-info { color: #00bfff; }
+        
+        .footer-info {
+            font-size: 11px;
+            color: #8b949e;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🛡️ OCI Core Manager</h1>
+        <span class="badge">Sessão Admin</span>
+    </div>
+
+    <div class="card">
+        <div class="card-header-area">
+            <div class="card-title">🤖 Automação de Instâncias ARM (Sempre Grátis)</div>
+            <div class="btn-group">
+                <!-- BOTÃO DE REINICIAR -->
+                <button class="btn-copy" id="btn-reboot" onclick="reiniciarBot()" style="border-color: #bc7c14; color: #ffcc00;">
+                    <span id="reboot-icon">🔄</span> <span id="reboot-text">Reiniciar</span>
+                </button>
+                <!-- BOTÃO DE COPIAR -->
+                <button class="btn-copy" id="btn-copiar" onclick="copiarLogs()">
+                    <span id="copy-icon">📋</span> <span id="copy-text">Copiar Logs</span>
+                </button>
+            </div>
+        </div>
+        
+        <div id="terminal" class="terminal-box">
+            <p class="log-line log-info">[SISTEMA] Aguardando conexão com a memória...</p>
+        </div>
+    </div>
+    
+    <div class="footer-info">
+        Acesso restrito. Requisições em segundo plano protegidas contra sleep de 48h.
+    </div>
+</div>
+
+<script>
+    function colorirLinha(texto) {
+        let classe = 'log-info';
+        if (texto.includes('SUCESSO') || texto.includes('🎉') || texto.includes('SUCCEEDED') || texto.includes('✅')) {
+            classe = 'log-sucesso';
+        } else if (texto.includes('❌') || texto.includes('Erro') || texto.includes('FAILED') || texto.includes('CRÍTICO') || texto.includes('🛑')) {
+            classe = 'log-erro';
+        } else if (texto.includes('⚠️') || texto.includes('Aguardando') || texto.includes('Tentativa') || texto.includes('DIAGNÓSTICO') || texto.includes('🔄')) {
+            classe = 'log-alerta';
+        }
+        return `<p class="log-line ${classe}">${texto}</p>`;
+    }
+
+    function atualizarTerminal() {
+        fetch('/admin/oracle-logs-api')
+            .then(response => {
+                if(response.status === 403) window.location.reload();
+                return response.json();
+            })
+            .then(data => {
+                const terminal = document.getElementById('terminal');
+                const linhas = data.logs.split('\n');
+                let htmlResultado = '';
+                
+                linhas.forEach(linha => {
+                    if(linha.trim() !== '') {
+                        htmlResultado += colorirLinha(linha);
+                    }
+                });
+                
+                terminal.innerHTML = htmlResultado;
+                terminal.scrollTop = terminal.scrollHeight;
+            })
+            .catch(err => console.error("Falha ao atualizar painel:", err));
+    }
+
+    function copiarLogs() {
+        const terminal = document.getElementById('terminal');
+        const botao = document.getElementById('btn-copiar');
+        const txtIcon = document.getElementById('copy-icon');
+        const txtLabel = document.getElementById('copy-text');
+        
+        const textoPuro = terminal.innerText || terminal.textContent;
+        const elementoFantasma = document.createElement('textarea');
+        elementoFantasma.value = textoPuro;
+        document.body.appendChild(elementoFantasma);
+        elementoFantasma.select();
+        elementoFantasma.setSelectionRange(0, 99999);
+        
+        try {
+            document.execCommand('copy');
+            txtIcon.textContent = "✅";
+            txtLabel.textContent = "Copiado!";
+            botao.style.borderColor = "#238636";
+            botao.style.color = "#39ff14";
+            
+            setTimeout(() => {
+                txtIcon.textContent = "📋";
+                txtLabel.textContent = "Copiar Logs";
+                botao.style.borderColor = "#30363d";
+                botao.style.color = "#c9d1d9";
+            }, 2500);
+        } catch (err) {
+            alert('Erro ao copiar.');
+        }
+        document.body.removeChild(elementoFantasma);
+    }
+
+    function reiniciarBot() {
+        const btn = document.getElementById('btn-reboot');
+        const txt = document.getElementById('reboot-text');
+        const ico = document.getElementById('reboot-icon');
+        
+        if(!confirm("Deseja limpar os logs e recarregar os Secrets do ambiente?")) return;
+        
+        txt.textContent = "Reiniciando...";
+        btn.style.opacity = "0.6";
+        
+        fetch('/admin/oracle-reboot', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                setTimeout(() => {
+                    txt.textContent = "Reiniciar";
+                    btn.style.opacity = "1";
+                    document.getElementById('terminal').innerHTML = '<p class="log-line log-info">[🔄] Sinais de reboot enviados. Atualizando processos...</p>';
+                }, 1500);
+            })
+            .catch(err => {
+                alert("Erro ao enviar comando.");
+                txt.textContent = "Reiniciar";
+                btn.style.opacity = "1";
+            });
+    }
+
+    setInterval(atualizarTerminal, 4000);
+    atualizarTerminal();
+</script>
+
+</body>
+</html>

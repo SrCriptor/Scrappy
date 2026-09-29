@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Painel de Debug</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .info-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            max-width: 420px;
+            width: 100%;
+        }
+        .lock-icon-wrap {
+            width: 72px; height: 72px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.25rem;
+            cursor: pointer;
+            transition: background .25s, box-shadow .25s;
+            background: rgba(185, 28, 28, 0.2);
+            border: 2px solid transparent;
+            user-select: none;
+        }
+        .lock-icon-wrap:hover { box-shadow: 0 0 0 3px rgba(239,68,68,.25); }
+        .lock-icon-wrap.unlocked {
+            background: rgba(22, 163, 74, 0.2);
+            box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+        }
+        .lock-icon-wrap i { font-size: 1.8rem; transition: color .25s; color: #ef4444; }
+        .lock-icon-wrap.unlocked i { color: #22c55e; }
+
+        .info-title { font-size: 1.25rem; font-weight: 700; color: #e6edf3; margin-bottom: .35rem; display: flex; align-items: center; justify-content: center; gap: .35rem; }
+        .info-subtitle { color: #8b949e; font-size: .9rem; margin-bottom: 1.75rem; }
+        .info-box {
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 10px;
+            padding: 1rem 1.2rem;
+            text-align: left;
+            margin-bottom: 1.5rem;
+        }
+        .info-box ul { margin: 0; padding-left: 1.2rem; color: #8b949e; font-size: .85rem; line-height: 1.8; }
+        .info-box ul li strong { color: #c9d1d9; }
+        .back-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            color: #6ea8fe; text-decoration: none; font-size: .88rem;
+            transition: color .15s;
+        }
+        .back-link:hover { color: #93c5fd; }
+
+        /* Easter egg info button */
+        #eggInfoBtn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            font-size: .78rem;
+            cursor: default;
+            color: #374151;
+            transition: color .3s, text-shadow .3s;
+            vertical-align: middle;
+        }
+        #eggInfoBtn.active {
+            color: #6ea8fe;
+            cursor: pointer;
+            text-shadow: 0 0 8px rgba(110,168,254,.6);
+            animation: pulse-info .9s ease-in-out infinite alternate;
+        }
+        @keyframes pulse-info {
+            from { text-shadow: 0 0 4px rgba(110,168,254,.4); }
+            to   { text-shadow: 0 0 14px rgba(110,168,254,.9); }
+        }
+        .hint-text { display: none; }
+    </style>
+</head>
+<body>
+    <div class="info-card">
+        <div class="lock-icon-wrap" id="lockBtn" onclick="unlockStep()" title="Clique para desbloquear">
+            <i class="fas fa-lock" id="lockIcon"></i>
+        </div>
+
+        <div class="info-title">
+            Painel de Debug
+            <span id="eggInfoBtn" title="" onclick="goAdmin()">
+                <i class="fas fa-info-circle"></i>
+            </span>
+        </div>
+        <div class="info-subtitle">Acesso restrito a administradores</div>
+
+        <div class="hint-text" id="hintText">desbloqueado — clique no <i class="fas fa-info-circle" style="font-size:.65rem;"></i></div>
+
+        <div class="info-box">
+            <ul>
+                <li>Esta área serve para <strong>análise de URLs com falha</strong> de download.</li>
+                <li>As URLs são <strong>reportadas manualmente</strong> pelos usuários ao clicar em «Reportar URL» durante o uso da ferramenta.</li>
+                <li>O ambiente é destinado ao <strong>diagnóstico</strong> de erros de conexão, bloqueios e timeouts.</li>
+                <li>Nenhum dado pessoal de usuários é armazenado nesta área.</li>
+            </ul>
+        </div>
+
+        <a href="/" class="back-link">
+            <i class="fas fa-arrow-left"></i> Voltar ao início
+        </a>
+    </div>
+
+    <script>
+        let _unlocked = false;
+
+        function unlockStep() {
+            if (_unlocked) return;
+            _unlocked = true;
+            const btn  = document.getElementById('lockBtn');
+            const icon = document.getElementById('lockIcon');
+            const info = document.getElementById('eggInfoBtn');
+            const hint = document.getElementById('hintText');
+
+            btn.classList.add('unlocked');
+            icon.classList.replace('fa-lock', 'fa-unlock');
+            btn.title = '';
+            btn.style.cursor = 'default';
+            btn.onclick = null;
+
+            // Activate info button
+            info.classList.add('active');
+            info.title = 'Entrar no painel';
+
+            // Show hint
+            setTimeout(() => hint.classList.add('show'), 200);
+        }
+
+        function goAdmin() {
+            if (!_unlocked) return;
+            window.location.href = '/admin/login';
+        }
+    </script>
+</body>
+</html>

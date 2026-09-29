@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gateways de Pagamento</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+
+        .gw-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: .75rem;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .gw-card.active-gw { border-color: #3fb950; }
+        .gw-card.custom-gw { border-color: #30363d; }
+        .gw-card.custom-gw.active-gw { border-color: #a371f7; }
+
+        .gw-header { display: flex; align-items: center; gap: 12px; margin-bottom: .75rem; }
+        .gw-icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; flex-shrink: 0;
+        }
+        .gw-title { font-weight: 600; font-size: .95rem; margin: 0; }
+        .gw-sub   { font-size: .72rem; color: #8b949e; }
+
+        .field-group { margin-bottom: .6rem; }
+        .field-group label { font-size: .72rem; color: #8b949e; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 4px; }
+
+        .section-hdr {
+            font-size: .72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .5px; color: #8b949e; border-bottom: 1px solid #30363d;
+            padding-bottom: .4rem; margin-bottom: 1rem;
+        }
+        .badge-pix   { background: #32d296; color: #0d1117; font-size: .65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+        .badge-nopix { background: #30363d; color: #8b949e; font-size: .65rem; padding: 2px 7px; border-radius: 10px; }
+        .badge-custom { background: #2d2038; color: #a371f7; font-size: .65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+
+        .env-hint { font-size: .7rem; color: #8b949e; margin-top: 3px; }
+        .env-hint code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: .68rem; color: #79c0ff; }
+
+        /* ── Seletor de ícone ── */
+        .icon-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+        .icon-opt {
+            width: 34px; height: 34px; border-radius: 8px; border: 2px solid #30363d;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; background: #21262d; font-size: .85rem; color: #8b949e;
+            transition: border-color .15s, background .15s, color .15s;
+        }
+        .icon-opt:hover  { border-color: #58a6ff; color: #58a6ff; }
+        .icon-opt.active { border-color: var(--gw-color, #a371f7); background: color-mix(in srgb, var(--gw-color, #a371f7) 15%, #21262d); color: var(--gw-color, #a371f7); }
+
+        /* ── Seletor de cor ── */
+        .color-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+        .color-dot {
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            border: 3px solid transparent; transition: border-color .15s, transform .15s;
+        }
+        .color-dot:hover  { transform: scale(1.15); }
+        .color-dot.active { border-color: #fff; transform: scale(1.15); }
+
+        /* ── Botão remover ── */
+        .btn-remove-cg {
+            background: transparent; border: 1px solid #e74c3c33; color: #e74c3c;
+            border-radius: 8px; padding: 4px 10px; font-size: .72rem; cursor: pointer;
+            transition: background .15s;
+        }
+        .btn-remove-cg:hover { background: #e74c3c22; }
+
+        /* ── Add button ── */
+        .btn-add-gw {
+            width: 100%; border: 2px dashed #30363d; background: transparent;
+            color: #8b949e; border-radius: 12px; padding: .75rem;
+            font-size: .85rem; cursor: pointer; transition: border-color .2s, color .2s;
+        }
+        .btn-add-gw:hover { border-color: #a371f7; color: #a371f7; }
+
+        /* Preview do ícone no header do card personalizado */
+        .cg-preview-icon { transition: background .2s, color .2s; }
+        /* Item 7: animação de "shredding" ao excluir um PIX — a linha se
+           desintegra em faixas verticais avermelhadas antes de desaparecer,
+           em vez de a página recarregar. */
+        @keyframes pixShredFx {
+            0%   { opacity:1;    transform:translateY(0) scaleY(1);      filter:none; }
+            35%  { opacity:.75;  transform:translateY(1px) scaleY(1) skewX(2deg);  filter:blur(.4px); }
+            70%  { opacity:.35;  transform:translateY(6px) scaleY(.5) skewX(-4deg); filter:blur(1.5px); }
+            100% { opacity:0;    transform:translateY(14px) scaleY(.05) skewX(-8deg); filter:blur(3px); }
+        }
+        .pix-row-shred {
+            animation:pixShredFx .55s cubic-bezier(.55,0,.85,.35) forwards;
+            transform-origin:top center;
+        }
+        .pix-row-shred td {
+            background-image:repeating-linear-gradient(90deg, transparent 0 5px, rgba(248,81,73,.35) 5px 6px);
+        }
+    </style>
+</head>
+<body>
+<div class="container py-4" style="max-width:700px;">
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h5 class="mb-0"><i class="fas fa-credit-card me-2 text-primary"></i>Gateways de Pagamento</h5>
+        <div class="d-flex gap-2">
+            <a href="/admin/" class="btn btn-outline-primary btn-sm"><i class="fas fa-arrow-left me-1"></i>Admin</a>
+            <a href="/dashboard" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chart-line me-1"></i>Dashboard</a>
+            <a href="/debug" class="btn btn-outline-secondary btn-sm"><i class="fas fa-bug me-1"></i>Debug</a>
+        </div>
+    </div>
+
+    {% if admin_msg %}
+    <div class="alert alert-success py-2 small mb-3"><i class="fas fa-check-circle me-1"></i>{{ admin_msg }}</div>
+    {% endif %}
+
+    <form method="POST" action="/payment/admin" id="mainForm">
+
+        <!-- Gateway principal -->
+        <div class="mb-3">
+            <div class="section-hdr"><i class="fas fa-star me-1"></i>Gateway Padrão</div>
+            <div class="d-flex align-items-center gap-2">
+            <select name="primary_gateway" class="form-select form-select-sm flex-grow-1" id="primaryGatewaySelect">
+                {% for gid, meta in meta.items() %}
+                <option value="{{ gid }}" {% if cfg.primary_gateway == gid %}selected{% endif %}>
+                    {{ meta.name }}{% if not meta.pix %} (sem PIX){% endif %}
+                </option>
+                {% endfor %}
+                {% for cg in cfg.custom_gateways %}
+                <option value="{{ cg.id }}" {% if cfg.primary_gateway == cg.id %}selected{% endif %}>
+                    {{ cg.name }} ✦ Personalizado
+                </option>
+                {% endfor %}
+            </select>
+            <i id="primaryGwSaveIcon" style="font-size:.85rem;min-width:14px;"></i>
+            </div><!-- /.d-flex gateway padrão -->
+        </div>
+
+        <!-- ═══ Gateways padrão ═══ -->
+        <div class="section-hdr d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-toggle-on me-1"></i>Gateways Padrão</span>
+            {% if any_active %}
+            <button type="button" id="disableAllBtn" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.72rem;" onclick="disableAllGateways()" title="Desativar todos os gateways ativos">
+                <i class="fas fa-ban me-1"></i>Desativar Ativos
+            </button>
+            {% elif has_previously_active %}
+            <button type="button" id="disableAllBtn" class="btn btn-outline-success btn-sm py-0 px-2" style="font-size:.72rem;" onclick="reactivateAllGateways()" title="Reativar gateways que estavam ativos antes">
+                <i class="fas fa-rotate-left me-1"></i>Ativar Anteriores
+            </button>
+            {% endif %}
+        </div>
+
+        {% for gid, meta in meta.items() %}
+        {% set gw_cfg = cfg.gateways.get(gid, {}) %}
+        <div class="gw-card {% if gw_cfg.get('enabled') %}active-gw{% endif %}">
+            <div class="gw-header">
+                <div class="gw-icon" style="background:{{ meta.color }}22; color:{{ meta.color }};">
+                    <i class="fab {{ meta.icon }}" onerror="this.className='fas fa-credit-card'"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="gw-title">{{ meta.name }}
+                        {% if meta.pix %}<span class="badge-pix ms-1">PIX</span>{% else %}<span class="badge-nopix ms-1">sem PIX</span>{% endif %}
+                    </div>
+                    <div class="gw-sub">{{ meta.desc }}</div>
+                </div>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input gw-toggle" type="checkbox" name="enabled_gateways" value="{{ gid }}"
+                           id="toggle_{{ gid }}" {% if gw_cfg.get('enabled') %}checked{% endif %}
+                           onchange="toggleGatewayRealtime(this, '{{ gid }}')">
+                    <label class="form-check-label small" for="toggle_{{ gid }}">Ativo</label>
+                </div>
+            </div>
+
+            {% if gid == 'manual' %}
+            <div class="row g-2">
+                <div class="col-12 col-md-7">
+                    <div class="field-group">
+                        <label>Chave PIX</label>
+                        <input type="text" name="manual_pix_key" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('pix_key','') }}" placeholder="email, CPF, telefone, CNPJ ou chave aleatória" />
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="field-group">
+                        <label>Tipo</label>
+                        <select name="manual_pix_key_type" class="form-select form-select-sm">
+                            {% for t in ['email','cpf','telefone','cnpj','chave-aleatoria'] %}
+                            <option value="{{ t }}" {% if gw_cfg.get('pix_key_type') == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="field-group">
+                        <label>Cidade</label>
+                        <input type="text" name="manual_city" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('city','Brasil') }}" maxlength="15" />
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="field-group">
+                        <label>Beneficiário</label>
+                        <input type="text" name="manual_beneficiary_name" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('beneficiary_name','Doação') }}" maxlength="25" />
+                    </div>
+                </div>
+            </div>
+
+            {% elif gid == 'mercadopago' %}
+            <div class="field-group">
+                <label>Access Token</label>
+                <input type="password" name="mercadopago_access_token" class="form-control form-control-sm"
+                       value="{{ gw_cfg.get('access_token','') }}" placeholder="APP_USR-..." autocomplete="new-password" />
+                <div class="env-hint">Ou <code>MERCADOPAGO_ACCESS_TOKEN</code></div>
+            </div>
+
+            {% elif gid == '99pay' %}
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="field-group">
+                        <label>Client ID</label>
+                        <input type="text" name="99pay_client_id" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_id','') }}" autocomplete="off" />
+                        <div class="env-hint">Ou <code>NOVENOVE_CLIENT_ID</code></div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="field-group">
+                        <label>Client Secret</label>
+                        <input type="password" name="99pay_client_secret" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_secret','') }}" autocomplete="new-password" />
+                        <div class="env-hint">Ou <code>NOVENOVE_CLIENT_SECRET</code></div>
+                    </div>
+                </div>
+            </div>
+
+            {% elif gid == 'stripe' %}
+            <div class="field-group">
+                <label>Secret Key</label>
+                <input type="password" name="stripe_api_key" class="form-control form-control-sm"
+                       value="{{ gw_cfg.get('api_key','') }}" placeholder="sk_live_..." autocomplete="new-password" />
+                <div class="env-hint">Ou <code>STRIPE_SECRET_KEY</code></div>
+            </div>
+            <div class="form-check form-switch mt-2">
+                <input type="checkbox" name="stripe_pix_enabled" class="form-check-input" id="stripe_pix_enabled"
+                       {% if gw_cfg.get('stripe_pix_enabled', True) %}checked{% endif %}
+                       onchange="toggleStripePixRealtime(this)">
+                <label class="form-check-label small" for="stripe_pix_enabled">
+                    Habilitar Pix via Stripe
+                    <span class="text-muted d-block" style="font-size:.68rem;">
+                        Quando desativado, o Stripe aparece apenas na aba "Cartão / Outros métodos" no checkout.
+                    </span>
+                </label>
+            </div>
+
+            {% elif gid == 'paypal' %}
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="field-group">
+                        <label>Client ID</label>
+                        <input type="text" name="paypal_client_id" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_id','') }}" autocomplete="off" />
+                        <div class="env-hint">Ou <code>PAYPAL_CLIENT_ID</code></div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="field-group">
+                        <label>Client Secret</label>
+                        <input type="password" name="paypal_client_secret" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_secret','') }}" autocomplete="new-password" />
+                        <div class="env-hint">Ou <code>PAYPAL_CLIENT_SECRET</code></div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch mt-2">
+                        <input type="checkbox" name="paypal_sandbox" class="form-check-input" id="pp_sandbox"
+                               {% if gw_cfg.get('sandbox', True) %}checked{% endif %}
+                               onchange="togglePaypalSandboxRealtime(this)">
+                        <label class="form-check-label small" for="pp_sandbox">
+                            Habilitar Sandbox (Testes) PayPal
+                            <span class="text-muted d-block" style="font-size:.68rem;">
+                                Quando ativo, o PayPal opera em modo de teste. Desative para processar pagamentos reais.
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <!-- ═══ Gateways Personalizados ═══ -->
+        <div class="section-hdr mt-4"><i class="fas fa-wand-magic-sparkles me-1"></i>Gateways Personalizados</div>
+
+        <div id="customGatewaysContainer">
+            {% for cg in cfg.custom_gateways %}
+            <div class="gw-card custom-gw {% if cg.get('enabled') %}active-gw{% endif %}"
+                 data-cg-id="{{ cg.id }}"
+                 style="--gw-color: {{ cg.get('color','#a371f7') }}">
+
+                <!-- Hidden fields (parallel arrays) -->
+                <input type="hidden" name="cg_id"             value="{{ cg.id }}" />
+                <input type="hidden" name="cg_color"          class="cg-color-val"  value="{{ cg.get('color','#a371f7') }}" />
+                <input type="hidden" name="cg_icon"           class="cg-icon-val"   value="{{ cg.get('icon','fa-qrcode') }}" />
+                <input type="hidden" name="cg_enabled"        class="cg-enabled-val" value="{{ '1' if cg.get('enabled') else '0' }}" />
+
+                <div class="gw-header">
+                    <div class="gw-icon cg-preview-icon"
+                         style="background: color-mix(in srgb, {{ cg.get('color','#a371f7') }} 20%, #161b22); color: {{ cg.get('color','#a371f7') }};">
+                        <i class="fas {{ cg.get('icon','fa-qrcode') }} cg-preview-i"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="gw-title">
+                            <input type="text" name="cg_name" class="form-control form-control-sm cg-name-input"
+                                   value="{{ cg.get('name','Personalizado') }}" maxlength="40"
+                                   placeholder="Nome do gateway" style="max-width:220px;" />
+                        </div>
+                        <div class="gw-sub"><span class="badge-custom">✦ Personalizado</span><span class="badge-pix ms-1">PIX</span></div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input cg-toggle" type="checkbox" {% if cg.get('enabled') %}checked{% endif %}
+                                   onchange="toggleCustomGw(this)">
+                            <label class="form-check-label small">Ativo</label>
+                        </div>
+                        <button type="button" class="btn-remove-cg" onclick="removeCustomGw(this)" title="Remover gateway">
+                            <i class="fas fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <div class="field-group">
+                            <label>Chave PIX</label>
+                            <input type="text" name="cg_pix_key" class="form-control form-control-sm"
+                                   value="{{ cg.get('pix_key','') }}" placeholder="email, CPF, telefone..." />
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="field-group">
+                            <label>Tipo</label>
+                            <select name="cg_pix_key_type" class="form-select form-select-sm">
+                                {% for t in ['email','cpf','telefone','cnpj','chave-aleatoria'] %}
+                                <option value="{{ t }}" {% if cg.get('pix_key_type') == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="field-group">
+                            <label>Cidade</label>
+                            <input type="text" name="cg_city" class="form-control form-control-sm"
+                                   value="{{ cg.get('city','Brasil') }}" maxlength="15" />
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="field-group">
+                            <label>Beneficiário (até 25 chars)</label>
+                            <input type="text" name="cg_beneficiary_name" class="form-control form-control-sm"
+                                   value="{{ cg.get('beneficiary_name','Doação') }}" maxlength="25" />
+                        </div>
+                    </div>
+
+                    <!-- Ícone -->
+                    <div class="col-12">
+                        <div class="field-group">
+                            <label>Ícone</label>
+                            <div class="icon-picker">
+                                {% for icon_cls, icon_label in custom_icons %}
+                                <div class="icon-opt {% if cg.get('icon') == icon_cls %}active{% endif %}"
+                                     title="{{ icon_label }}"
+                                     style="--gw-color: {{ cg.get('color','#a371f7') }}"
+                                     onclick="selectIcon(this, '{{ icon_cls }}')">
+                                    <i class="fas {{ icon_cls }}"></i>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cor -->
+                    <div class="col-12">
+                        <div class="field-group">
+                            <label>Cor</label>
+                            <div class="color-picker">
+                                {% for color in custom_colors %}
+                                <div class="color-dot {% if cg.get('color') == color %}active{% endif %}"
+                                     style="background: {{ color }};"
+                                     title="{{ color }}"
+                                     onclick="selectColor(this, '{{ color }}')">
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Botão adicionar gateway personalizado -->
+        <button type="button" class="btn-add-gw mb-4" onclick="addCustomGateway()">
+            <i class="fas fa-plus me-2"></i>Adicionar Gateway Personalizado
+        </button>
+
+        <!-- Salvar -->
+        <div class="d-flex gap-2 mt-1 align-items-center">
+            <button type="submit" id="saveConfigBtn" class="btn btn-primary btn-sm px-4" disabled title="Altere alguma configuração de gateway para habilitar">
+                <i class="fas fa-save me-1"></i>Salvar Configurações
+            </button>
+            <span id="saveDirtyHint" class="text-muted" style="font-size:.75rem;display:none;">
+                <i class="fas fa-circle-dot text-warning me-1" style="font-size:.65rem;"></i>Alterações não salvas
+            </span>
+        </div>
+
+    </form>
+
+    <!-- ═══ Permissão de Gateway para Admins (Owner only) ═══ -->
+    {% if admin and admin.role == 'owner' %}
+    <div class="mt-4">
+        <div class="section-hdr d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-user-shield me-1"></i>Controle de Acesso</span>
+        </div>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:.85rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+            <div>
+                <div style="font-size:.82rem;color:#e6edf3;font-weight:600;margin-bottom:.2rem;">
+                    <i class="fas fa-key me-1" style="color:#fbbf24;"></i>Permitir que Administradores gerenciem Gateways
+                </div>
+                <div style="font-size:.72rem;color:#8b949e;">
+                    Quando ativado, usuários com cargo <strong>Admin</strong> também podem acessar este painel.
+                </div>
+            </div>
+            <button id="allowAdminGwBtn" onclick="toggleAllowAdminGw()"
+                    style="min-width:110px;font-size:.75rem;border-radius:8px;padding:.3rem .85rem;cursor:pointer;border:1px solid;
+                    background:{{ '#0f2d1b' if allow_admin_gateway else '#1a0a0a' }};
+                    color:{{ '#4ade80' if allow_admin_gateway else '#f87171' }};
+                    border-color:{{ '#166534' if allow_admin_gateway else '#7f1d1d' }};">
+                {% if allow_admin_gateway %}
+                    <i class="fas fa-toggle-on me-1"></i>Ativado
+                {% else %}
+                    <i class="fas fa-toggle-off me-1"></i>Desativado
+                {% endif %}
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ Progresso dos PIXs gerados (Owner only) ═══ -->
+    {% if admin and admin.role == 'owner' %}
+    <div class="mt-4">
+        <div class="section-hdr d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-qrcode me-1"></i>Progresso dos PIXs Gerados</span>
+            <span style="font-size:.65rem;color:#4ade80;"><i class="fas fa-circle-notch fa-spin me-1"></i>Atualização automática</span>
+        </div>
+
+        <!-- Filtros de status (Item 1) -->
+        <div id="pixFilterBtns" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.65rem;">
+            <button class="pix-filter active" data-filter="all"     onclick="filterPix('all')"     style="font-size:.7rem;padding:3px 12px;border-radius:20px;cursor:pointer;border:1px solid #30363d;background:#30363d;color:#e6edf3;">Todos</button>
+            <button class="pix-filter"        data-filter="paid"    onclick="filterPix('paid')"    style="font-size:.7rem;padding:3px 12px;border-radius:20px;cursor:pointer;border:1px solid #166534;background:#0f2d1b;color:#4ade80;">✓ Aprovados/Pagos</button>
+            <button class="pix-filter"        data-filter="pending" onclick="filterPix('pending')" style="font-size:.7rem;padding:3px 12px;border-radius:20px;cursor:pointer;border:1px solid #854d0e;background:#1c1a0e;color:#fbbf24;">⏳ Pendentes</button>
+            <button class="pix-filter"        data-filter="expired" onclick="filterPix('expired')" style="font-size:.7rem;padding:3px 12px;border-radius:20px;cursor:pointer;border:1px solid #7f1d1d;background:#2d1111;color:#fca5a5;">⌛ Expirados</button>
+        </div>
+
+        <div id="pixTableWrapper" class="table-responsive">
+            {% if pix_payments %}
+            <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
+                <thead>
+                    <tr style="border-bottom:1px solid #30363d;color:#8b949e;text-align:left;">
+                        <th style="padding:.4rem .5rem;">ID do Pagamento</th>
+                        <th style="padding:.4rem .5rem;">Gateway</th>
+                        <th style="padding:.4rem .5rem;">Valor</th>
+                        <th style="padding:.4rem .5rem;">Status</th>
+                        <th style="padding:.4rem .5rem;">Data</th>
+                        <th style="padding:.4rem .5rem;">Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="pixTableBody">
+                    {% for p in pix_payments %}
+                    <tr style="border-bottom:1px solid #21262d;" data-payment-id="{{ p.payment_id }}" data-pix-status="{{ p.status }}">
+                        <td style="padding:.45rem .5rem;font-family:monospace;font-size:.72rem;color:#8b949e;">{{ p.payment_id[:20] }}{% if p.payment_id|length > 20 %}…{% endif %}</td>
+                        <td style="padding:.45rem .5rem;">{{ p.gateway_id }}</td>
+                        <td style="padding:.45rem .5rem;color:#4ade80;font-weight:600;">R$ {{ '%.2f'|format(p.amount) }}</td>
+                        <td style="padding:.45rem .5rem;" class="pix-status-cell">
+                            {% if p.status == 'paid' %}
+                            <span style="background:#0f2d1b;color:#4ade80;border:1px solid #166534;font-size:.65rem;padding:2px 8px;border-radius:20px;font-weight:700;">✓ Pago</span>
+                            {% elif p.status == 'expired' %}
+                            <span style="background:#2d1111;color:#fca5a5;border:1px solid #7f1d1d;font-size:.65rem;padding:2px 8px;border-radius:20px;">⌛ Expirado</span>
+                            {% elif p.status == 'cancelled' %}
+                            <span style="background:#2d1111;color:#f87171;border:1px solid #7f1d1d;font-size:.65rem;padding:2px 8px;border-radius:20px;">✗ Cancelado</span>
+                            {% else %}
+                            <span style="background:#1c1a0e;color:#fbbf24;border:1px solid #854d0e;font-size:.65rem;padding:2px 8px;border-radius:20px;">⏳ Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:.45rem .5rem;color:#8b949e;font-size:.7rem;">{{ p.ts[:16].replace('T',' ') }}</td>
+                        <td style="padding:.45rem .5rem;">
+                            <div class="d-flex gap-1 align-items-center">
+                                {% if session.get('role') == 'owner' %}
+                                <button class="btn btn-link text-warning p-1 me-1 edit-status-btn"
+                                        data-id="{{ p.payment_id }}"
+                                        data-status="{{ p.status }}"
+                                        title="Editar Status">
+                                    <i class="fas fa-edit" style="font-size:1.1rem;"></i>
+                                </button>
+                                {% endif %}
+                                <button type="button" class="pix-delete-btn" data-id="{{ p.payment_id }}"
+                                        style="background:#1a0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:2px 8px;font-size:.65rem;cursor:pointer;" title="Apagar registro">
+                                    <i class="fas fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div id="pixEmptyState" class="text-center py-3" style="color:#8b949e;font-size:.82rem;background:#161b22;border:1px solid #30363d;border-radius:10px;">
+                <i class="fas fa-qrcode" style="font-size:1.5rem;display:block;margin-bottom:.4rem;opacity:.4;"></i>
+                Nenhum PIX gerado ainda.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ═══ Backups do Gateway (Owner only) ═══ -->
+    <div class="mt-4 mb-4">
+        <div class="section-hdr d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-clock-rotate-left me-1"></i>Backups do Gateway</span>
+            <div class="d-flex gap-2">
+                <form method="post" action="/admin/gateway/backup/create" class="d-inline">
+                    <button type="submit" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Salvar configuração atual como backup">
+                        <i class="fas fa-floppy-disk me-1"></i>Fazer Backup
+                    </button>
+                </form>
+                {% if gateway_backups %}
+                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('quickRestoreForm').scrollIntoView({behavior:'smooth'})" title="Restaurar último backup">
+                    <i class="fas fa-clock-rotate-left me-1"></i>Restaurar
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% if gateway_backups %}
+        <div style="display:flex;flex-direction:column;gap:.5rem;">
+            {% for bk in gateway_backups %}
+            <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:.78rem;font-weight:600;color:#e6edf3;">Backup #{{ bk.id }}</div>
+                    <div style="font-size:.7rem;color:#8b949e;">Por {{ bk.saved_by }} — {{ bk.ts[:16].replace('T',' ') }}</div>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <form {% if loop.first %}id="quickRestoreForm"{% endif %}
+                          method="post" action="/admin/gateway/backup/restore" class="d-flex gap-2 align-items-center"
+                          onsubmit="return confirmFormSubmit(this, 'Restaurar este backup? Isso sobrescreverá a configuração atual.')">
+                        <input type="hidden" name="backup_id" value="{{ bk.id }}" />
+                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Motivo da restauração..." required style="max-width:200px;font-size:.75rem;" />
+                        <button type="submit" style="background:#1a2f1a;border:1px solid #166534;color:#4ade80;border-radius:6px;padding:4px 12px;font-size:.72rem;cursor:pointer;white-space:nowrap;">
+                            <i class="fas fa-clock-rotate-left me-1"></i>Restaurar
+                        </button>
+                    </form>
+                    <button type="button"
+                            onclick="deleteGatewayBackup({{ bk.id }}, this)"
+                            title="Excluir este backup"
+                            style="background:#2d1b1b;border:1px solid #6b2121;color:#f87171;border-radius:6px;padding:4px 10px;font-size:.72rem;cursor:pointer;">
+                        <i class="fas fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-3" style="color:#8b949e;font-size:.82rem;background:#161b22;border:1px solid #30363d;border-radius:10px;">
+            Nenhum backup disponível. Salve as configurações para criar um backup automaticamente.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Template oculto para novos gateways (clonado pelo JS) -->
+<template id="cgTemplate">
+    <div class="gw-card custom-gw" data-cg-id="" style="--gw-color: #a371f7">
+        <input type="hidden" name="cg_id"          value="" />
+        <input type="hidden" name="cg_color"        class="cg-color-val"   value="#a371f7" />
+        <input type="hidden" name="cg_icon"         class="cg-icon-val"    value="fa-qrcode" />
+        <input type="hidden" name="cg_enabled"      class="cg-enabled-val" value="0" />
+
+        <div class="gw-header">
+            <div class="gw-icon cg-preview-icon" style="background: #a371f722; color: #a371f7;">
+                <i class="fas fa-qrcode cg-preview-i"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="gw-title">
+                    <input type="text" name="cg_name" class="form-control form-control-sm cg-name-input"
+                           value="" maxlength="40" placeholder="Nome do gateway" style="max-width:220px;" />
+                </div>
+                <div class="gw-sub"><span class="badge-custom">✦ Personalizado</span><span class="badge-pix ms-1">PIX</span></div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input cg-toggle" type="checkbox" onchange="toggleCustomGw(this)">
+                    <label class="form-check-label small">Ativo</label>
+                </div>
+                <button type="button" class="btn-remove-cg" onclick="removeCustomGw(this)" title="Remover gateway">
+                    <i class="fas fa-trash-can"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-12 col-md-6">
+                <div class="field-group">
+                    <label>Chave PIX</label>
+                    <input type="text" name="cg_pix_key" class="form-control form-control-sm" placeholder="email, CPF, telefone..." />
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="field-group">
+                    <label>Tipo</label>
+                    <select name="cg_pix_key_type" class="form-select form-select-sm">
+                        <option value="email">email</option>
+                        <option value="cpf">cpf</option>
+                        <option value="telefone">telefone</option>
+                        <option value="cnpj">cnpj</option>
+                        <option value="chave-aleatoria">chave-aleatoria</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="field-group">
+                    <label>Cidade</label>
+                    <input type="text" name="cg_city" class="form-control form-control-sm" value="Brasil" maxlength="15" />
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="field-group">
+                    <label>Beneficiário (até 25 chars)</label>
+                    <input type="text" name="cg_beneficiary_name" class="form-control form-control-sm" value="Doação" maxlength="25" />
+                </div>
+            </div>
+            <!-- Ícone -->
+            <div class="col-12">
+                <div class="field-group">
+                    <label>Ícone</label>
+                    <div class="icon-picker">
+                        {% for icon_cls, icon_label in custom_icons %}
+                        <div class="icon-opt {% if loop.first %}active{% endif %}"
+                             title="{{ icon_label }}"
+                             style="--gw-color: #a371f7"
+                             onclick="selectIcon(this, '{{ icon_cls }}')">
+                            <i class="fas {{ icon_cls }}"></i>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <!-- Cor -->
+            <div class="col-12">
+                <div class="field-group">
+                    <label>Cor</label>
+                    <div class="color-picker">
+                        {% for color in custom_colors %}
+                        <div class="color-dot {% if loop.first %}active{% endif %}"
+                             style="background: {{ color }};"
+                             title="{{ color }}"
+                             onclick="selectColor(this, '{{ color }}')">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    /* ── Selecionar ícone ── */
+    function selectIcon(el, iconCls) {
+        const card = el.closest('.gw-card');
+        card.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('active'));
+        el.classList.add('active');
+        card.querySelector('.cg-icon-val').value = iconCls;
+        // Atualiza preview
+        const previewI = card.querySelector('.cg-preview-i');
+        if (previewI) {
+            previewI.className = `fas ${iconCls} cg-preview-i`;
+        }
+    }
+
+    /* ── Selecionar cor ── */
+    function selectColor(el, color) {
+        const card = el.closest('.gw-card');
+        card.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+        el.classList.add('active');
+        card.querySelector('.cg-color-val').value = color;
+        card.style.setProperty('--gw-color', color);
+        // Atualiza preview do ícone
+        const icon = card.querySelector('.cg-preview-icon');
+        if (icon) {
+            icon.style.background = `color-mix(in srgb, ${color} 20%, #161b22)`;
+            icon.style.color = color;
+        }
+        // Atualiza icon-opts
+        card.querySelectorAll('.icon-opt').forEach(o => o.style.setProperty('--gw-color', color));
+    }
+
+    /* ── Toggle enabled (real-time AJAX) ── */
+    async function toggleGatewayRealtime(checkbox, gid) {
+        const enabled = checkbox.checked;
+        checkbox.closest('.gw-card').classList.toggle('active-gw', enabled);
+        try {
+            const r = await fetch('/payment/admin/toggle-gateway', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({gid, enabled})
+            });
+            if (!r.ok) {
+                // Revert on failure
+                checkbox.checked = !enabled;
+                checkbox.closest('.gw-card').classList.toggle('active-gw', !enabled);
+                alert('Erro ao salvar estado do gateway.');
+            } else {
+                updateDisableBtn(enabled);
+            }
+        } catch {
+            checkbox.checked = !enabled;
+            checkbox.closest('.gw-card').classList.toggle('active-gw', !enabled);
+            alert('Erro de conexão.');
+        }
+    }
+
+    /* ── Item 8: toggle "Habilitar Pix via Stripe" salva imediatamente (AJAX),
+       igual aos demais toggles — antes só era persistido no submit completo
+       do formulário, então o estado se perdia se a página fosse atualizada
+       sem clicar em "Salvar Configurações". ── */
+    async function toggleStripePixRealtime(checkbox) {
+        const enabled = checkbox.checked;
+        try {
+            const r = await fetch('/payment/admin/toggle-stripe-pix', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+            if (!r.ok) {
+                checkbox.checked = !enabled;
+                alert('Erro ao salvar preferência de Pix via Stripe.');
+            }
+        } catch {
+            checkbox.checked = !enabled;
+            alert('Erro de conexão.');
+        }
+    }
+
+    async function togglePaypalSandboxRealtime(checkbox) {
+        const sandbox = checkbox.checked;
+        try {
+            const r = await fetch('/payment/admin/paypal-sandbox-toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sandbox })
+            });
+            if (!r.ok) {
+                checkbox.checked = !sandbox;
+                alert('Erro ao salvar modo sandbox do PayPal.');
+            }
+        } catch {
+            checkbox.checked = !sandbox;
+            alert('Erro de conexão.');
+        }
+    }
+
+    function toggleCustomGw(checkbox) {
+        const card = checkbox.closest('.gw-card');
+        const flag = checkbox.checked ? '1' : '0';
+        const cgId = card.dataset.cgId;
+        card.querySelector('.cg-enabled-val').value = flag;
+        card.classList.toggle('active-gw', checkbox.checked);
+        // Real-time save only if it's a saved (non-new) gateway
+        if (cgId && !cgId.startsWith('new_')) {
+            toggleGatewayRealtime(checkbox, cgId);
+        }
+    }
+
+    /* ── Gateway Padrão: salva imediatamente ao mudar o dropdown ── */
+    (function () {
+        const sel = document.getElementById('primaryGatewaySelect');
+        if (!sel) return;
+        let _saveTimer = null;
+        sel.addEventListener('change', function () {
+            clearTimeout(_saveTimer);
+            const gid = this.value;
+            const icon = document.getElementById('primaryGwSaveIcon');
+            if (icon) { icon.className = 'fas fa-spinner fa-spin ms-2'; icon.style.color = '#8b949e'; }
+            _saveTimer = setTimeout(async () => {
+                try {
+                    const r = await fetch('/payment/admin/set-primary-gateway', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({gid})
+                    });
+                    const d = await r.json();
+                    if (icon) {
+                        if (d.ok) {
+                            icon.className = 'fas fa-check ms-2'; icon.style.color = '#4ade80';
+                            setTimeout(() => { icon.className = ''; }, 2000);
+                        } else {
+                            icon.className = 'fas fa-times ms-2'; icon.style.color = '#f87171';
+                        }
+                    }
+                } catch {
+                    if (icon) { icon.className = 'fas fa-times ms-2'; icon.style.color = '#f87171'; }
+                }
+            }, 300);
+        });
+    })();
+
+    function updateDisableBtn(anyEnabled) {
+        const btn = document.getElementById('disableAllBtn');
+        if (!btn) return;
+        const anyActive = anyEnabled !== undefined
+            ? (anyEnabled || document.querySelectorAll('.gw-toggle:checked, .cg-toggle:checked').length > 0)
+            : document.querySelectorAll('.gw-toggle:checked, .cg-toggle:checked').length > 0;
+        if (anyActive) {
+            btn.className = 'btn btn-outline-danger btn-sm py-0 px-2';
+            btn.style.fontSize = '.72rem';
+            btn.title = 'Desativar todos os gateways ativos';
+            btn.innerHTML = '<i class="fas fa-ban me-1"></i>Desativar Ativos';
+            btn.onclick = disableAllGateways;
+        } else {
+            btn.className = 'btn btn-outline-success btn-sm py-0 px-2';
+            btn.style.fontSize = '.72rem';
+            btn.title = 'Reativar gateways que estavam ativos antes';
+            btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores';
+            btn.onclick = reactivateAllGateways;
+        }
+    }
+
+    /* ── Remover gateway ── */
+    function removeCustomGw(btn) {
+        const card = btn.closest('.gw-card');
+        const name = card.querySelector('.cg-name-input')?.value || 'este gateway';
+        showConfirmModal({
+            title: 'Remover Gateway',
+            message: `Remover "${name}"? Esta ação não pode ser desfeita sem salvar novamente.`,
+            confirmText: 'Confirmar e Remover',
+            onConfirm: () => {
+                card.style.transition = 'opacity .25s, transform .25s';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(20px)';
+                setTimeout(() => card.remove(), 250);
+            }
+        });
+    }
+
+    /* ── Desativar todos os gateways ativos ── */
+    function disableAllGateways() {
+        showConfirmModal({
+            title: 'Desativar Todos os Gateways',
+            message: 'Desativar TODOS os meios de pagamento ativos? Ninguém poderá gerar PIX até que você reative. As configurações serão salvas automaticamente.',
+            confirmText: 'Confirmar e Desativar',
+            onConfirm: executarDisableAllGateways
+        });
+    }
+
+    async function executarDisableAllGateways() {
+        const btn = document.getElementById('disableAllBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Desativando…'; }
+        try {
+            const r = await fetch('/payment/admin/disable-all', {method:'POST'});
+            const d = await r.json();
+            if (d.ok) {
+                document.querySelectorAll('input[name="enabled_gateways"]').forEach(cb => {
+                    cb.checked = false;
+                    cb.closest('.gw-card')?.classList.remove('active-gw');
+                });
+                document.querySelectorAll('.cg-toggle').forEach(cb => {
+                    cb.checked = false;
+                    const card = cb.closest('.gw-card');
+                    if (card) {
+                        card.classList.remove('active-gw');
+                        const flag = card.querySelector('.cg-enabled-val');
+                        if (flag) flag.value = '0';
+                    }
+                });
+                if (btn) {
+                    btn.disabled = false;
+                    btn.className = 'btn btn-outline-success btn-sm py-0 px-2';
+                    btn.style.fontSize = '.72rem';
+                    btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores';
+                    btn.onclick = reactivateAllGateways;
+                    btn.title = 'Reativar gateways que estavam ativos antes';
+                }
+            } else {
+                alert('Erro: ' + (d.error || 'falha ao desativar'));
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban me-1"></i>Desativar Ativos'; }
+            }
+        } catch {
+            alert('Erro de conexão ao desativar gateways.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban me-1"></i>Desativar Ativos'; }
+        }
+    }
+
+    /* ── Reativar gateways que estavam ativos antes ── */
+    function reactivateAllGateways() {
+        showConfirmModal({
+            title: 'Reativar Gateways',
+            message: 'Reativar os gateways que estavam ativos antes?',
+            confirmText: 'Confirmar',
+            onConfirm: executarReactivateAllGateways
+        });
+    }
+
+    async function executarReactivateAllGateways() {
+        const btn = document.getElementById('disableAllBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reativando…'; }
+        try {
+            const r = await fetch('/payment/admin/reactivate-all', {method:'POST'});
+            const d = await r.json();
+            if (d.ok) {
+                setTimeout(() => location.reload(), 400);
+            } else {
+                alert('Erro: ' + (d.error || 'falha ao reativar'));
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores'; }
+            }
+        } catch {
+            alert('Erro de conexão.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores'; }
+        }
+    }
+
+    /* ── Dirty tracking para botão Salvar ── */
+    (function() {
+        const saveBtn  = document.getElementById('saveConfigBtn');
+        const dirtyhint = document.getElementById('saveDirtyHint');
+        if (!saveBtn) return;
+
+        // Seleciona apenas campos de texto/select/password (não toggles)
+        const form = document.getElementById('mainForm');
+        const trackSelectors = 'input[type="text"], input[type="password"], select:not(.cg-toggle ~ label), textarea';
+
+        function markDirty() {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('btn-primary');
+            saveBtn.classList.add('btn-warning');
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Salvar Configurações';
+            if (dirtyhint) dirtyhint.style.display = 'inline';
+        }
+
+        // Observe changes to non-toggle inputs
+        form.addEventListener('change', function(e) {
+            const el = e.target;
+            // Skip toggles and hidden fields
+            if (el.type === 'checkbox' || el.type === 'hidden' || el.type === 'range') return;
+            markDirty();
+        });
+
+        form.addEventListener('input', function(e) {
+            const el = e.target;
+            if (el.type === 'checkbox' || el.type === 'hidden' || el.type === 'range') return;
+            markDirty();
+        });
+
+        // Re-enable if a new custom gateway is added (new ones need saving)
+        const origAddGw = window.addCustomGateway;
+        window.addCustomGateway = function() {
+            if (typeof origAddGw === 'function') origAddGw();
+            markDirty();
+        };
+    })();
+
+    /* ── Excluir backup do gateway ── */
+    function deleteGatewayBackup(backupId, btn) {
+        showConfirmModal({
+            title: 'Excluir Backup',
+            message: 'Excluir este backup? Esta ação é irreversível.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: () => executarDeleteGatewayBackup(backupId, btn)
+        });
+    }
+
+    function executarDeleteGatewayBackup(backupId, btn) {
+        btn.disabled = true;
+        const fd = new FormData();
+        fd.append('backup_id', backupId);
+        fetch('/admin/gateway/backup/delete', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    const row = btn.closest('[style*="background:#161b22"]');
+                    if (row) { row.style.transition = 'opacity .3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); }
+                } else {
+                    btn.disabled = false;
+                    alert('Erro ao excluir backup: ' + (d.error || 'desconhecido'));
+                }
+            })
+            .catch(() => { btn.disabled = false; alert('Erro de rede ao excluir backup.'); });
+    }
+
+    /* ── Adicionar gateway personalizado ── */
+    function addCustomGateway() {
+        const template = document.getElementById('cgTemplate');
+        const clone    = template.content.cloneNode(true);
+        const card     = clone.querySelector('.gw-card');
+
+        // ID temporário — server converte para permanente no save
+        const tmpId = 'new_' + Date.now();
+        card.dataset.cgId = tmpId;
+        card.querySelector('input[name="cg_id"]').value = tmpId;
+
+        // Anima a entrada
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-10px)';
+        card.style.transition = 'opacity .25s, transform .25s';
+
+        document.getElementById('customGatewaysContainer').appendChild(clone);
+
+        // Força reflow
+        const addedCard = document.getElementById('customGatewaysContainer').lastElementChild;
+        requestAnimationFrame(() => {
+            addedCard.style.opacity = '1';
+            addedCard.style.transform = 'translateY(0)';
+        });
+
+        // Scroll suave
+        addedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Foca no nome
+        addedCard.querySelector('.cg-name-input')?.focus();
+    }
+
+    /* ── Atualização automática do Progresso dos PIXs Gerados ── */
+    (function () {
+        const body = document.getElementById('pixTableBody');
+        const wrapper = document.getElementById('pixTableWrapper');
+        if (!wrapper) return;
+
+        const statusBadge = (status) => {
+            if (status === 'paid') {
+                return '<span style="background:#0f2d1b;color:#4ade80;border:1px solid #166534;font-size:.65rem;padding:2px 8px;border-radius:20px;font-weight:700;">✓ Pago</span>';
+            } else if (status === 'expired') {
+                return '<span style="background:#2d1111;color:#fca5a5;border:1px solid #7f1d1d;font-size:.65rem;padding:2px 8px;border-radius:20px;">⌛ Expirado</span>';
+            } else if (status === 'cancelled') {
+                return '<span style="background:#2d1111;color:#f87171;border:1px solid #7f1d1d;font-size:.65rem;padding:2px 8px;border-radius:20px;">✗ Cancelado</span>';
+            }
+            return '<span style="background:#1c1a0e;color:#fbbf24;border:1px solid #854d0e;font-size:.65rem;padding:2px 8px;border-radius:20px;">⏳ Pendente</span>';
+        };
+
+        const actionButtons = (p) => {
+            let html = '<div class="d-flex gap-1 align-items-center flex-wrap">';
+            html += `<button class="btn btn-link text-warning p-1 me-1 edit-status-btn"
+                        data-id="${p.payment_id}"
+                        data-status="${p.status}"
+                        title="Editar Status">
+                        <i class="fas fa-edit" style="font-size:1.1rem;"></i>
+                    </button>`;
+            html += `<button type="button" class="pix-delete-btn" data-id="${p.payment_id}"
+                    style="background:#1a0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:2px 8px;font-size:.65rem;cursor:pointer;" title="Apagar registro">
+                <i class="fas fa-trash-can"></i>
+            </button>`;
+            html += '</div>';
+            return html;
+        };
+
+        const escId = (s) => (s.length > 20 ? s.slice(0, 20) + '…' : s);
+
+        async function refreshPixTable() {
+            try {
+                const r = await fetch('/payment/admin/pix-status');
+                if (!r.ok) return;
+                const list = await r.json();
+                if (!Array.isArray(list)) return;
+
+                if (!list.length) {
+                    wrapper.innerHTML = `<div id="pixEmptyState" class="text-center py-3" style="color:#8b949e;font-size:.82rem;background:#161b22;border:1px solid #30363d;border-radius:10px;">
+                        <i class="fas fa-qrcode" style="font-size:1.5rem;display:block;margin-bottom:.4rem;opacity:.4;"></i>
+                        Nenhum PIX gerado ainda.
+                    </div>`;
+                    return;
+                }
+
+                // Se a tabela não existe ainda (estado vazio anterior), recria a estrutura
+                let tbody = document.getElementById('pixTableBody');
+                if (!tbody) {
+                    wrapper.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.78rem;">
+                        <thead>
+                            <tr style="border-bottom:1px solid #30363d;color:#8b949e;text-align:left;">
+                                <th style="padding:.4rem .5rem;">ID do Pagamento</th>
+                                <th style="padding:.4rem .5rem;">Gateway</th>
+                                <th style="padding:.4rem .5rem;">Valor</th>
+                                <th style="padding:.4rem .5rem;">Status</th>
+                                <th style="padding:.4rem .5rem;">Data</th>
+                                <th style="padding:.4rem .5rem;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pixTableBody"></tbody>
+                    </table>`;
+                    tbody = document.getElementById('pixTableBody');
+                }
+
+                const seenIds = new Set();
+                list.forEach(p => {
+                    seenIds.add(p.payment_id);
+                    let row = tbody.querySelector(`tr[data-payment-id="${CSS.escape(p.payment_id)}"]`);
+                    if (!row) {
+                        row = document.createElement('tr');
+                        row.style.borderBottom = '1px solid #21262d';
+                        row.dataset.paymentId = p.payment_id;
+                        tbody.prepend(row);
+                    }
+                    const prevStatus = row.dataset.status;
+                    // Item 1: guarda status para filtragem client-side
+                    row.dataset.status    = p.status;
+                    row.dataset.pixStatus = p.status;
+                    row.innerHTML = `
+                        <td style="padding:.45rem .5rem;font-family:monospace;font-size:.72rem;color:#8b949e;">${escId(p.payment_id)}</td>
+                        <td style="padding:.45rem .5rem;">${p.gateway_id}</td>
+                        <td style="padding:.45rem .5rem;color:#4ade80;font-weight:600;">R$ ${p.amount.toFixed(2)}</td>
+                        <td style="padding:.45rem .5rem;" class="pix-status-cell">${statusBadge(p.status)}</td>
+                        <td style="padding:.45rem .5rem;color:#8b949e;font-size:.7rem;">${p.ts}</td>
+                        <td style="padding:.45rem .5rem;">${actionButtons(p)}</td>`;
+                    if (prevStatus && prevStatus !== p.status) {
+                        row.style.transition = 'background .6s';
+                        row.style.background = '#132a1c';
+                        setTimeout(() => { row.style.background = ''; }, 900);
+                    }
+                });
+                // Remove linhas que desapareceram do backend (ex.: apagadas manualmente)
+                tbody.querySelectorAll('tr[data-payment-id]').forEach(row => {
+                    if (!seenIds.has(row.dataset.paymentId)) row.remove();
+                });
+                // Re-aplica filtro ativo após refresh
+                const activeFilter = document.querySelector('.pix-filter.active');
+                if (activeFilter) applyPixFilter(activeFilter.dataset.filter);
+                if (!tbody.children.length && !document.getElementById('pixEmptyState')) {
+                    wrapper.innerHTML = `<div id="pixEmptyState" class="text-center py-3" style="color:#8b949e;font-size:.82rem;background:#161b22;border:1px solid #30363d;border-radius:10px;">
+                        <i class="fas fa-qrcode" style="font-size:1.5rem;display:block;margin-bottom:.4rem;opacity:.4;"></i>
+                        Nenhum PIX gerado ainda.
+                    </div>`;
+                }
+            } catch (e) { /* silencioso — próxima tentativa em breve */ }
+        }
+
+        refreshPixTable();
+        setInterval(refreshPixTable, 5000);
+    })();
+
+    /* ── Item 7: Excluir PIX via fetch assíncrono + animação de "shredding" ── */
+    (function () {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.pix-delete-btn');
+            if (!btn) return;
+            var pid = btn.dataset.id;
+            showConfirmModal({
+                title: 'Excluir PIX',
+                message: 'Apagar este PIX do histórico? Esta ação não pode ser desfeita.',
+                confirmText: 'Confirmar e Apagar',
+                onConfirm: function () { shredAndDeletePix(pid); }
+            });
+        });
+
+        async function shredAndDeletePix(pid) {
+            var row = document.querySelector('tr[data-payment-id="' + CSS.escape(pid) + '"]');
+            try {
+                var r = await fetch('/payment/admin/pix-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payment_id: pid })
+                });
+                var d = await r.json().catch(function () { return {}; });
+                if (!r.ok || d.error) {
+                    alert('Erro: ' + (d.error || 'tente novamente.'));
+                    return;
+                }
+                if (row) {
+                    row.classList.add('pix-row-shred');
+                    var done = false;
+                    var finish = function () {
+                        if (done) return;
+                        done = true;
+                        row.remove();
+                    };
+                    row.addEventListener('animationend', finish, { once: true });
+                    setTimeout(finish, 700); // fallback caso animationend não dispare
+                }
+            } catch (err) {
+                alert('Erro de conexão.');
+            }
+        }
+    })();
+
+    /* ── Edit Status Modal (pencil icon) ── */
+    (function() {
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.edit-status-btn');
+            if (!btn) return;
+            var pid    = btn.dataset.id;
+            var status = btn.dataset.status || 'pending';
+            document.getElementById('editStatusPayId').textContent  = pid.substring(0, 20) + (pid.length > 20 ? '…' : '');
+            document.getElementById('editStatusPayIdFull').value    = pid;
+            document.getElementById('editStatusSelect').value       = status;
+            new bootstrap.Modal(document.getElementById('editStatusModal')).show();
+        });
+
+        document.addEventListener('click', async function(e) {
+            var btn = e.target.closest('#editStatusSaveBtn');
+            if (!btn) return;
+            var pid    = document.getElementById('editStatusPayIdFull').value;
+            var status = document.getElementById('editStatusSelect').value;
+            btn.disabled = true; btn.textContent = 'Salvando…';
+            try {
+                var r = await fetch('/admin/payments/update-status/' + encodeURIComponent(pid), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: status })
+                });
+                var d = await r.json();
+                if (d.ok) {
+                    /* Update the status badge in the row without a page reload */
+                    var row = document.querySelector('[data-payment-id="' + pid + '"]');
+                    if (row) {
+                        row.dataset.pixStatus = status;
+                        var cell = row.querySelector('.pix-status-cell');
+                        var badgeMap = {
+                            'paid':    '<span style="background:#0f2d1b;color:#4ade80;border:1px solid #166534;font-size:.65rem;padding:2px 8px;border-radius:20px;font-weight:700;">✓ Pago</span>',
+                            'pending': '<span style="background:#1c1a0e;color:#fbbf24;border:1px solid #854d0e;font-size:.65rem;padding:2px 8px;border-radius:20px;">⏳ Pendente</span>',
+                            'expired': '<span style="background:#2d1111;color:#fca5a5;border:1px solid #7f1d1d;font-size:.65rem;padding:2px 8px;border-radius:20px;">⌛ Expirado</span>',
+                        };
+                        if (cell && badgeMap[status]) cell.innerHTML = badgeMap[status];
+                        /* Sync pencil button data-status */
+                        var pencil = row.querySelector('.edit-status-btn');
+                        if (pencil) pencil.dataset.status = status;
+                    }
+                    bootstrap.Modal.getInstance(document.getElementById('editStatusModal')).hide();
+                } else {
+                    alert('Erro: ' + (d.error || 'tente novamente.'));
+                }
+            } catch(err) {
+                alert('Erro de rede. Tente novamente.');
+            }
+            btn.disabled = false; btn.textContent = 'Salvar Alteração';
+        });
+    })();
+
+    /* ── Item 1: Filtro de status dos PIXs ── */
+    let _activePixFilter = 'all';
+    function applyPixFilter(filter) {
+        _activePixFilter = filter;
+        document.querySelectorAll('#pixTableBody tr[data-pix-status]').forEach(row => {
+            const match = (filter === 'all') || (row.dataset.pixStatus === filter);
+            row.style.display = match ? '' : 'none';
+        });
+    }
+    function filterPix(filter) {
+        _activePixFilter = filter;
+        document.querySelectorAll('.pix-filter').forEach(btn => {
+            const isActive = btn.dataset.filter === filter;
+            btn.classList.toggle('active', isActive);
+            btn.style.opacity = isActive ? '1' : '.65';
+        });
+        applyPixFilter(filter);
+    }
+
+    /* ── Item 2: Toggle permissão de gateway para Admins ── */
+    let _allowAdminGw = {{ 'true' if allow_admin_gateway else 'false' }};
+    async function toggleAllowAdminGw() {
+        const btn = document.getElementById('allowAdminGwBtn');
+        if (!btn) return;
+        const newVal = !_allowAdminGw;
+        btn.disabled = true;
+        try {
+            const r = await fetch('/admin/gateway-access', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: newVal })
+            });
+            const d = await r.json();
+            if (d.ok) {
+                _allowAdminGw = newVal;
+                if (newVal) {
+                    btn.style.background = '#0f2d1b'; btn.style.color = '#4ade80'; btn.style.borderColor = '#166534';
+                    btn.innerHTML = '<i class="fas fa-toggle-on me-1"></i>Ativado';
+                } else {
+                    btn.style.background = '#1a0a0a'; btn.style.color = '#f87171'; btn.style.borderColor = '#7f1d1d';
+                    btn.innerHTML = '<i class="fas fa-toggle-off me-1"></i>Desativado';
+                }
+            }
+        } catch {}
+        btn.disabled = false;
+    }
+</script>
+<!-- ── Edit Status Modal ── -->
+<div class="modal fade" id="editStatusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title text-warning"><i class="fas fa-edit me-2"></i>Alterar Status do Pagamento</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted" style="font-size:.75rem;">ID: <code id="editStatusPayId" style="color:#c9d1d9;"></code></p>
+                <input type="hidden" id="editStatusPayIdFull" />
+                <label class="form-label text-muted" style="font-size:.8rem;">Novo Status</label>
+                <select id="editStatusSelect" class="form-select bg-dark text-white border-secondary" style="font-size:.85rem;">
+                    <option value="paid">✓ Aprovado/Pago</option>
+                    <option value="pending">⏳ Pendente</option>
+                    <option value="expired">⌛ Expirado</option>
+                </select>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" id="editStatusSaveBtn">Salvar Alteração</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

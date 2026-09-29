@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manutenção — Scraper</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .maint-card {
+            background: #161b22; border: 1px solid #30363d; border-radius: 16px;
+            padding: 2.5rem 2rem; text-align: center; max-width: 480px; width: 100%;
+            box-shadow: 0 8px 32px rgba(0,0,0,.5);
+        }
+        .maint-icon { font-size: 3.5rem; color: #f59e0b; margin-bottom: 1.2rem; }
+        .maint-title { font-size: 1.4rem; font-weight: 700; margin-bottom: .5rem; }
+        .maint-msg { color: #8b949e; margin-bottom: 1.5rem; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+    </style>
+</head>
+<body>
+<div class="maint-card">
+    <div class="maint-icon pulse"><i class="fas fa-tools"></i></div>
+    <div class="maint-title">Manutenção em andamento</div>
+    <p class="maint-msg">{{ message or 'Site em manutenção. Voltamos em breve.' }}</p>
+    <div class="text-muted small">
+        <i class="fas fa-clock me-1"></i>Por favor, tente novamente em alguns minutos.
+    </div>
+</div>
+</body>
+</html>
