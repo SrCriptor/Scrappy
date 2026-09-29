@@ -1,0 +1,1561 @@
+<!-- ═══ FLOATING CHAT WIDGET — shared include ════════════════════════════ -->
+<!-- Fonts (safe to load more than once — browser deduplicates) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<!-- confirm-modal helper (idempotent if already loaded) -->
+<script src="/static/js/confirm-modal.js"></script>
+<!-- ═══ FLOATING CHAT BALL ═══════════════════════════════════════════════ -->
+<style>
+    #chatBall {
+        position:fixed;bottom:84px;right:20px;z-index:10000;
+        width:52px;height:52px;border-radius:50%;
+        background:linear-gradient(135deg,#3d5af1,#6610f2);
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 4px 20px rgba(61,90,241,.5);
+        cursor:pointer;user-select:none;transition:transform .15s;
+    }
+    #chatBall:hover { transform:scale(1.1); }
+    /* ── Isolate profile dropdown from any drag side-effects ────────────── */
+    #profileMenu, #profileMenu * { cursor: default !important; }
+    #chatBall .chat-ball-badge {
+        position:absolute;top:-4px;right:-4px;width:18px;height:18px;
+        background:#ef4444;border-radius:50%;font-size:.6rem;
+        display:none;align-items:center;justify-content:center;
+        font-weight:700;color:#fff;border:2px solid #0d1117;
+    }
+    #chatWindow {
+        position:fixed;bottom:148px;right:20px;z-index:9999;
+        width:360px !important;max-width:360px !important;height:500px !important;
+        background:#0d1117;
+        border:1px solid #30363d;border-radius:12px;
+        display:none;flex-direction:column;
+        box-shadow:0 8px 32px rgba(0,0,0,.7);overflow:hidden;
+    }
+    #chatWindow.active { display:flex; }
+    .chat-header {
+        background:#161b22;border-bottom:1px solid #21262d;
+        padding:.55rem 1rem;display:flex;align-items:center;justify-content:space-between;
+        cursor:move;user-select:none;flex-shrink:0;
+    }
+    .chat-tabs { display:flex !important;justify-content:center !important;align-items:center !important;gap:16px !important;width:100% !important;background:#0d1117;border-bottom:1px solid #21262d;flex-shrink:0; }
+    .chat-tab {
+        flex:0 1 auto;padding:.38rem .55rem;text-align:center;font-size:.73rem;cursor:pointer;
+        color:#8b949e;border-bottom:2px solid transparent;transition:all .15s;
+        display:flex;align-items:center;justify-content:center;gap:.2rem;white-space:nowrap;
+    }
+    .chat-tab.active { color:#6ea8fe;border-bottom-color:#6ea8fe; }
+    .chat-tab:hover:not(.active) { color:#c9d1d9; }
+    .internal-gear {
+        font-size:.58rem;color:#6e7681;margin-left:.15rem;cursor:pointer;
+        padding:.1rem;border-radius:3px;transition:color .12s;
+    }
+    .internal-gear:hover { color:#a78bfa; }
+    .team-gear {
+        font-size:.58rem;color:#6e7681;margin-left:.15rem;cursor:pointer;
+        padding:.1rem;border-radius:3px;transition:color .12s;
+    }
+    .team-gear:hover { color:#6ea8fe; }
+    /* Team access bar (owner only) */
+    #teamAccessBar {
+        background:#0d1b2b;border-bottom:1px solid #1d4ed833;
+        padding:.35rem .75rem;display:flex;flex-direction:column;gap:.3rem;
+        font-size:.68rem;color:#6ea8fe;flex-shrink:0;
+    }
+    /* Internal access bar (owner only) */
+    #internalAccessBar {
+        background:#13102b;border-bottom:1px solid #7c3aed33;
+        padding:.35rem .75rem;display:flex;flex-direction:column;gap:.3rem;
+        font-size:.68rem;color:#a78bfa;flex-shrink:0;
+    }
+    .int-access-row {
+        display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+    }
+    .int-access-toggle-btn {
+        border:1px solid currentColor;border-radius:99px;padding:.15rem .5rem;
+        font-size:.62rem;cursor:pointer;background:transparent;transition:all .15s;
+        display:flex;align-items:center;gap:.25rem;white-space:nowrap;
+    }
+    .int-clear-btn {
+        border:1px solid #ef444455;border-radius:6px;padding:.15rem .4rem;
+        font-size:.62rem;cursor:pointer;background:transparent;color:#ef4444;
+        transition:all .15s;display:flex;align-items:center;gap:.25rem;
+    }
+    .int-clear-btn:hover { background:#ef444418; }
+    /* Team/Internal messages */
+    .chat-messages {
+        flex:1;overflow-y:auto;padding:.4rem .6rem;display:flex;flex-direction:column;gap:4px !important;
+    }
+    .chat-bubble {
+        width:max-content !important;max-width:100% !important;
+        padding:10px 14px !important;border-radius:10px;
+        font-size:.8rem !important;line-height:1.35;word-break:break-word;
+        margin-bottom:0 !important;
+    }
+    .chat-bubble.mine { align-self:flex-end;background:#1a3a6e;color:#e6edf3;border-radius:10px 2px 10px 10px; }
+    .chat-bubble.theirs { align-self:flex-start;background:#1e262d;color:#e6edf3;border-radius:2px 10px 10px 10px; }
+    .bubble-row { display:flex;align-items:flex-end;gap:.3rem;max-width:90%; }
+    .bubble-row.mine-row { align-self:flex-end;flex-direction:row-reverse; }
+    .bubble-row.theirs-row { align-self:flex-start; }
+    .bubble-av { width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #30363d; }
+    /* ── Bubble name+role row — sem overflow, sem barra ─────────────────── */
+    .bubble-name-role {
+        display:flex !important; flex-direction:row !important;
+        align-items:center !important; gap:0.75rem !important;
+        flex-wrap:nowrap !important; margin-bottom:4px !important;
+        width:max-content !important;
+        justify-content:flex-start !important;
+    }
+    .chat-bubble .bubble-ts { font-size:.58rem;color:#6e7681;margin-top:2px;text-align:right; }
+    .tick-mark { font-size:.6rem;margin-left:2px;font-style:normal; }
+    .msg-delete-btn {
+        background:none;border:none;cursor:pointer;padding:0 0 0 5px;
+        color:#6e7681;font-size:.6rem;opacity:0;transition:opacity .15s;
+        vertical-align:middle;flex-shrink:0;
+    }
+    .bubble-row:hover .msg-delete-btn { opacity:1; }
+    .msg-delete-btn:hover { color:#ef4444 !important; }
+
+    /* ── Módulo 3: Identidade visual — Glitch Neon ───────────────────────── */
+
+    /* Keyframes: camadas ciano (before) e magenta (after) trepidando */
+    @keyframes glitch-before {
+        0%   { clip-path:inset(0 0 95% 0); transform:translate(-2px, 0); }
+        20%  { clip-path:inset(30% 0 50% 0); transform:translate(2px, 0); }
+        40%  { clip-path:inset(60% 0 20% 0); transform:translate(-1px, 0); }
+        60%  { clip-path:inset(80% 0 5%  0); transform:translate(2px,-1px); }
+        80%  { clip-path:inset(10% 0 70% 0); transform:translate(-2px, 0); }
+        100% { clip-path:inset(0 0 95% 0); transform:translate(0,  0); }
+    }
+    @keyframes glitch-after {
+        0%   { clip-path:inset(80% 0 5%  0); transform:translate(2px, 0); }
+        20%  { clip-path:inset(10% 0 70% 0); transform:translate(-2px, 1px); }
+        40%  { clip-path:inset(0 0 90% 0); transform:translate(2px, 0); }
+        60%  { clip-path:inset(40% 0 40% 0); transform:translate(-1px,-1px); }
+        80%  { clip-path:inset(65% 0 15% 0); transform:translate(2px, 0); }
+        100% { clip-path:inset(80% 0 5%  0); transform:translate(0,  0); }
+    }
+
+    .bubble-name-role .glow-name {
+        font-family:'Rajdhani',sans-serif; font-weight:700; font-size:.8rem;
+        white-space:nowrap !important; word-break:normal !important;
+        overflow-wrap:normal !important; width:max-content !important;
+        max-width:none !important; line-height:1.2; flex-shrink:0 !important;
+        position:relative; display:inline-block;
+    }
+    /* Pseudo-elementos ficam invisíveis por padrão */
+    .bubble-name-role .glow-name::before,
+    .bubble-name-role .glow-name::after {
+        content: attr(data-text);
+        position:absolute; inset:0;
+        font-family:inherit; font-weight:inherit; font-size:inherit;
+        white-space:nowrap; overflow:hidden;
+        pointer-events:none;
+        animation-iteration-count:infinite;
+        animation-timing-function:steps(1);
+        animation-play-state:paused; /* parado até hover */
+        opacity:0;
+    }
+    .bubble-name-role .glow-name::before {
+        color:rgba(0,255,255,.75);
+        text-shadow:none;
+        animation-name:glitch-before;
+        animation-duration:.55s;
+    }
+    .bubble-name-role .glow-name::after {
+        color:rgba(255,0,128,.75);
+        text-shadow:none;
+        animation-name:glitch-after;
+        animation-duration:.45s;
+    }
+    /* Apenas no hover: ativa animações */
+    .bubble-name-role .glow-name:hover::before,
+    .bubble-name-role .glow-name:hover::after {
+        animation-play-state:running;
+        opacity:1;
+    }
+    .bubble-name-role .glow-role {
+        font-family:'Orbitron',sans-serif; text-transform:uppercase; font-weight:600;
+        font-size:.56rem; padding:1px 5px; border-radius:4px; letter-spacing:.04em;
+        display:inline-flex; align-items:center; justify-content:center;
+        border:1px solid; flex-shrink:0; white-space:nowrap; line-height:1.4;
+    }
+    /* Glitch: neon + aberração cromática sutil (sem fundo) */
+    .glow-owner     { color:#f0f0f0; text-shadow:0 0 4px #fff,0 0 10px rgba(255,255,255,.8),0 0 20px rgba(255,255,255,.4),1px 0 rgba(0,255,255,.2),-1px 0 rgba(255,0,255,.2); }
+    .glow-admin     { color:#ff3333; text-shadow:0 0 4px #ff3333,0 0 10px rgba(255,51,51,.9),0 0 22px rgba(255,51,51,.5),1px 0 rgba(0,255,255,.2),-1px 0 rgba(255,0,255,.2); }
+    .glow-moderator { color:#00ff66; text-shadow:0 0 4px #00ff66,0 0 10px rgba(0,255,102,.9),0 0 22px rgba(0,255,102,.5),1px 0 rgba(0,180,255,.2),-1px 0 rgba(255,0,200,.2); }
+    .glow-helper    { color:#ff9800; text-shadow:0 0 4px #ff9800,0 0 10px rgba(255,152,0,.9),0 0 22px rgba(255,152,0,.5),1px 0 rgba(255,255,0,.2),-1px 0 rgba(255,0,100,.2); }
+    .glow-role-owner     { background:rgba(255,255,255,.15); color:#f9fafb; border-color:rgba(255,255,255,.4); }
+    .glow-role-admin     { background:rgba(255,51,51,.15);   color:#ef4444; border-color:rgba(239,68,68,.4); }
+    .glow-role-moderator { background:rgba(34,197,94,.15);   color:#22c55e; border-color:rgba(34,197,94,.4); }
+    .glow-role-helper    { background:rgba(249,115,22,.15);  color:#f97316; border-color:rgba(249,115,22,.4); }
+    /* Role-tinted bubble backgrounds */
+    .chat-bubble.theirs.bubble-role-admin     { background:rgba(239,68,68,0.15); }
+    .chat-bubble.theirs.bubble-role-moderator { background:rgba(34,197,94,0.15); }
+    .chat-bubble.theirs.bubble-role-helper    { background:rgba(249,115,22,0.15); }
+    .typing-indicator { padding:.15rem .6rem;font-size:.67rem;color:#8b949e;font-style:italic;min-height:1.1rem;line-height:1.4; }
+    .chat-input-row {
+        display:flex;gap:.4rem;padding:.5rem .7rem;border-top:1px solid #21262d;background:#161b22;flex-shrink:0;
+    }
+    .chat-input-row input {
+        flex:1;background:#0d1117;border:1px solid #30363d;border-radius:8px;
+        padding:.3rem .6rem;font-size:.8rem;color:#e6edf3;outline:none;
+    }
+    .chat-input-row input:focus { border-color:#3d5af1; }
+    .chat-input-row button {
+        background:#3d5af1;border:none;border-radius:8px;
+        width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+        cursor:pointer;color:#fff;font-size:.8rem;flex-shrink:0;
+    }
+    .chat-input-row button:hover { background:#6610f2; }
+    #toggleOnlineMembersBtn:hover { background:rgba(255,255,255,.08) !important; }
+    /* Privado pane */
+    #chatPrivadoPane {
+        flex:1;overflow:hidden;flex-direction:column;display:none;position:relative;
+    }
+    #privListView {
+        flex:1;overflow:hidden;display:flex !important;flex-direction:column !important;
+        justify-content:flex-start !important;align-items:stretch !important;
+    }
+    #privRoomsList {
+        flex:1;padding:0 .4rem .4rem;margin:0 !important;
+        display:flex !important;flex-direction:column !important;
+        justify-content:flex-start !important;align-content:flex-start !important;
+        /* Premium hidden scrollbar — keep wheel/touch scroll fully functional */
+        overflow-y:scroll !important;
+        scrollbar-width:none !important;
+        -ms-overflow-style:none !important;
+    }
+    #privRoomsList::-webkit-scrollbar { display:none !important; width:0 !important; height:0 !important; }
+    .priv-footer {
+        padding:.45rem .6rem;border-top:1px solid #21262d;background:#161b22;flex-shrink:0;
+    }
+    .priv-new-btn {
+        width:100%;background:transparent;border:1px dashed #3d5af155;border-radius:8px;
+        color:#6ea8fe;font-size:.73rem;padding:.3rem;cursor:pointer;transition:all .12s;
+        display:flex;align-items:center;justify-content:center;gap:.35rem;
+    }
+    .priv-new-btn:hover { background:#1a3a6e33;border-color:#3d5af1; }
+    .priv-room-item {
+        padding:.45rem .55rem;border-radius:8px;cursor:pointer;
+        display:flex;align-items:center;gap:.45rem;transition:background .12s;
+        border:1px solid transparent;margin-bottom:.3rem;
+    }
+    .priv-room-item:hover { background:#1c2128;border-color:#30363d; }
+    .priv-room-av {
+        width:30px;height:30px;border-radius:50%;background:#21262d;
+        display:flex;align-items:center;justify-content:center;
+        font-size:.72rem;color:#58a6ff;flex-shrink:0;border:2px solid #30363d;
+    }
+    .priv-room-av.closed-av { border-color:#e74c3c55;color:#e74c3c88; }
+    .priv-room-info { flex:1;min-width:0; }
+    .priv-room-name { font-size:.75rem;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .priv-room-preview { font-size:.65rem;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .priv-room-badge { font-size:.55rem;padding:.1rem .35rem;border-radius:99px;flex-shrink:0; }
+    .priv-room-badge.open { background:#22c55e22;color:#22c55e; }
+    .priv-room-badge.closed { background:#e74c3c22;color:#e74c3c; }
+    /* Privado room view */
+    #privRoomView { flex:1;overflow:hidden;flex-direction:column;display:none; }
+    .priv-room-header {
+        display:flex;align-items:center;gap:.4rem;padding:.4rem .55rem;
+        background:#161b22;border-bottom:1px solid #21262d;flex-shrink:0;
+    }
+    .priv-back-btn {
+        background:none;border:none;color:#8b949e;cursor:pointer;padding:.1rem .3rem;
+        font-size:.8rem;border-radius:4px;transition:color .12s;
+    }
+    .priv-back-btn:hover { color:#e6edf3;background:#21262d; }
+    #privRoomMessages { flex:1;overflow-y:auto;padding:.55rem .7rem;display:flex;flex-direction:column;gap:.35rem; }
+    #privRoomInputRow { display:flex;align-items:center;gap:8px;padding:.45rem .6rem;border-top:1px solid #21262d;background:#161b22;flex-shrink:0; }
+    #privRoomInputRow input { flex:1;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:.3rem .6rem;font-size:.78rem;color:#e6edf3;outline:none; }
+    #privRoomInputRow input:focus { border-color:#3d5af1; }
+    #privRoomInputRow button { background:#3d5af1;border:none;border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:.78rem;flex-shrink:0; }
+    #privRoomInputRow button:hover { background:#6610f2; }
+    /* Botão de 3 tracinhos — gaveta de membros — não deve ter fundo azul */
+    #chatDrawerToggleBtn {
+        background:transparent !important;border:1px solid #30363d !important;border-radius:6px !important;
+        width:35px !important;height:35px !important;min-width:35px;flex-shrink:0;
+        display:flex;align-items:center;justify-content:center;
+        cursor:pointer;color:#8b949e !important;font-size:.85rem;
+    }
+    #chatDrawerToggleBtn:hover { background:#1c2128 !important;border-color:#58a6ff !important;color:#58a6ff !important; }
+
+    /* ── Status dots — defined here so they work on every page that includes
+       this widget (not just panel.html where the original definitions live) ── */
+    .status-dot { width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0; }
+    .status-online    { background:#22c55e;box-shadow:0 0 5px #22c55e; }
+    .status-busy      { background:#f59e0b;box-shadow:0 0 5px #f59e0b; }
+    .status-invisible { background:#6b7280; }
+    .status-offline   { background:#374151; }
+
+    /* ── Módulo 2: gaveta de Membros Online (toggle deslizante — usado no Privado) ── */
+    .chat-online-drawer {
+        max-height:0; overflow:hidden; background:#161b22; border-top:1px solid transparent;
+        transition: max-height .28s ease, border-color .28s ease; flex-shrink:0;
+    }
+    .chat-online-drawer.open { max-height:220px; overflow-y:auto; border-top-color:#21262d; }
+    .chat-drawer-header {
+        font-size:.68rem; font-weight:700; color:#8b949e; padding:.5rem .7rem .3rem;
+        text-transform:uppercase; letter-spacing:.03em;
+    }
+    .chat-drawer-list { display:flex; flex-direction:column; gap:.3rem; padding:0 .6rem .6rem; }
+    .chat-drawer-item { display:flex; align-items:center; gap:.5rem; padding:.3rem .4rem; border-radius:6px; background:#0d1117; }
+
+    /* ── Chat da Equipe/Interno: layout com sidebar overlay ────── */
+    .chat-body-flex { display:flex; flex:1; min-height:0; overflow:hidden; position:relative; }
+    .chat-sidebar-members {
+        position:absolute; left:0; top:0; bottom:0; z-index:4;
+        width:160px; display:flex; flex-direction:column;
+        background:#161b22; border-right:1px solid #21262d;
+        box-shadow:3px 0 12px rgba(0,0,0,.5);
+        transition: transform .2s ease, opacity .2s ease;
+    }
+    .chat-sidebar-members.collapsed { display:none; }
+    .chat-sidebar-header {
+        display:flex; align-items:center; justify-content:space-between; gap:.3rem;
+        padding:.55rem .6rem .35rem; flex-shrink:0;
+    }
+    .chat-sidebar-title {
+        font-size:.62rem; font-weight:700; color:#22c55e; text-transform:uppercase;
+        letter-spacing:.04em; white-space:nowrap;
+    }
+    .chat-sidebar-count {
+        font-size:.6rem; font-weight:700; color:#58a6ff; background:#58a6ff1a;
+        border-radius:99px; padding:0 .4rem; flex-shrink:0;
+    }
+    .chat-sidebar-list {
+        flex:1; overflow-y:auto; padding:0 .5rem .5rem; display:flex; flex-direction:column; gap:.3rem;
+        scrollbar-width:none;
+    }
+    .chat-sidebar-list::-webkit-scrollbar { display:none; }
+    .chat-sidebar-member-item { display:flex; align-items:center; gap:.4rem; padding:.25rem .3rem; border-radius:6px; }
+    .chat-sidebar-footer {
+        flex-shrink:0; border-top:1px solid #21262d; padding:.3rem;
+        display:flex; align-items:center; justify-content:flex-start;
+    }
+    .chat-conversation-col { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+    #privRoomClosedBanner { display:none;padding:.35rem .7rem;background:#451a0344;border-top:1px solid #92400e44;text-align:center;font-size:.68rem;color:#fbbf24;flex-shrink:0; }
+    .priv-system-msg { text-align:center;font-size:.65rem;color:#6e7681;padding:.2rem .6rem;background:#161b22;border-radius:99px;align-self:center;border:1px solid #21262d11;margin:.2rem 0; }
+    /* New room overlay */
+    #privNewRoomOverlay {
+        position:absolute;inset:0;background:#0d1117;z-index:5;
+        flex-direction:column;display:none;overflow:hidden;border-radius:0 0 12px 12px;
+    }
+    .priv-overlay-header {
+        padding:.45rem .7rem;border-bottom:1px solid #21262d;background:#161b22;
+        display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+    }
+    #newRoomAdminList { flex:1;overflow-y:auto; }
+    .priv-admin-pick-item {
+        padding:.45rem .7rem;display:flex;align-items:center;gap:.55rem;
+        cursor:pointer;transition:background .12s;border-bottom:1px solid #21262d22;
+    }
+    .priv-admin-pick-item:hover { background:#1c2128; }
+    .badge-role-owner { color:#f59e0b;font-size:.63rem; }
+    .badge-role-admin { color:#c0392b;font-size:.63rem; }
+    .badge-role-moderator { color:#16a34a;font-size:.63rem; }
+    .badge-role-helper { color:#ea580c;font-size:.63rem; }
+</style>
+
+<div id="chatBall">
+    <i class="fas fa-comments" style="color:#fff;font-size:1.25rem;pointer-events:none;"></i>
+    <span class="chat-ball-badge" id="chatBallBadge"></span>
+</div>
+
+<div id="chatWindow">
+    <!-- Header -->
+    <div class="chat-header" id="chatHeader">
+        <span style="font-size:.82rem;font-weight:600;color:#e6edf3;">
+            <i class="fas fa-comments text-primary me-2"></i>Chat
+        </span>
+        <div style="display:flex;align-items:center;gap:.55rem;">
+            <button id="chatMuteBtn" onclick="toggleChatMute()" title="Silenciar notificações"
+                style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:.88rem;padding:0;line-height:1;transition:color .15s;">
+                🔔
+            </button>
+            <button onclick="toggleChatWindow()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:.85rem;padding:0;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="chat-tabs">
+        <div class="chat-tab active" id="tabTeam" onclick="switchChatTab('team')">
+            <i class="fas fa-users"></i>Equipe
+            {% if admin.role == 'owner' %}
+            <i class="fas fa-gear team-gear" id="teamGear" title="Configurações" onclick="event.stopPropagation();toggleTeamBar()"></i>
+            {% endif %}
+        </div>
+        {% if admin.role in ('owner', 'admin') or (admin.role == 'moderator' and internal_access_mod) or (admin.role == 'helper' and internal_access_helper) %}
+        <div class="chat-tab" id="tabInternal" onclick="switchChatTab('internal')">
+            <i class="fas fa-lock"></i>Interno
+            {% if admin.role == 'owner' %}
+            <i class="fas fa-gear internal-gear" id="internalGear" title="Configurações" onclick="event.stopPropagation();toggleInternalBar()"></i>
+            {% endif %}
+        </div>
+        {% endif %}
+        <div class="chat-tab" id="tabPrivado" onclick="switchChatTab('privado')">
+            <i class="fas fa-user-lock"></i>Privado
+        </div>
+    </div>
+
+    <!-- Team settings bar (owner only) -->
+    {% if admin.role == 'owner' %}
+    <div id="teamAccessBar" style="display:none;">
+        <div class="int-access-row" style="border-color:#1d4ed833;">
+            <span style="color:#8b949e;"><i class="fas fa-trash-can me-1"></i>Limpar chat da equipe</span>
+            <button class="int-clear-btn" onclick="clearTeamChat()">
+                <i class="fas fa-trash-can"></i>Limpar
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Internal access bar (owner only) -->
+    {% if admin.role == 'owner' %}
+    <div id="internalAccessBar" style="display:none;">
+        <div class="int-access-row">
+            <span><i class="fas fa-shield-halved me-1"></i>Permitir Moderadores</span>
+            <button id="internalAccessToggleBtn" class="int-access-toggle-btn" onclick="toggleInternalAccess()"
+                    style="color:{{ '#22c55e' if internal_access_mod else '#ef4444' }};border-color:{{ '#22c55e55' if internal_access_mod else '#ef444455' }};">
+                {% if internal_access_mod %}<i class="fas fa-toggle-on"></i>Ativado
+                {% else %}<i class="fas fa-toggle-off"></i>Desativado{% endif %}
+            </button>
+        </div>
+        <div class="int-access-row">
+            <span><i class="fas fa-user me-1"></i>Permitir Ajudantes</span>
+            <button id="helperAccessToggleBtn" class="int-access-toggle-btn" onclick="toggleHelperAccess()"
+                    style="color:{{ '#22c55e' if internal_access_helper else '#ef4444' }};border-color:{{ '#22c55e55' if internal_access_helper else '#ef444455' }};">
+                {% if internal_access_helper %}<i class="fas fa-toggle-on"></i>Ativado
+                {% else %}<i class="fas fa-toggle-off"></i>Desativado{% endif %}
+            </button>
+        </div>
+        <div class="int-access-row" style="border-top:1px solid #7c3aed22;padding-top:.3rem;margin-top:.05rem;">
+            <span style="color:#8b949e;"><i class="fas fa-trash-can me-1"></i>Limpar chat interno</span>
+            <button class="int-clear-btn" onclick="clearInternalChat()">
+                <i class="fas fa-trash-can"></i>Limpar
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Team / Internal chat area — 2-column Discord-style layout -->
+    <div class="chat-body-flex" id="chatBodyFlex">
+        <!-- Left sidebar: overlay members panel (hidden by default) -->
+        <div id="chatSidebarMembers" class="chat-sidebar-members collapsed">
+            <div class="chat-sidebar-header">
+                <span class="chat-sidebar-title"><i class="fas fa-users me-1"></i>Membros Online</span>
+                <span class="chat-sidebar-count" id="chatSidebarCount">0</span>
+            </div>
+            <div id="chatTeamDrawerList" class="chat-sidebar-list"></div>
+            <div class="chat-sidebar-footer">
+                <button id="toggleOnlineMembersBtn" onclick="toggleOnlineMembersDrawer()" title="Recolher/expandir membros"
+                        style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;cursor:pointer;color:#8b949e;background:transparent;border:1px solid #30363d;border-radius:6px;">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </div>
+        <!-- Right column: message history + input -->
+        <div class="chat-conversation-col">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="typing-indicator" id="chatTypingIndicator"></div>
+            <div class="chat-input-row" id="chatInputRow">
+                <button id="toggleOnlineMembersBtnAlt" onclick="toggleOnlineMembersDrawer()" title="Mostrar/ocultar membros online"
+                        style="display:flex;align-items:center;justify-content:center;width:35px;min-width:35px;height:35px;flex-shrink:0;cursor:pointer;color:#fff;background:transparent;border:none;margin-right:4px;">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <input type="text" id="chatWidgetInput" placeholder="Mensagem…" maxlength="500"
+                       onkeydown="if(event.key==='Enter')sendChatMsg()"
+                       oninput="notifyTyping(_chatChan, null)" style="flex:1 !important;" />
+                <button onclick="sendChatMsg()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privado pane -->
+    <div id="chatPrivadoPane">
+        <!-- Room list view -->
+        <div id="privListView">
+            <div id="privRoomsList"></div>
+            {% if admin.role != 'owner' %}
+            <div class="priv-footer">
+                <button class="priv-new-btn" onclick="openNewRoomOverlay()">
+                    <i class="fas fa-plus"></i>Nova conversa privada
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        <!-- Room chat view -->
+        <div id="privRoomView">
+            <div class="priv-room-header">
+                <button class="priv-back-btn" onclick="privBackToList()" title="Voltar">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <span id="privRoomTitle" style="font-size:.73rem;font-weight:600;color:#e6edf3;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+                <button id="privCloseRoomBtn" onclick="closePrivRoom()"
+                        style="display:none;background:none;border:1px solid #ef444455;border-radius:5px;color:#ef4444;cursor:pointer;font-size:.63rem;padding:.32rem .5rem;white-space:nowrap;align-items:center;gap:.2rem;position:relative;z-index:5;touch-action:manipulation;-webkit-tap-highlight-color:rgba(239,68,68,.25);"
+                        title="Encerrar conversa">
+                    <i class="fas fa-times-circle"></i> Encerrar
+                </button>
+                {% if admin.role == 'owner' %}
+                <button id="privDeleteRoomBtn" onclick="deletePrivRoom()"
+                        style="display:none;background:none;border:1px solid #ef444455;border-radius:5px;color:#ef4444;cursor:pointer;font-size:.63rem;padding:.18rem .38rem;white-space:nowrap;align-items:center;gap:.2rem;"
+                        title="Apagar conversa permanentemente">
+                    <i class="fas fa-trash-can"></i>
+                </button>
+                <a id="privTranscriptBtn" href="#" target="_blank"
+                   style="font-size:.65rem;color:#8b949e;text-decoration:none;padding:.2rem .4rem;border:1px solid #30363d;border-radius:5px;white-space:nowrap;"
+                   title="Exportar transcript">
+                    <i class="fas fa-file-export"></i>
+                </a>
+                {% endif %}
+            </div>
+            <div id="privRoomMessages"></div>
+            <div id="privRoomClosedBanner">
+                <i class="fas fa-lock me-1"></i>Conversa encerrada
+            </div>
+            <div class="typing-indicator" id="privTypingIndicator"></div>
+            <div id="chatOnlineDrawer" class="chat-online-drawer">
+                <div class="chat-drawer-header"><i class="fas fa-users me-1"></i>Membros Online</div>
+                <div id="chatDrawerList" class="chat-drawer-list"></div>
+            </div>
+            <div id="privRoomInputRow">
+                <button id="chatDrawerToggleBtn" onclick="toggleChatDrawer()" title="Membros online">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <input type="text" id="privInput" placeholder="Mensagem…" maxlength="500"
+                       onkeydown="if(event.key==='Enter')sendPrivMsg()"
+                       oninput="notifyTyping(null, _privRoomId)" />
+                <button onclick="sendPrivMsg()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+        <!-- New room picker overlay -->
+        <div id="privNewRoomOverlay">
+            <div class="priv-overlay-header">
+                <span style="font-size:.78rem;font-weight:600;color:#e6edf3;">
+                    <i class="fas fa-plus text-primary me-2"></i>Nova conversa
+                </span>
+                <button onclick="closeNewRoomOverlay()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:.82rem;padding:0;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="newRoomAdminList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const ADMIN_ROLE = {{ admin.role | tojson }};
+    const ADMIN_ID   = {{ admin.id }};
+    const CHAT_ADMINS = {{ chat_admins | tojson }};
+    let _internalAccessMod    = {{ 'true' if internal_access_mod else 'false' }};
+    let _internalAccessHelper = {{ 'true' if internal_access_helper else 'false' }};
+
+    let _chatOpen  = false;
+    let _chatChan  = 'team';
+    let _lastId    = {'team': 0, 'internal': 0};
+    let _chatPoll  = null;
+
+    let _privState            = 'list';
+    let _privRoomId           = null;
+    let _privRoomClosed       = false;
+    let _privRoomIsParticipant = false;
+    let _privLastId           = 0;
+    let _privPoll             = null;
+    let _privListPoll         = null;
+    let _privRoomsMap         = {};
+    let _typingTimer          = null;
+
+    let _dragging = false, _dragOX = 0, _dragOY = 0;
+    let _ballDrag = false, _ballMoved = false, _ballDX = 0, _ballDY = 0;
+
+    const ROLE_COLORS = { owner:'#c9d1d9', admin:'#c0392b', moderator:'#16a34a', helper:'#ea580c' };
+    // Módulo 5: brilho neon por cargo — drop-shadow colorido em todos os avatares.
+    // V3, item 4: o Owner reverteu para o visual "Grafite Glitch" — fundo grafite
+    // elegante com reflexo sutil em drop-shadow, sem contorno dourado nem bordas tortas.
+    const ROLE_GLOW = {
+        owner:     'border:2px solid #3a3f46;background:linear-gradient(145deg,#2b2f36,#1c1f24);filter:drop-shadow(0 0 5px rgba(201,209,217,0.35)) drop-shadow(0 2px 3px rgba(0,0,0,0.6));',
+        admin:     'border:2px solid #ef4444;filter:drop-shadow(0 0 4px rgba(239,68,68,0.5));',
+        moderator: 'border:2px solid #22c55e;filter:drop-shadow(0 0 4px rgba(34,197,94,0.5));',
+        helper:    'border:2px solid #f97316;filter:drop-shadow(0 0 4px rgba(249,115,22,0.5));',
+    };
+    function avatarBorderStyle(role) {
+        return ROLE_GLOW[role] || 'border-color:#30363d;';
+    }
+    const ROLE_LABELS = { owner:'Owner', admin:'ADMIN', moderator:'MODER', helper:'HELPER' };
+
+    // ── Open / Close ──────────────────────────────────────────────────────
+    window.openChatBall = function() { if (!_chatOpen) toggleChatWindow(); };
+
+    window.toggleChatWindow = function() {
+        _chatOpen = !_chatOpen;
+        const win = document.getElementById('chatWindow');
+        if (_chatOpen) {
+            win.classList.add('active');
+            // Always reset internal access bar to closed on open
+            const intBar = document.getElementById('internalAccessBar');
+            if (intBar) intBar.style.display = 'none';
+            if (_chatChan === 'privado') {
+                if (_privState === 'room') startPrivRoomPoll();
+                else { loadPrivRoomsList(); startPrivListPoll(); }
+            } else {
+                loadChatMessages(true);
+                _chatPoll = setInterval(() => loadChatMessages(false), 3000);
+            }
+        } else {
+            win.classList.remove('active');
+            clearAllPolls();
+            // Reset internal access bar to closed on close
+            const intBar = document.getElementById('internalAccessBar');
+            if (intBar) intBar.style.display = 'none';
+        }
+    };
+
+    function clearAllPolls() {
+        clearInterval(_chatPoll);    _chatPoll    = null;
+        clearInterval(_privPoll);    _privPoll    = null;
+        clearInterval(_privListPoll); _privListPoll = null;
+    }
+
+    // ── Tab switching ─────────────────────────────────────────────────────
+    window.switchChatTab = function(ch) {
+        clearAllPolls();
+        _chatChan = ch;
+
+        ['tabTeam','tabInternal','tabPrivado'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('active');
+        });
+        const tabMap = { team:'tabTeam', internal:'tabInternal', privado:'tabPrivado' };
+        const activeTab = document.getElementById(tabMap[ch]);
+        if (activeTab) activeTab.classList.add('active');
+
+        const msgs     = document.getElementById('chatMessages');
+        const inputRow = document.getElementById('chatInputRow');
+        const privPane = document.getElementById('chatPrivadoPane');
+        const intBar   = document.getElementById('internalAccessBar');
+        const teamBar  = document.getElementById('teamAccessBar');
+
+        if (ch === 'privado') {
+            msgs.style.display    = 'none';
+            inputRow.style.display = 'none';
+            privPane.style.display = 'flex';
+            if (intBar)  intBar.style.display  = 'none';
+            if (teamBar) teamBar.style.display  = 'none';
+            showPrivListView();
+            startPrivListPoll();
+        } else {
+            msgs.style.display    = 'flex';
+            inputRow.style.display = 'flex';
+            privPane.style.display = 'none';
+            // Access bars stay CLOSED by default — only open on gear click
+            if (intBar)  intBar.style.display  = 'none';
+            if (teamBar) teamBar.style.display  = 'none';
+            // ── Ghost prevention: hide before wipe so stale content is never readable ──
+            msgs.style.visibility = 'hidden';
+            msgs.innerHTML = '';
+            _lastId[ch] = 0;
+            loadChatMessages(true);
+            if (_chatOpen) _chatPoll = setInterval(() => loadChatMessages(false), 3000);
+        }
+    };
+
+    // ── Team settings bar (owner) ─────────────────────────────────────────
+    window.toggleTeamBar = function() {
+        if (_chatChan !== 'team') return;
+        const bar = document.getElementById('teamAccessBar');
+        if (!bar) return;
+        bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+    };
+
+    window.clearTeamChat = function() {
+        showConfirmModal({
+            title: 'Limpar Chat da Equipe',
+            message: 'Limpar todo o chat da Equipe? Todas as mensagens serão apagadas permanentemente para todos os participantes.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: async () => {
+                try {
+                    const r = await fetch('/admin/chat/clear-team', {method: 'POST'});
+                    const data = await r.json();
+                    if (data.ok) {
+                        const box = document.getElementById('chatMessages');
+                        if (box) box.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.78rem;margin-top:1.2rem;">Chat da equipe limpo.</div>';
+                        _lastId['team'] = 0;
+                        const bar = document.getElementById('teamAccessBar');
+                        if (bar) bar.style.display = 'none';
+                    }
+                } catch {}
+            }
+        });
+    };
+
+    // ── Internal access bar (owner) ───────────────────────────────────────
+    window.toggleInternalBar = function() {
+        if (_chatChan !== 'internal') return;
+        const bar = document.getElementById('internalAccessBar');
+        if (!bar) return;
+        bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+    };
+
+    window.toggleInternalAccess = async function() {
+        const newVal = !_internalAccessMod;
+        try {
+            const r = await fetch('/admin/chat/internal-access', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({enabled: newVal})
+            });
+            const data = await r.json();
+            if (data.ok) {
+                _internalAccessMod = data.enabled;
+                const btn = document.getElementById('internalAccessToggleBtn');
+                if (btn) {
+                    if (_internalAccessMod) {
+                        btn.style.color = '#22c55e'; btn.style.borderColor = '#22c55e55';
+                        btn.innerHTML = '<i class="fas fa-toggle-on me-1"></i>Ativado';
+                    } else {
+                        btn.style.color = '#ef4444'; btn.style.borderColor = '#ef444455';
+                        btn.innerHTML = '<i class="fas fa-toggle-off me-1"></i>Desativado';
+                    }
+                }
+            }
+        } catch {}
+    };
+
+    window.toggleHelperAccess = async function() {
+        const newVal = !_internalAccessHelper;
+        try {
+            const r = await fetch('/admin/chat/helper-access', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({enabled: newVal})
+            });
+            const data = await r.json();
+            if (data.ok) {
+                _internalAccessHelper = data.enabled;
+                const btn = document.getElementById('helperAccessToggleBtn');
+                if (btn) {
+                    if (_internalAccessHelper) {
+                        btn.style.color = '#22c55e'; btn.style.borderColor = '#22c55e55';
+                        btn.innerHTML = '<i class="fas fa-toggle-on me-1"></i>Ativado';
+                    } else {
+                        btn.style.color = '#ef4444'; btn.style.borderColor = '#ef444455';
+                        btn.innerHTML = '<i class="fas fa-toggle-off me-1"></i>Desativado';
+                    }
+                }
+            }
+        } catch {}
+    };
+
+    window.clearInternalChat = function() {
+        showConfirmModal({
+            title: 'Limpar Chat Interno',
+            message: 'Limpar todo o chat Interno? Todas as mensagens serão apagadas permanentemente para todos os participantes.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: async () => {
+                try {
+                    const r = await fetch('/admin/chat/clear-internal', {method: 'POST'});
+                    const data = await r.json();
+                    if (data.ok) {
+                        const box = document.getElementById('chatMessages');
+                        if (box) box.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.78rem;margin-top:1.2rem;">Chat interno limpo.</div>';
+                        _lastId['internal'] = 0;
+                    }
+                } catch {}
+            }
+        });
+    };
+
+    // ── Team / Internal messages ──────────────────────────────────────────
+    async function loadChatMessages(initial) {
+        const since = initial ? 0 : _lastId[_chatChan];
+        try {
+            const r = await fetch(`/admin/chat/api?channel=${_chatChan}&since=${since}`);
+            const data = await r.json();
+            const msgs       = data.messages || [];
+            const typing     = data.typing || [];
+            const othersSeen = data.others_seen_up_to || 0;
+            const typingEl   = document.getElementById('chatTypingIndicator');
+            if (typingEl) typingEl.textContent = typing.length ? `${typing.join(', ')} está digitando…` : '';
+            const box = document.getElementById('chatMessages');
+            if (!msgs.length) {
+                if (initial) {
+                    box.innerHTML =
+                        '<div style="text-align:center;color:#8b949e;font-size:.78rem;margin-top:1.2rem;">Nenhuma mensagem ainda.</div>';
+                    box.style.visibility = 'visible';
+                }
+                updateReadTicks(box, othersSeen);
+                return;
+            }
+            if (initial) box.innerHTML = '';
+            const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 40;
+            let _newTeamMsgs = 0;
+            msgs.forEach(m => {
+                if (m.id > _lastId[_chatChan]) _lastId[_chatChan] = m.id;
+                // Guard against duplicate bubbles caused by an overlapping
+                // send-triggered reload racing the periodic poll (both may
+                // fetch the same "since" window before either updates it).
+                if (box.querySelector('[data-id="' + m.id + '"]')) return;
+                if (!m.mine && !initial) _newTeamMsgs++;
+                const color = ROLE_COLORS[m.role] || '#6c757d';
+                const label = ROLE_LABELS[m.role] || m.role;
+                const avSrc = `/static/avatars/${m.avatar || 'av1'}.svg`;
+                const row = document.createElement('div');
+                row.className = 'bubble-row ' + (m.mine ? 'mine-row' : 'theirs-row');
+                row.dataset.id = m.id;
+                const crownHtml = m.crowned ? `<span title="Funcionário do Mês" style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:.8rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,.9));cursor:default;">👑</span>` : '';
+                const avImg = `<div style="position:relative;flex-shrink:0;">${crownHtml}<img src="${avSrc}" class="bubble-av" style="${avatarBorderStyle(m.role, color)}" onerror="this.src='/static/avatars/av1.svg'" /></div>`;
+                if (m.mine) {
+                    const read = othersSeen >= m.id;
+                    row.innerHTML = avImg +
+                        `<div class="chat-bubble mine"><div>${escHtml(m.msg)}</div>` +
+                        `<div class="bubble-ts">${m.ts} <span class="tick-mark" data-read="${read ? 1 : 0}" style="color:${read ? '#00a884' : '#8b949e'};">${read ? '✓✓' : '✓'}</span></div></div>`;
+                } else {
+                    row.innerHTML = avImg +
+                        `<div class="chat-bubble theirs bubble-role-${m.role}">` +
+                        `<div class="bubble-name-role"><span class="glow-name glow-${m.role}" data-text="${escHtml(m.name)}">${escHtml(m.name)}</span><span class="glow-role glow-role-${m.role}">${label}</span></div>` +
+                        `<div>${escHtml(m.msg)}</div><div class="bubble-ts">${m.ts}</div></div>`;
+                }
+                box.appendChild(row);
+            });
+            updateReadTicks(box, othersSeen);
+            if (_newTeamMsgs > 0) playTeamMsgSound();
+            if (initial || atBottom) box.scrollTop = box.scrollHeight;
+            if (initial) box.style.visibility = 'visible';
+        } catch {
+            // Ensure the pane is never left permanently invisible on a fetch error
+            if (initial) {
+                const _errBox = document.getElementById('chatMessages');
+                if (_errBox) {
+                    _errBox.innerHTML = '<div style="text-align:center;color:#6e7681;font-size:.75rem;margin-top:1.2rem;">Erro ao carregar mensagens. Tente novamente.</div>';
+                    _errBox.style.visibility = 'visible';
+                }
+            }
+        }
+    }
+
+    window.sendChatMsg = async function() {
+        const inp = document.getElementById('chatWidgetInput');
+        const msg = inp.value.trim();
+        if (!msg) return;
+        inp.value = '';
+        try {
+            await fetch('/admin/chat/send-api', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({message: msg, channel: _chatChan})
+            });
+            await loadChatMessages(false);
+        } catch {}
+    };
+
+    // ── Privado: list view ────────────────────────────────────────────────
+    function showPrivListView() {
+        _privState = 'list';
+        document.getElementById('privListView').style.display   = 'flex';
+        document.getElementById('privRoomView').style.display   = 'none';
+        document.getElementById('privNewRoomOverlay').style.display = 'none';
+        clearInterval(_privPoll); _privPoll = null;
+    }
+
+    async function loadPrivRoomsList() {
+        try {
+            const r = await fetch('/admin/chat/rooms-api');
+            const rooms = await r.json();
+            renderPrivRoomsList(rooms);
+        } catch {}
+    }
+
+    function startPrivListPoll() {
+        clearInterval(_privListPoll);
+        loadPrivRoomsList();
+        _privListPoll = setInterval(loadPrivRoomsList, 5000);
+    }
+
+    function renderPrivRoomsList(rooms) {
+        _privRoomsMap = {};
+        rooms.forEach(r => { _privRoomsMap[r.id] = r; });
+        const list = document.getElementById('privRoomsList');
+        if (!rooms.length) {
+            list.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.74rem;padding:1.8rem .5rem;">' +
+                '<i class="fas fa-comments" style="font-size:1.5rem;display:block;margin-bottom:.5rem;opacity:.4;"></i>' +
+                (ADMIN_ROLE === 'owner' ? 'Nenhuma conversa ainda.' : 'Sem conversas. Clique em "Nova" para começar.') +
+                '</div>';
+            return;
+        }
+        list.innerHTML = rooms.map(r => {
+            const titleE = escHtml(r.title);
+            const previewE = escHtml(r.last_msg || 'Nenhuma mensagem');
+            const badge = r.closed
+                ? '<span class="priv-room-badge closed"><i class="fas fa-lock"></i></span>'
+                : '<span class="priv-room-badge open"><i class="fas fa-circle" style="font-size:.35rem;vertical-align:middle;"></i></span>';
+            const otherUsername = r.other_username || '';
+            return `<div class="priv-room-item" data-chat-username="${escHtml(otherUsername)}" onclick="openPrivRoom(${r.id})">
+                <div class="priv-room-av ${r.closed ? 'closed-av' : ''}">
+                    <i class="fas ${r.closed ? 'fa-lock' : 'fa-comments'}"></i>
+                </div>
+                <div class="priv-room-info">
+                    <div class="priv-room-name">${titleE}</div>
+                    <div class="priv-room-preview">${previewE}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem;flex-shrink:0;margin-left:.3rem;">
+                    <div style="font-size:.58rem;color:#8b949e;">${r.last_ts || ''}</div>
+                    ${badge}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ── Privado: room view ────────────────────────────────────────────────
+    window.openPrivRoom = function(roomId) {
+        const r = _privRoomsMap[roomId] || {};
+        const roomTitle    = r.title || '';
+        const closed       = !!r.closed;
+        const isParticipant = !!r.is_participant;
+
+        _privState             = 'room';
+        _privRoomId            = roomId;
+        _privRoomClosed        = closed;
+        _privRoomIsParticipant = isParticipant;
+        _privLastId            = 0;
+
+        clearInterval(_privListPoll); _privListPoll = null;
+
+        document.getElementById('privListView').style.display       = 'none';
+        document.getElementById('privRoomView').style.display       = 'flex';
+        document.getElementById('privNewRoomOverlay').style.display = 'none';
+
+        const titleEl = document.getElementById('privRoomTitle');
+        if (titleEl) titleEl.textContent = roomTitle;
+
+        const inputRow = document.getElementById('privRoomInputRow');
+        if (inputRow) inputRow.style.display = (isParticipant && !closed) ? 'flex' : 'none';
+
+        const closedBanner = document.getElementById('privRoomClosedBanner');
+        if (closedBanner) closedBanner.style.display = closed ? 'block' : 'none';
+
+        const closeBtn = document.getElementById('privCloseRoomBtn');
+        if (closeBtn) closeBtn.style.display = (isParticipant && !closed) ? 'inline-flex' : 'none';
+
+        const deleteBtn = document.getElementById('privDeleteRoomBtn');
+        if (deleteBtn) deleteBtn.style.display = (ADMIN_ROLE === 'owner' && closed) ? 'inline-flex' : 'none';
+
+        const typingEl = document.getElementById('privTypingIndicator');
+        if (typingEl) typingEl.textContent = '';
+
+        const transcriptBtn = document.getElementById('privTranscriptBtn');
+        if (transcriptBtn) transcriptBtn.href = `/admin/chat/room/${roomId}/transcript`;
+
+        // ── Ghost prevention: wipe stale messages before any fetch ───────────
+        const _ghostBox = document.getElementById('privRoomMessages');
+        if (_ghostBox) { _ghostBox.innerHTML = ''; _ghostBox.style.visibility = 'hidden'; }
+
+        loadPrivRoomMessages(true);
+        if (!closed) startPrivRoomPoll();
+        markRoomAsRead(roomId);
+    };
+
+    // ── Módulo 4: dispara mark-as-read ao abrir a conversa ─────────────────
+    function markRoomAsRead(roomId) {
+        fetch('/admin/api/chat/mark-as-read', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({room_id: roomId})
+        }).catch(() => {});
+    }
+
+    window.privBackToList = function() {
+        clearInterval(_privPoll); _privPoll = null;
+        showPrivListView();
+        startPrivListPoll();
+    };
+
+    // ── Fix mobile-tap reliability: some touch browsers fire a synthetic
+    // click with a delay/miss when the button sits inside a flex header
+    // that also has its own touch listeners. Binding touchend explicitly
+    // (with preventDefault to stop the ghost click) makes the tap register
+    // immediately and every time.
+    (function bindCloseRoomTouch() {
+        const btn = document.getElementById('privCloseRoomBtn');
+        if (!btn || btn.dataset.touchBound) return;
+        btn.dataset.touchBound = '1';
+        btn.addEventListener('touchend', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closePrivRoom();
+        }, { passive: false });
+    })();
+
+    window.closePrivRoom = function() {
+        if (!_privRoomId || _privRoomClosed) return;
+        showConfirmModal({
+            title: 'Encerrar Conversa',
+            message: 'Encerrar esta conversa? Os participantes não poderão mais enviar mensagens.',
+            confirmText: 'Confirmar e Encerrar',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/admin/chat/room/${_privRoomId}/close`, {method:'POST'});
+                    const d = await res.json();
+                    if (d.ok) {
+                        _privRoomClosed = true;
+                        const inputRow = document.getElementById('privRoomInputRow');
+                        if (inputRow) inputRow.style.display = 'none';
+                        const closedBanner = document.getElementById('privRoomClosedBanner');
+                        if (closedBanner) closedBanner.style.display = 'block';
+                        const closeBtn = document.getElementById('privCloseRoomBtn');
+                        if (closeBtn) closeBtn.style.display = 'none';
+                        const deleteBtn = document.getElementById('privDeleteRoomBtn');
+                        if (deleteBtn && ADMIN_ROLE === 'owner') deleteBtn.style.display = 'inline-flex';
+                        const typingEl = document.getElementById('privTypingIndicator');
+                        if (typingEl) typingEl.textContent = '';
+                        if (_privRoomsMap[_privRoomId]) _privRoomsMap[_privRoomId].closed = true;
+                    }
+                } catch {}
+            }
+        });
+    };
+
+    window.deletePrivRoom = function() {
+        if (!_privRoomId) return;
+        showConfirmModal({
+            title: 'Apagar Conversa',
+            message: 'Apagar esta conversa permanentemente? Esta ação é irreversível e não pode ser desfeita.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/admin/chat/room/${_privRoomId}/delete`, {method:'POST'});
+                    const d = await res.json();
+                    if (d.ok) {
+                        delete _privRoomsMap[_privRoomId];
+                        _privRoomId = null;
+                        privBackToList();
+                    }
+                } catch {}
+            }
+        });
+    };
+
+    function notifyTyping(channel, roomId) {
+        clearTimeout(_typingTimer);
+        _typingTimer = setTimeout(() => {
+            const body = roomId ? {room_id: roomId} : {channel: channel || 'team'};
+            fetch('/admin/chat/typing-notify', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(body)
+            }).catch(() => {});
+        }, 400);
+    }
+
+    // ── Módulo 4: Duplo check estilo WhatsApp ──────────────────────────────
+    // 1 check cinza = enviado · 2 checks cinzas = destinatário online (entregue)
+    // 2 checks azuis = lido (mark-as-read)
+    function updateDeliveryTicks(box, recipientOnline) {
+        if (!box) return;
+        box.querySelectorAll('.mine-row .tick-mark').forEach(tick => {
+            if (tick.dataset.read === '1') return; // já lido, não regride
+            if (recipientOnline) {
+                tick.textContent = '✓✓';
+                tick.style.color = '#8b949e';
+            } else {
+                tick.textContent = '✓';
+                tick.style.color = '#8b949e';
+            }
+        });
+    }
+
+    function updateReadTicks(box, othersSeen) {
+        if (!othersSeen || !box) return;
+        box.querySelectorAll('.mine-row').forEach(row => {
+            const mid = parseInt(row.dataset.id);
+            if (!mid || mid > othersSeen) return;
+            const tick = row.querySelector('.tick-mark');
+            if (tick) {
+                tick.textContent = '✓✓';
+                tick.style.color = '#00a884';
+                tick.dataset.read = '1';
+            }
+        });
+    }
+
+    function startPrivRoomPoll() {
+        clearInterval(_privPoll);
+        _privPoll = setInterval(() => loadPrivRoomMessages(false), 3000);
+    }
+
+    async function loadPrivRoomMessages(initial) {
+        if (!_privRoomId) return;
+        const since = initial ? 0 : _privLastId;
+        try {
+            const r = await fetch(`/admin/chat/room/${_privRoomId}/api?since=${since}`);
+            const data = await r.json();
+            const msgs       = data.messages || [];
+            const typing     = data.typing || [];
+            const othersSeen = data.others_seen_up_to || 0;
+            const recipOnline = !!data.recipient_online;
+            const typingEl   = document.getElementById('privTypingIndicator');
+            if (typingEl) typingEl.textContent = typing.length ? `${typing.join(', ')} está digitando…` : '';
+            const box = document.getElementById('privRoomMessages');
+            if (!msgs.length) {
+                if (initial) {
+                    box.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.72rem;margin-top:1rem;">Sem mensagens.</div>';
+                    box.style.visibility = 'visible';
+                }
+                updateReadTicks(box, othersSeen);
+                return;
+            }
+            if (initial) box.innerHTML = '';
+            const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 40;
+            let _newMsgsFromOthers = 0;
+            msgs.forEach(m => {
+                if (m.id > _privLastId) _privLastId = m.id;
+                // Same duplicate-bubble guard as the team/internal chat.
+                if (box.querySelector('[data-id="' + m.id + '"]')) return;
+                if (!m.mine && !m.system && !initial) _newMsgsFromOthers++;
+                if (m.system) {
+                    const sys = document.createElement('div');
+                    sys.className = 'priv-system-msg';
+                    sys.dataset.id = m.id;
+                    sys.textContent = m.msg;
+                    box.appendChild(sys);
+                    return;
+                }
+                const color = ROLE_COLORS[m.role] || '#6c757d';
+                const label = ROLE_LABELS[m.role] || m.role;
+                const avSrc = `/static/avatars/${m.avatar || 'av1'}.svg`;
+                const row = document.createElement('div');
+                row.dataset.id = m.id;
+                row.className = 'bubble-row ' + (m.mine ? 'mine-row' : 'theirs-row');
+                const crownHtml2 = m.crowned ? `<span title="Funcionário do Mês" style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:.8rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,.9));cursor:default;">👑</span>` : '';
+                const avImg = `<div style="position:relative;flex-shrink:0;">${crownHtml2}<img src="${avSrc}" class="bubble-av" style="${avatarBorderStyle(m.role, color)}" onerror="this.src='/static/avatars/av1.svg'" /></div>`;
+                if (m.mine) {
+                    const read = othersSeen >= m.id;
+                    row.innerHTML = avImg +
+                        `<div class="chat-bubble mine"><div>${escHtml(m.msg)}</div>` +
+                        `<div class="bubble-ts">${m.ts} <span class="tick-mark" data-read="${read ? 1 : 0}" style="color:${read ? '#00a884' : '#8b949e'};">${read ? '✓✓' : (recipOnline ? '✓✓' : '✓')}</span>` +
+                        `<button class="msg-delete-btn" onclick="deletePrivMsg(${_privRoomId},${m.id},this)" title="Apagar mensagem"><i class="fas fa-trash-can"></i></button></div></div>`;
+                } else {
+                    row.innerHTML = avImg +
+                        `<div class="chat-bubble theirs bubble-role-${m.role}">` +
+                        `<div class="bubble-name-role"><span class="glow-name glow-${m.role}" data-text="${escHtml(m.name)}">${escHtml(m.name)}</span><span class="glow-role glow-role-${m.role}">${label}</span></div>` +
+                        `<div>${escHtml(m.msg)}</div><div class="bubble-ts">${m.ts}</div></div>`;
+                }
+                box.appendChild(row);
+            });
+            updateReadTicks(box, othersSeen);
+            updateDeliveryTicks(box, recipOnline);
+            // Toca som APENAS se o usuário atual é participante direto da conversa
+            // (Owner e outros admins que não são participantes ficam em silêncio)
+            if (_newMsgsFromOthers > 0 && _privRoomIsParticipant) {
+                playPrivateMsgSound();
+            }
+            if (initial || atBottom) box.scrollTop = box.scrollHeight;
+            if (initial) box.style.visibility = 'visible';
+        } catch {
+            // Ensure the pane is never left permanently invisible on a fetch error
+            if (initial) {
+                const _errBox = document.getElementById('privRoomMessages');
+                if (_errBox) {
+                    _errBox.innerHTML = '<div style="text-align:center;color:#6e7681;font-size:.75rem;margin-top:1rem;">Erro ao carregar mensagens. Tente novamente.</div>';
+                    _errBox.style.visibility = 'visible';
+                }
+            }
+        }
+    }
+
+    // ── Optimistic delete: hide bubble instantly, confirm via server ──────────
+    window.deletePrivMsg = async function(roomId, msgId, btn) {
+        const row = btn.closest('.bubble-row');
+        if (!row) return;
+        row.style.display = 'none'; // optimistic: vanishes immediately
+        try {
+            const r = await fetch(`/admin/chat/room/${roomId}/message/${msgId}/delete`, {method: 'POST'});
+            const d = await r.json();
+            if (d.ok) {
+                row.remove();
+            } else {
+                row.style.display = ''; // rollback on server rejection
+            }
+        } catch {
+            row.style.display = ''; // rollback on network error
+        }
+    };
+
+    window.sendPrivMsg = async function() {
+        if (!_privRoomId || _privRoomClosed || !_privRoomIsParticipant) return;
+        const inp = document.getElementById('privInput');
+        const msg = inp.value.trim();
+        if (!msg) return;
+        inp.value = '';
+        try {
+            await fetch(`/admin/chat/room/${_privRoomId}/send`, {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({message: msg})
+            });
+            await loadPrivRoomMessages(false);
+        } catch {}
+    };
+
+    // ── Privado: new room overlay ─────────────────────────────────────────
+    window.openNewRoomOverlay = function() {
+        clearInterval(_privListPoll); _privListPoll = null;
+        document.getElementById('privListView').style.display       = 'none';
+        document.getElementById('privNewRoomOverlay').style.display = 'flex';
+        renderNewRoomAdminList();
+    };
+
+    window.closeNewRoomOverlay = function() {
+        document.getElementById('privListView').style.display       = 'flex';
+        document.getElementById('privNewRoomOverlay').style.display = 'none';
+        startPrivListPoll();
+    };
+
+    function renderNewRoomAdminList() {
+        const list = document.getElementById('newRoomAdminList');
+        if (!CHAT_ADMINS.length) {
+            list.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.75rem;padding:1.2rem;">Sem membros disponíveis.</div>';
+            return;
+        }
+        list.innerHTML = CHAT_ADMINS.map(a => {
+            const color  = ROLE_COLORS[a.role] || '#6c757d';
+            const label  = ROLE_LABELS[a.role] || a.role;
+            const avSrc  = `/static/avatars/${a.avatar || 'av1'}.svg`;
+            const nameE  = escHtml(a.display_name);
+            return `<div class="priv-admin-pick-item" data-chat-username="${escHtml(a.username || '')}" onclick="createPrivRoom(${a.id})">
+                <img src="${avSrc}" class="bubble-av" style="width:30px;height:30px;${avatarBorderStyle(a.role, color)}" onerror="this.src='/static/avatars/av1.svg'" />
+                <div>
+                    <div style="font-size:.78rem;font-weight:600;color:#e6edf3;">${nameE}</div>
+                    <div class="badge-role-${a.role}">${label}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    window.createPrivRoom = async function(targetId) {
+        try {
+            const r = await fetch('/admin/chat/room/create-api', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({target_id: targetId})
+            });
+            const data = await r.json();
+            if (data.ok) {
+                document.getElementById('privNewRoomOverlay').style.display = 'none';
+                _privRoomsMap[data.room_id] = {id: data.room_id, title: data.title, closed: false, is_participant: true};
+                openPrivRoom(data.room_id);
+            }
+        } catch {}
+    };
+
+    // ── Utils ─────────────────────────────────────────────────────────────
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Drag: chat window ─────────────────────────────────────────────────
+    const header = document.getElementById('chatHeader');
+    const win    = document.getElementById('chatWindow');
+    if (header && win) {
+        header.addEventListener('mousedown', e => {
+            // Hard exclusion: never capture clicks originating inside #profileMenu
+            if (e.target.closest('#profileMenu')) return;
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'I') return;
+            // Also exclude input fields, textareas, and interactive elements
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.tagName === 'A') return;
+            if (e.target.closest('input, textarea, button, select, a')) return;
+            // Boundary fix: ignore rapid re-mousedown while already dragging
+            // (prevents offset corruption from rapid/double clicks)
+            if (_dragging) return;
+            _dragging = true;
+            const rect = win.getBoundingClientRect();
+            _dragOX = e.clientX - rect.left;
+            _dragOY = e.clientY - rect.top;
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+            if (!_dragging) return;
+            // Safety net: if pointer drifts into #profileMenu, abort drag
+            if (e.target.closest('#profileMenu')) { _dragging = false; return; }
+            const vw = window.innerWidth,  vh = window.innerHeight;
+            const ww = win.offsetWidth  || 340;
+            const wh = win.offsetHeight || 480;
+            // Only reset right/bottom anchor the first time we actually move
+            if (win.style.right !== 'auto') { win.style.right = 'auto'; win.style.bottom = 'auto'; }
+            win.style.left = Math.max(0, Math.min(e.clientX - _dragOX, vw - ww)) + 'px';
+            win.style.top  = Math.max(0, Math.min(e.clientY - _dragOY, vh - wh)) + 'px';
+        });
+        document.addEventListener('mouseup',    () => { _dragging = false; });
+        // Reset when mouse leaves the browser window or focus is lost
+        // (handles "button released outside viewport" and alt-tab scenarios)
+        document.addEventListener('mouseleave', () => { _dragging = false; });
+        window.addEventListener('blur',         () => { _dragging = false; });
+    }
+
+    // ── Drag: chat ball (com persistência de posição via localStorage) ────
+    const ball = document.getElementById('chatBall');
+    if (ball) {
+        // Restaura posição salva ao carregar a página
+        (function restoreBallPos() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('chatBallPos') || 'null');
+                if (saved && saved.left && saved.top) {
+                    ball.style.right  = 'auto';
+                    ball.style.bottom = 'auto';
+                    ball.style.left   = saved.left;
+                    ball.style.top    = saved.top;
+                    // Garante que a bola não fique fora da tela após redimensionamento
+                    const vw = window.innerWidth, vh = window.innerHeight;
+                    const bw = ball.offsetWidth || 52, bh = ball.offsetHeight || 52;
+                    const l = Math.max(0, Math.min(parseFloat(saved.left), vw - bw));
+                    const t = Math.max(0, Math.min(parseFloat(saved.top),  vh - bh));
+                    ball.style.left = l + 'px';
+                    ball.style.top  = t + 'px';
+                }
+            } catch {}
+        })();
+
+        ball.addEventListener('mousedown', e => {
+            // Hard exclusion: never capture clicks originating inside #profileMenu
+            if (e.target.closest('#profileMenu')) return;
+            // Boundary fix: ignore rapid re-mousedown while already dragging
+            if (_ballDrag) return;
+            _ballDrag = true; _ballMoved = false;
+            const r = ball.getBoundingClientRect();
+            _ballDX = e.clientX - r.left; _ballDY = e.clientY - r.top;
+            ball.style.transition = 'none';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+            if (!_ballDrag) return;
+            // Safety net: if pointer drifts into #profileMenu, abort drag
+            if (e.target.closest('#profileMenu')) { _ballDrag = false; ball.style.transition = ''; return; }
+            _ballMoved = true;
+            const vw = window.innerWidth,  vh = window.innerHeight;
+            const bw = ball.offsetWidth  || 52;
+            const bh = ball.offsetHeight || 52;
+            ball.style.right = 'auto'; ball.style.bottom = 'auto';
+            ball.style.left = Math.max(0, Math.min(e.clientX - _ballDX, vw - bw)) + 'px';
+            ball.style.top  = Math.max(0, Math.min(e.clientY - _ballDY, vh - bh)) + 'px';
+        });
+        document.addEventListener('mouseup', () => {
+            if (_ballDrag) {
+                _ballDrag = false;
+                ball.style.transition = '';
+                if (!_ballMoved) {
+                    toggleChatWindow();
+                } else {
+                    // Salva nova posição no localStorage
+                    try {
+                        localStorage.setItem('chatBallPos', JSON.stringify({
+                            left: ball.style.left,
+                            top:  ball.style.top
+                        }));
+                    } catch {}
+                }
+            }
+        });
+        // Reset when mouse leaves the browser window or focus is lost
+        document.addEventListener('mouseleave', () => { _ballDrag = false; ball.style.transition = ''; });
+        window.addEventListener('blur',         () => { _ballDrag = false; ball.style.transition = ''; });
+    }
+
+    // ── Mute toggle ──────────────────────────────────────────────────────────
+    let _soundMuted = false;
+    window.toggleChatMute = function() {
+        _soundMuted = !_soundMuted;
+        const btn = document.getElementById('chatMuteBtn');
+        if (btn) btn.textContent = _soundMuted ? '🔕' : '🔔';
+    };
+
+    // ── Áudio: contexto único compartilhado (browsers exigem gesto do usuário) ──
+    let _audioCtx = null;
+    function _getAudioCtx() {
+        if (!_audioCtx) {
+            try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+        }
+        if (_audioCtx.state === 'suspended') { try { _audioCtx.resume(); } catch {} }
+        return _audioCtx;
+    }
+    // Inicializa o contexto no primeiro clique do usuário (unlock gesture)
+    document.addEventListener('click', function _initAudio() {
+        _getAudioCtx();
+        document.removeEventListener('click', _initAudio);
+    }, { once: true });
+
+    function _playTone(freq1, freq2, dur, vol) {
+        const ctx = _getAudioCtx(); if (!ctx) return;
+        try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq1, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + dur * 0.4);
+            gain.gain.setValueAtTime(vol, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+        } catch {}
+    }
+    // Equipe/Interno: "ding" suave ascendente
+    function playTeamMsgSound()    { if (!_soundMuted) _playTone(660, 880, 0.28, 0.10); }
+    // Privado: tom descendente mais marcado
+    function playPrivateMsgSound() { if (!_soundMuted) _playTone(880, 660, 0.35, 0.13); }
+
+    // ── Módulo 1: painel "Membros Online" em tempo real (polling rápido) ───
+    async function refreshOnlineMembers() {
+        try {
+            const r = await fetch('/admin/online-members-api');
+            const members = await r.json();
+            // Update main-page panel widgets (only exist on /admin dashboard)
+            const container = document.getElementById('onlineUsersContainer');
+            const counter   = document.getElementById('totalOnlineCounter');
+            const section   = document.getElementById('onlineMembersSection');
+            if (counter) counter.textContent = members.length;
+            if (section) section.style.display = members.length ? '' : 'none';
+            if (container) container.innerHTML = members.map(m => {
+                const crownBadge = m.crowned ? '<span class="crown-badge" title="Funcionário do Mês">👑</span>' : '';
+                const crownFooter = m.crowned ? '<div style="font-size:.6rem;color:#f59e0b;">✦ Func. do Mês</div>' : '';
+                const label = ROLE_LABELS_FULL[m.role] || m.role;
+                const nameE = escHtml(m.display_name);
+                return `<div class="member-row" data-online-id="${m.id}" data-chat-username="${escHtml(m.username || '')}" style="min-width:180px;">
+                    <div class="member-row-main">
+                        <div class="avatar-wrap">
+                            <img src="/static/avatars/${m.avatar}.svg" class="avatar-sm" />
+                            ${crownBadge}
+                        </div>
+                        <div>
+                            <div style="font-size:.82rem;font-weight:600;">${nameE}</div>
+                            <span class="badge role-badge-${m.role}" style="font-size:.62rem;">${label}</span>
+                            ${crownFooter}
+                        </div>
+                    </div>
+                    <span class="status-dot status-${m.status}"></span>
+                </div>`;
+            }).join('');
+            atualizarStatusNoChat(members);
+        } catch {}
+    }
+
+    const ROLE_LABELS_FULL = { owner:'Owner', admin:'Admin', moderator:'Moderador', helper:'Ajudante' };
+
+    // Sincroniza os indicadores de status na lista de contatos do chat privado
+    // com os membros atualmente online (respeita a invisibilidade do Owner).
+    // Módulo 3: o indicador fica cravado no canto do avatar (.avatar-wrap),
+    // nunca solto no meio da linha. O painel "Membros Online" (.member-row)
+    // já renderiza seu próprio .status-dot fixo e é ignorado aqui.
+    function atualizarStatusNoChat(onlineMembers) {
+        // Map username → status. Invisible users are intentionally excluded so
+        // their dot is treated the same as offline (removed from the UI).
+        const statusMap = new Map();
+        onlineMembers.forEach(m => {
+            if (m.username && m.status !== 'invisible') {
+                statusMap.set(m.username, m.status || 'online');
+            }
+        });
+
+        document.querySelectorAll('[data-chat-username]:not(.member-row)').forEach(el => {
+            const uname = el.dataset.chatUsername;
+            const st = uname ? statusMap.get(uname) : undefined;
+            let wrap = el.querySelector('.avatar-wrap');
+            if (!wrap) {
+                const img = el.querySelector('img');
+                if (!img) return;
+                wrap = document.createElement('div');
+                wrap.className = 'avatar-wrap';
+                img.parentNode.insertBefore(wrap, img);
+                wrap.appendChild(img);
+            }
+            let dot = wrap.querySelector('.chat-online-dot');
+            if (!st) {
+                // Offline ou invisível: sem dot
+                if (dot) dot.remove();
+                return;
+            }
+            if (!dot) {
+                dot = document.createElement('span');
+                dot.style.cssText = 'position:absolute;bottom:0;right:0;border:2px solid #161b22;';
+                wrap.appendChild(dot);
+            }
+            // Apenas status-online (verde) ou status-busy (laranja)
+            dot.className = `chat-online-dot status-dot status-${st}`;
+        });
+        // Atualiza a gaveta de membros online do chat (Módulo 2)
+        renderChatDrawer(onlineMembers);
+    }
+
+    setInterval(refreshOnlineMembers, 4000);
+    refreshOnlineMembers();
+
+    // ── Módulo 2: gaveta deslizante de Membros Online no chat privado ──────
+    function renderChatDrawer(onlineMembers) {
+        // Also populate the team chat drawer
+        const teamList = document.getElementById('chatTeamDrawerList');
+        const teamCount = document.getElementById('chatSidebarCount');
+        // Invisible users are ghost-mode — omit from all UI lists
+        const visibleMembers = onlineMembers.filter(m => m.status !== 'invisible');
+        if (teamCount) teamCount.textContent = visibleMembers.length;
+        if (teamList) {
+            if (!visibleMembers.length) {
+                teamList.innerHTML = '<div style="color:#6e7681;font-size:.68rem;padding:.4rem .3rem;">Nenhum membro online</div>';
+            } else {
+                teamList.innerHTML = visibleMembers.map(m => {
+                    const label = ROLE_LABELS_FULL[m.role] || m.role;
+                    const st = m.status || 'online';
+                    return `<div class="chat-sidebar-member-item" style="gap:.35rem;">
+                        <div style="position:relative;flex-shrink:0;">
+                            <img src="/static/avatars/${m.avatar || 'av1'}.svg" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" />
+                            <span class="status-dot status-${st}" style="position:absolute;bottom:0;right:0;border:2px solid #161b22;width:7px;height:7px;"></span>
+                        </div>
+                        <div style="min-width:0;display:flex;flex-direction:column;gap:1px;">
+                            <div style="font-size:.72rem;font-weight:700;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;font-family:'Rajdhani',sans-serif;">${escHtml(m.display_name || m.username)}</div>
+                            <span class="glow-role glow-role-${m.role}" style="font-size:.52rem;padding:0 4px;line-height:1.5;align-self:flex-start;">${label}</span>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+        const list = document.getElementById('chatDrawerList');
+        if (!list) return;
+        if (!visibleMembers.length) {
+            list.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.72rem;padding:1rem;">Ninguém online no momento.</div>';
+            return;
+        }
+        list.innerHTML = visibleMembers.map(m => {
+            const label = ROLE_LABELS_FULL[m.role] || m.role;
+            const st = m.status || 'online';
+            return `<div class="chat-drawer-item">
+                <div class="avatar-wrap">
+                    <img src="/static/avatars/${m.avatar}.svg" class="avatar-sm" />
+                    <span class="status-dot status-${st}" style="position:absolute;bottom:0;right:0;border:2px solid #161b22;"></span>
+                </div>
+                <div>
+                    <div style="font-size:.78rem;font-weight:600;color:#e6edf3;">${escHtml(m.display_name)}</div>
+                    <span class="glow-role glow-role-${m.role}">${label}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Team/Internal now uses a persistent sidebar column (Discord-style)
+    // instead of a toggled overlay drawer. The 3-bar button collapses/
+    // expands that sidebar so the conversation column can reclaim the
+    // space when the member list isn't needed.
+    window.toggleOnlineMembersDrawer = function() {
+        const sidebar = document.getElementById('chatSidebarMembers');
+        if (sidebar) sidebar.classList.toggle('collapsed');
+    };
+
+    // Keep the private room drawer toggle under its own function
+    window.toggleChatDrawer = function() {
+        const drawer = document.getElementById('chatOnlineDrawer');
+        if (!drawer) return;
+        drawer.classList.toggle('open');
+    };
+
+    document.addEventListener('click', (e) => {
+        // Close private room drawer when clicking outside
+        const drawer = document.getElementById('chatOnlineDrawer');
+        if (!drawer || !drawer.classList.contains('open')) return;
+        const toggleBtn = document.getElementById('chatDrawerToggleBtn');
+        if (drawer.contains(e.target) || (toggleBtn && toggleBtn.contains(e.target))) return;
+        drawer.classList.remove('open');
+    });
+})();
+</script>

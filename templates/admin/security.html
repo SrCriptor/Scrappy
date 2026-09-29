@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Segurança &amp; Forense — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+        .stat-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.2rem; text-align:center; }
+        .stat-num  { font-size:1.9rem; font-weight:700; }
+        .log-scroll { max-height: 640px; overflow-y: auto; }
+        .log-scroll::-webkit-scrollbar { width: 5px; }
+        .log-scroll::-webkit-scrollbar-track { background: #21262d; border-radius:4px; }
+        .log-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        .owner-only-badge {
+            display: inline-flex; align-items: center; gap: .4rem;
+            background: #1a0a0a; border: 1px solid #7f1d1d;
+            border-radius: 8px; padding: .3rem .75rem;
+            font-size: .72rem; color: #f87171; font-weight: 700;
+        }
+        .sec-tabs { display:flex; gap:.4rem; margin-bottom:1rem; }
+        .sec-tab {
+            flex:1; text-align:center; padding:.55rem .5rem; border-radius:8px; cursor:pointer;
+            background:#161b22; border:1px solid #30363d; font-size:.82rem; color:#8b949e; transition:all .15s;
+        }
+        .sec-tab.active { color:#f87171; border-color:#7f1d1d; background:#1a0a0a; }
+        .attack-row { display: flex; align-items: flex-start; gap: .75rem; padding: .65rem .75rem; border-radius: 8px; margin-bottom: .35rem; background: #0d1117; border: 1px solid #21262d; cursor: pointer; transition: border-color .15s; }
+        .attack-row:hover { border-color: #f59e0b44; }
+        .attack-detail { display: none; margin-top: .6rem; padding-top: .6rem; border-top: 1px solid #21262d; }
+        .attack-row.open .attack-detail { display: block; }
+        .attack-row.open .attack-chevron { transform: rotate(90deg); }
+        .attack-chevron { transition: transform .15s; color: #6b7280; font-size: .65rem; flex-shrink: 0; margin-top: 3px; }
+        .attack-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; flex-shrink: 0; }
+        .type-xss          { background:#3d1a1a; color:#f87171; }
+        .type-sql          { background:#1a1a3d; color:#818cf8; }
+        .type-traversal    { background:#1a2e1a; color:#86efac; }
+        .type-unknown      { background:#2a2a2a; color:#94a3b8; }
+        .attack-badge { font-size: .68rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+        .badge-xss       { background:#3d1a1a; color:#f87171; border:1px solid #7f1d1d; }
+        .badge-sql       { background:#1a1a3d; color:#818cf8; border:1px solid #312e81; }
+        .badge-traversal { background:#1a2e1a; color:#86efac; border:1px solid #14532d; }
+        .badge-unknown   { background:#1e1e1e; color:#94a3b8; border:1px solid #374151; }
+        .url-path { font-family: 'Courier New', monospace; font-size: .72rem; color: #f59e0b; word-break: break-all; background: #0d1117; padding: 2px 6px; border-radius: 4px; }
+        .count-badge { background:#451a03; color:#fbbf24; border:1px solid #92400e; font-size:.7rem; padding:1px 7px; border-radius:20px; font-weight:700; }
+        /* Incident card */
+        .incident-card {
+            background: #0d1117; border: 1px solid #3a0a0a; border-left: 3px solid #ef4444;
+            border-radius: 8px; padding: .75rem 1rem; margin-bottom: .5rem; cursor: pointer;
+        }
+        .incident-card:hover { border-left-color: #f87171; background: #110d0d; }
+        .incident-detail { display: none; margin-top: .75rem; padding-top: .75rem; border-top: 1px solid #21262d; }
+        .incident-card.open .incident-detail { display: block; }
+        .incident-card.open .incident-chevron { transform: rotate(90deg); }
+        .incident-chevron { transition: transform .15s; color: #6b7280; }
+        .ip-badge { font-family: 'Courier New', monospace; font-size: 1rem; font-weight: 700; color: #f87171; letter-spacing: .05em; }
+        .fp-hash { font-family: 'Courier New', monospace; font-size: .78rem; color: #a78bfa; background: #1a0f2e; border: 1px solid #3b2a6e; padding: 2px 8px; border-radius: 6px; letter-spacing: .04em; }
+        .rtc-ip { font-family: 'Courier New', monospace; font-size: .78rem; color: #34d399; background: #0a1f17; border: 1px solid #065f46; padding: 2px 8px; border-radius: 6px; }
+        .infra-badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+        .infra-vpn  { background: #451a03; color: #fdba74; border: 1px solid #92400e; }
+        .infra-dc   { background: #1a1a3d; color: #818cf8; border: 1px solid #312e81; }
+        .grid-2col  { display: grid; grid-template-columns: auto 1fr; gap: .15rem .6rem; }
+        .grid-label { color: #6b7280; font-size: .72rem; }
+        .grid-val   { color: #e6edf3; font-size: .72rem; word-break: break-all; }
+        .section-divider { border-top: 1px solid #21262d; margin: .6rem 0 .5rem; padding-top: .5rem; }
+        .hw-chip { display: inline-flex; align-items: center; gap: .25rem; background: #1c1f26; border: 1px solid #2d333b; border-radius: 6px; padding: 2px 8px; font-size: .7rem; color: #8b949e; }
+        .case-num { font-size: .65rem; color: #4b5563; font-weight: 600; letter-spacing: .06em; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:1100px;">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Voltar</a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-shield-halved text-danger me-2"></i>Segurança &amp; Inteligência Forense</h4>
+            <small class="text-muted">Painel unificado — Ataques suspeitos na URL e dossiês de força bruta (item 8, V3)</small>
+        </div>
+        <div class="ms-auto">
+            <span class="owner-only-badge"><i class="fas fa-shield-halved"></i> OWNER ONLY — CONFIDENCIAL</span>
+        </div>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show mb-3">
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Bloco Superior: Monitoramento de Segurança da URL -->
+    <div class="mb-1" style="color:#4b5563;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">🛡️ Monitoramento de Segurança da URL</div>
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-danger">{{ requests_list | length }}</div>
+                <div class="text-muted small">Ataques suspeitos</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-warning">{{ suspicious_today }}</div>
+                <div class="text-muted small">Ataques hoje</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-danger">{{ forensics_today }}</div>
+                <div class="text-muted small">Incidentes hoje</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bloco Inferior: Inteligência Forense & OSINT -->
+    <div class="mb-1" style="color:#4b5563;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">🔍 Inteligência Forense &amp; OSINT</div>
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-danger">{{ incidents | length }}</div>
+                <div class="text-muted small">Incidentes força bruta</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-info">{{ unique_ips }}</div>
+                <div class="text-muted small">IPs únicos (força bruta)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-num text-warning">{{ proxy_count }}</div>
+                <div class="text-muted small">Via VPN / Proxy</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="sec-tabs">
+        <div class="sec-tab active" id="secTabAttacks" onclick="switchSecTab('attacks')">
+            <i class="fas fa-bug me-1"></i>Ataques Suspeitos ({{ requests_list | length }})
+        </div>
+        <div class="sec-tab" id="secTabForensics" onclick="switchSecTab('forensics')">
+            <i class="fas fa-fingerprint me-1"></i>Força Bruta &amp; Forense ({{ incidents | length }})
+        </div>
+    </div>
+
+    <!-- ═══ ATAQUES SUSPEITOS ═══ -->
+    <div id="secPaneAttacks" class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-triangle-exclamation text-warning me-2"></i>Registros de Ataques na URL</span>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-danger">{{ requests_list | length }}</span>
+                {% if requests_list %}
+                <form method="post" action="/admin/suspicious/clear"
+                      onsubmit="return confirmFormSubmit(this, 'Apagar todos os registros de ataques suspeitos? Irreversível.')">
+                    <button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Limpar</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if requests_list %}
+        <div class="log-scroll">
+        {% for r in requests_list %}
+        {% set atype = r.attack_type | lower | replace(' ', '') %}
+        <div class="attack-row" data-ip="{{ r.ip }}" onclick="toggleAttackDetail(this)">
+            <i class="fas fa-chevron-right attack-chevron"></i>
+            <div class="attack-icon type-{{ 'xss' if 'xss' in atype else ('sql' if 'sql' in atype else ('traversal' if 'traversal' in atype else 'unknown')) }}">
+                <i class="fas {{ 'fa-code' if 'xss' in atype else ('fa-database' if 'sql' in atype else 'fa-folder-open') }}"></i>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+                <!-- Summary row (always visible) -->
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                    <span class="attack-badge badge-{{ 'xss' if 'xss' in atype else ('sql' if 'sql' in atype else ('traversal' if 'traversal' in atype else 'unknown')) }}">
+                        {{ r.attack_type }}
+                    </span>
+                    <span class="text-muted" style="font-size:.72rem;"><i class="fas fa-clock me-1"></i>{{ fmt_ts(r.ts) }}</span>
+                    {% if r.count > 1 %}
+                    <span class="count-badge"><i class="fas fa-repeat me-1"></i>{{ r.count }}×</span>
+                    {% endif %}
+                    <span class="badge bg-secondary" style="font-size:.62rem;">{{ r.method }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span style="font-size:.75rem;"><i class="fas fa-network-wired text-info me-1"></i><code style="color:#60a5fa;">{{ r.ip }}</code></span>
+                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1"
+                            style="font-size:.62rem;line-height:1.4;"
+                            onclick="event.stopPropagation(); exportDossier(this.closest('.attack-row').dataset.ip)"
+                            title="Exportar Dossiê Mestre para IP {{ r.ip }}">
+                        <i class="fas fa-file-export me-1"></i>Dossiê
+                    </button>
+                </div>
+                <!-- Truncated preview always shown -->
+                <div class="mt-1">
+                    <span class="url-path" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;">{{ r.url_path }}</span>
+                </div>
+                <!-- Expandable detail — payload rendered safely inside <pre><code>, never injected into JS -->
+                <div class="attack-detail">
+                    <div style="font-size:.62rem;color:#6b7280;margin-bottom:.3rem;">
+                        <i class="fas fa-bug me-1"></i>PAYLOAD COMPLETO (não truncado)
+                    </div>
+                    <pre style="margin:0;background:#0a0a0a;border:1px solid #3a0a0a;border-radius:6px;padding:.5rem .75rem;"><code class="text-danger" style="white-space:pre-wrap;word-break:break-all;font-size:.72rem;">{{ r.url_path }}</code></pre>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-shield-check text-success" style="font-size:2.5rem;display:block;margin-bottom:.75rem;"></i>
+            <p class="text-muted mb-0">Nenhum ataque suspeito detectado ainda.</p>
+            <small class="text-muted">Ataques à URL como path traversal, XSS e SQL injection aparecerão aqui.</small>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ FORÇA BRUTA / FORENSE ═══ -->
+    <div id="secPaneForensics" class="section-card" style="display:none;">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-file-shield text-danger me-2"></i>Dossiês de Força Bruta — clique numa linha para abrir os detalhes forenses</span>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-danger">{{ incidents | length }}</span>
+                {% if incidents %}
+                <form method="post" action="/admin/forensics/clear"
+                      onsubmit="return confirmFormSubmit(this, 'Apagar todos os registros forenses? Esta ação é irreversível.')">
+                    <button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Limpar</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if incidents %}
+        <div class="log-scroll">
+        {% for inc in incidents %}
+        <div class="incident-card" data-ip="{{ inc.ip }}" onclick="this.classList.toggle('open')">
+
+            <!-- Summary row (always visible) -->
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <i class="fas fa-chevron-right incident-chevron" style="font-size:.7rem;"></i>
+                    <span class="case-num">CASO #{{ '%04d' % inc.id }}</span>
+                    <span class="ip-badge" style="font-size:.85rem;">{{ inc.ip }}</span>
+                    <span class="text-muted" style="font-size:.72rem;"><i class="fas fa-clock me-1"></i>{{ fmt_ts(inc.ts) }}</span>
+                    {% if inc.username_tried %}
+                    <span style="font-size:.7rem;color:#fca5a5;"><i class="fas fa-user-secret me-1"></i>"{{ inc.username_tried }}"</span>
+                    {% endif %}
+                    <span style="font-size:.7rem;color:#f87171;"><i class="fas fa-repeat me-1"></i>{{ inc.failures }} falhas</span>
+                </div>
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                    {% if inc.geo_is_proxy %}
+                    <span class="infra-badge infra-vpn"><i class="fas fa-user-secret"></i>VPN / Proxy</span>
+                    {% endif %}
+                    {% if inc.geo_is_hosting %}
+                    <span class="infra-badge infra-dc"><i class="fas fa-server"></i>Datacenter</span>
+                    {% endif %}
+                    {% if inc.canvas_fp %}
+                    <span class="fp-hash" style="font-size:.65rem;"><i class="fas fa-fingerprint me-1"></i>{{ inc.canvas_fp[:12] }}…</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Forensic detail (collapsed until clicked) -->
+            <div class="incident-detail">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <div style="background:#150505;border:1px solid #450a0a;border-radius:6px;padding:.55rem .75rem;">
+                            <div style="font-size:.65rem;color:#6b7280;margin-bottom:.25rem;">
+                                <i class="fas fa-map-marker-alt me-1"></i>GEOLOCALIZAÇÃO DO IP
+                            </div>
+                            <div class="grid-2col">
+                                <span class="grid-label">País:</span>
+                                <span class="grid-val">{% if inc.geo_country %}{{ inc.geo_country }}{% else %}<em class="text-muted">—</em>{% endif %}</span>
+                                <span class="grid-label">Estado:</span>
+                                <span class="grid-val">{{ inc.geo_region or '—' }}</span>
+                                <span class="grid-label">Cidade:</span>
+                                <span class="grid-val">{{ inc.geo_city or '—' }}</span>
+                                {% if inc.geo_lat and inc.geo_lon %}
+                                <span class="grid-label">Coords:</span>
+                                <span class="grid-val">
+                                    <a href="https://maps.google.com/?q={{ inc.geo_lat }},{{ inc.geo_lon }}"
+                                       target="_blank" rel="noopener" onclick="event.stopPropagation()"
+                                       style="font-family:monospace;color:#60a5fa;font-size:.68rem;">
+                                        {{ inc.geo_lat }}, {{ inc.geo_lon }} <i class="fas fa-external-link-alt" style="font-size:.55rem;"></i>
+                                    </a>
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div style="background:#0d0d17;border:1px solid #1e1b4b;border-radius:6px;padding:.55rem .75rem;height:100%;">
+                            <div style="font-size:.65rem;color:#6b7280;margin-bottom:.25rem;">
+                                <i class="fas fa-building me-1"></i>ISP / ASN (MaxMind / DB-IP / IP2Location)
+                            </div>
+                            {% if inc.geo_isp %}<div style="font-size:.75rem;color:#a5b4fc;"><i class="fas fa-network-wired me-1"></i>{{ inc.geo_isp }}</div>{% endif %}
+                            {% if inc.geo_asn %}<div style="font-family:monospace;font-size:.72rem;color:#818cf8;margin-top:.25rem;">{{ inc.geo_asn }}</div>{% endif %}
+                            {% if not inc.geo_isp and not inc.geo_asn %}<div class="text-muted" style="font-size:.72rem;">Sem dados de provedor.</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-divider">
+                    <div style="font-size:.65rem;color:#6b7280;margin-bottom:.3rem;">
+                        <i class="fas fa-desktop me-1"></i>ID DE HARDWARE / DISPOSITIVO
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                        <span class="hw-chip"><i class="fas fa-desktop me-1"></i>{{ inc.os_name }}</span>
+                        {% if inc.hardware.cores %}<span class="hw-chip"><i class="fas fa-microchip me-1"></i>{{ inc.hardware.cores }} núcleos</span>{% endif %}
+                        {% if inc.hardware.memory %}<span class="hw-chip"><i class="fas fa-memory me-1"></i>{{ inc.hardware.memory }}</span>{% endif %}
+                        {% if inc.hardware.screen %}<span class="hw-chip"><i class="fas fa-expand me-1"></i>{{ inc.hardware.screen }}</span>{% endif %}
+                        {% if inc.hardware.timezone %}<span class="hw-chip"><i class="fas fa-clock me-1"></i>{{ inc.hardware.timezone }}</span>{% endif %}
+                        {% if inc.hardware.gpu and inc.hardware.gpu != '?' %}<span class="hw-chip"><i class="fas fa-gamepad me-1"></i>{{ inc.hardware.gpu }}</span>{% endif %}
+                    </div>
+                    {% if inc.ua %}
+                    <div style="font-size:.65rem;color:#4b5563;word-break:break-all;">
+                        <i class="fas fa-code me-1"></i>{{ inc.ua[:200] }}{% if inc.ua | length > 200 %}…{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if inc.canvas_fp or inc.webrtc_ip %}
+                <div class="section-divider">
+                    <div style="font-size:.65rem;color:#6b7280;margin-bottom:.35rem;">
+                        <i class="fas fa-fingerprint me-1"></i>ASSINATURA FORENSE ÚNICA
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        {% if inc.canvas_fp %}
+                        <div>
+                            <span style="font-size:.63rem;color:#6b7280;display:block;margin-bottom:2px;"><i class="fas fa-paint-brush me-1"></i>Canvas Fingerprint (GPU Hash)</span>
+                            <span class="fp-hash">{{ inc.canvas_fp }}</span>
+                        </div>
+                        {% endif %}
+                        {% if inc.webrtc_ip %}
+                        <div>
+                            <span style="font-size:.63rem;color:#6b7280;display:block;margin-bottom:2px;"><i class="fas fa-house-signal me-1"></i>IP Interno (WebRTC Leak)</span>
+                            <span class="rtc-ip">{{ inc.webrtc_ip }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Dossier export action -->
+                <div class="section-divider" style="margin-top:.85rem;padding-top:.6rem;">
+                    <button type="button" class="btn btn-outline-danger btn-sm"
+                            onclick="event.stopPropagation(); exportDossier(this.closest('.incident-card').dataset.ip)">
+                        <i class="fas fa-file-export me-1"></i>📥 Exportar Dossiê Policial
+                    </button>
+                    <span style="font-size:.62rem;color:#4b5563;margin-left:.6rem;">Exporta CSV forense completo para autoridades — IP: <code style="color:#f87171;">{{ inc.ip }}</code></span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-shield-check text-success" style="font-size:2.5rem;display:block;margin-bottom:.75rem;"></i>
+            <p class="text-muted mb-0">Nenhum incidente de força bruta registrado.</p>
+            <small class="text-muted">Tentativas de invasão por força bruta acima do limite aparecerão aqui com análise forense completa.</small>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    function switchSecTab(tab) {
+        const attacksActive = tab === 'attacks';
+        document.getElementById('secTabAttacks').classList.toggle('active', attacksActive);
+        document.getElementById('secTabForensics').classList.toggle('active', !attacksActive);
+        document.getElementById('secPaneAttacks').style.display = attacksActive ? 'block' : 'none';
+        document.getElementById('secPaneForensics').style.display = attacksActive ? 'none' : 'block';
+    }
+
+    /* ── Attack-row safe expand/collapse ────────────────────────────────────
+       Payload content is rendered by Jinja2 inside <pre><code> (server-side
+       HTML-escaped), so no user input ever touches a JS string literal.      */
+    function toggleAttackDetail(row) {
+        row.classList.toggle('open');
+    }
+
+    /* ── Dossier export ─────────────────────────────────────────────────────
+       IP is read from a data-ip attribute (HTML-decoded by the browser, never
+       injected into a JS string literal), then encodeURIComponent-wrapped
+       before being placed in the URL to handle any edge-case characters.      */
+    function exportDossier(ip) {
+        if (!ip) return;
+        window.location.href = '/admin/forensics/export-dossier/' + encodeURIComponent(ip);
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

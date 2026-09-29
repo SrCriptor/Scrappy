@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — Meu Perfil</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; }
+        .section-title { font-size:.95rem; font-weight:600; margin-bottom:1rem; padding-bottom:.5rem; border-bottom:1px solid #21262d; }
+        .role-badge-owner     { background: #111827; color: #f9fafb; }
+        .role-badge-admin     { background: #c0392b; color: #fff; }
+        .role-badge-moderator { background: #16a34a; color: #fff; }
+        .role-badge-helper    { background: #ea580c; color: #fff; }
+        .avatar-pick { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+        .av-opt { cursor:pointer; border-radius:10px; overflow:hidden; border:2px solid transparent; transition:.15s; position:relative; }
+        .av-opt:hover { border-color:#4d90fe; }
+        .av-opt.selected { border-color:#4d90fe; box-shadow:0 0 0 3px rgba(77,144,254,.3); }
+        .av-opt img { width:100%; display:block; }
+        .av-opt.av-locked { opacity:.38; cursor:not-allowed; }
+        .av-opt.av-locked::after {
+            content:'\f023'; font-family:'Font Awesome 6 Free'; font-weight:900;
+            position:absolute; bottom:5px; right:5px; font-size:.65rem;
+            color:#f9fafb; background:rgba(0,0,0,.7); border-radius:3px; padding:2px 4px;
+        }
+        .current-avatar-wrap { position:relative; display:inline-block; }
+        .current-avatar { width:90px; height:90px; border-radius:50%; object-fit:cover;
+                          border:3px solid #4d90fe; box-shadow:0 0 0 4px rgba(77,144,254,.2); }
+        .crown-badge { position:absolute; top:-14px; left:50%; transform:translateX(-50%); font-size:1.4rem; line-height:1; pointer-events:none; filter:drop-shadow(0 1px 4px rgba(0,0,0,.9)); }
+        .profile-bubble {
+            position:fixed; bottom:20px; right:20px; z-index:9999;
+            display:flex; align-items:center; gap:10px;
+            background:#161b22; border:1px solid #30363d;
+            border-radius:50px; padding:6px 14px 6px 6px;
+            box-shadow:0 4px 20px rgba(0,0,0,.5); cursor:pointer;
+        }
+        .profile-bubble .av { width:36px; height:36px; border-radius:50%; }
+        .profile-bubble .name { font-size:.82rem; font-weight:600; line-height:1; }
+        .profile-bubble .role-pill { font-size:.67rem; padding:1px 7px; border-radius:20px; color:#fff; margin-top:3px; display:inline-block; }
+    </style>
+</head>
+<body>
+
+<!-- Profile bubble -->
+<div class="profile-bubble" id="profileBubble">
+    <img src="/static/avatars/{{ admin.avatar }}.svg" class="av" />
+    <div>
+        <div class="name">{{ admin.display_name }}</div>
+        <span class="role-pill role-badge-{{ admin.role }}">{{ role_meta[admin.role].label }}</span>
+    </div>
+    <i class="fas fa-chevron-up ms-1 text-muted" style="font-size:.7rem;"></i>
+</div>
+<ul class="dropdown-menu dropdown-menu-end" id="profileMenu" style="min-width:180px;">
+    <li><a class="dropdown-item" href="/admin/"><i class="fas fa-home me-2"></i>Painel</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item text-danger" href="/admin/logout"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+</ul>
+
+<div class="container-fluid py-4 px-4" style="max-width:700px;">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0"><i class="fas fa-user-circle text-primary me-2"></i>Meu Perfil</h4>
+            <small class="text-muted">Altere seu avatar e senha</small>
+        </div>
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Painel
+        </a>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show py-2 mb-3">
+        <i class="fas fa-{{ 'check-circle' if flash_msg.type == 'success' else 'exclamation-triangle' }} me-1"></i>
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Current identity -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-id-badge me-2 text-info"></i>Identidade</div>
+        <div class="d-flex align-items-center gap-4">
+            <div class="current-avatar-wrap">
+                <img src="/static/avatars/{{ admin.avatar }}.svg" class="current-avatar" id="currentAvatar" />
+                {% if admin.crowned %}<span class="crown-badge">👑</span>{% endif %}
+            </div>
+            <div>
+                <div class="fw-bold fs-5">
+                    {{ admin.display_name }}
+                    {% if admin.crowned %}<span style="font-size:.75rem;color:#f59e0b;margin-left:6px;"><i class="fas fa-crown me-1"></i>Funcionário do Mês</span>{% endif %}
+                </div>
+                <div class="text-muted small mb-1">@{{ admin.username }}</div>
+                <span class="badge role-badge-{{ admin.role }} px-3 py-1">{{ role_meta[admin.role].label }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change avatar -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-image me-2 text-primary"></i>Alterar Avatar</div>
+        <form method="POST" action="/admin/profile/avatar">
+            <div class="d-flex gap-4 justify-content-center mb-3">
+                {% for av in role_avatars %}
+                <div class="text-center">
+                    <div class="av-opt {{ 'selected' if admin.avatar == av else '' }}"
+                         onclick="selectAv('{{ av }}', this)"
+                         style="width:72px; height:72px; margin:0 auto;">
+                        <img src="/static/avatars/{{ av }}.svg" alt="{{ av }}" style="width:100%;display:block;" />
+                    </div>
+                    <div class="text-muted mt-1" style="font-size:.72rem;">
+                        {% if loop.index == 1 %}<i class="fas fa-mars me-1"></i>Masculino{% else %}<i class="fas fa-venus me-1"></i>Feminino{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="avatar" id="avatarInput" value="{{ admin.avatar }}" />
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-save me-1"></i>Salvar Avatar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Change password -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-key me-2 text-warning"></i>Alterar Senha</div>
+        <p class="text-muted small">Após alterar a senha, você será redirecionado para o login.</p>
+        <form method="POST" action="/admin/profile/password">
+            <div class="mb-3">
+                <label class="form-label small text-muted">Senha atual</label>
+                <input type="password" name="current_password" class="form-control" required maxlength="128" placeholder="••••••••" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small text-muted">Nova senha</label>
+                <input type="password" name="new_password" class="form-control" required minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small text-muted">Confirmar nova senha</label>
+                <input type="password" name="confirm_password" class="form-control" required minlength="8" maxlength="128" placeholder="Repita a nova senha" />
+            </div>
+            <button type="submit" class="btn btn-warning btn-sm text-dark">
+                <i class="fas fa-key me-1"></i>Alterar Senha
+            </button>
+        </form>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function selectAv(avId, el) {
+        if (el.classList.contains('av-locked')) return;
+        document.querySelectorAll('.av-opt').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('avatarInput').value = avId;
+        document.getElementById('currentAvatar').src = '/static/avatars/' + avId + '.svg';
+    }
+
+    // Profile bubble dropdown
+    const bubble = document.getElementById('profileBubble');
+    const menu   = document.getElementById('profileMenu');
+    if (bubble && menu) {
+        document.addEventListener('click', e => {
+            if (bubble.contains(e.target)) {
+                const show = menu.style.display !== 'block';
+                menu.style.display = show ? 'block' : 'none';
+                if (show) {
+                    const rect = bubble.getBoundingClientRect();
+                    menu.style.cssText += `;position:fixed;bottom:${window.innerHeight - rect.top + 8}px;right:${window.innerWidth - rect.right}px;top:auto;`;
+                    menu.classList.add('show');
+                }
+            } else if (!menu.contains(e.target)) {
+                menu.style.display = 'none';
+                menu.classList.remove('show');
+            }
+        });
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

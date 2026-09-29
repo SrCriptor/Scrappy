@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — Desbloqueios de IP</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; }
+        .section-title { font-size:.95rem; font-weight:600; margin-bottom:1rem; padding-bottom:.5rem; border-bottom:1px solid #21262d; }
+        .req-row { background:#0d1117; border:1px solid #21262d; border-radius:8px; padding:.85rem 1rem; margin-bottom:.5rem; }
+        .req-row.pending  { border-left:3px solid #f59e0b; }
+        .req-row.approved { border-left:3px solid #22c55e; }
+        .req-row.denied   { border-left:3px solid #ef4444; }
+        .ip-tag {
+            font-family: monospace; font-size:.85rem; font-weight:700; color:#60a5fa;
+            cursor: help; text-decoration: underline dotted #60a5fa44;
+            transition: color .15s;
+        }
+        .ip-tag:hover { color: #93c5fd; }
+        .meta   { font-size:.7rem; color:#8b949e; word-break:break-all; }
+        .status-badge-pending  { background:#451a03; color:#fbbf24; }
+        .status-badge-approved { background:#14532d; color:#86efac; }
+        .status-badge-denied   { background:#450a0a; color:#fca5a5; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:900px;">
+
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0"><i class="fas fa-unlock text-warning me-2"></i>Desbloqueios de IP</h4>
+            <small class="text-muted">Solicitações de administradores bloqueados por tentativas de login</small>
+        </div>
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Painel
+        </a>
+    </div>
+
+    {% with f = session.pop('_admin_flash', None) %}
+    {% if f %}
+    <div class="alert alert-{{ f.type }} py-2 mb-3 alert-dismissible fade show">
+        {{ f.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Pending -->
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-hourglass-half text-warning me-2"></i>Aguardando Revisão</span>
+            {% if pending %}
+            <span class="badge bg-warning text-dark">{{ pending|length }}</span>
+            {% endif %}
+        </div>
+        {% if not pending %}
+        <p class="text-muted small mb-0"><i class="fas fa-check me-1"></i>Nenhuma solicitação pendente.</p>
+        {% endif %}
+        {% for r in pending %}
+        <div class="req-row pending">
+            <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                <div style="flex:1;min-width:0;">
+                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                        <span class="badge status-badge-pending">Pendente</span>
+                        <span class="ip-tag"
+                              data-bs-toggle="popover"
+                              data-bs-trigger="hover focus"
+                              data-bs-html="true"
+                              data-bs-placement="top"
+                              data-bs-content="{% if r.geo %}<div style='font-size:.72rem;line-height:1.6;'><i class='fas fa-map-marker-alt me-1 text-danger'></i><strong>Localização</strong><br>{{ r.geo | replace('|','<br><i class=&quot;fas fa-building me-1 text-warning&quot;></i>') }}<br>{% if r.ua %}<i class='fas fa-laptop me-1 text-info'></i><strong>Dispositivo</strong><br>{{ r.ua[:100] | replace('&quot;','') }}{% endif %}</div>{% else %}IP sem geolocalização disponível{% endif %}">{{ r.ip }}</span>
+                        <span class="text-muted" style="font-size:.7rem;">{{ r.ts | fmt_ts_short }}</span>
+                    </div>
+                    {% if r.attempted_username %}
+                    <div class="meta mt-1"><i class="fas fa-user-secret me-1 text-warning"></i>Usuário tentado: <strong>"{{ r.attempted_username }}"</strong></div>
+                    {% endif %}
+                    {% if r.geo %}
+                    <div class="meta"><i class="fas fa-map-marker-alt me-1 text-danger"></i>{{ r.geo }}</div>
+                    {% endif %}
+                    {% if r.ua %}
+                    <div class="meta mt-1"><i class="fas fa-laptop me-1"></i>{{ r.ua[:120] }}{% if r.ua|length > 120 %}…{% endif %}</div>
+                    {% endif %}
+                    {% if r.hardware_info %}
+                    {% set hw = r.hardware_info | fromjson %}
+                    <div class="meta mt-1" style="font-size:.68rem;color:#8b949e;">
+                        <i class="fas fa-microchip me-1"></i>
+                        {% if hw.cores %}{{ hw.cores }} núcleos{% endif %}{% if hw.memory %} · {{ hw.memory }} RAM{% endif %}{% if hw.gpu %} · {{ hw.gpu }}{% endif %}{% if hw.screen %} · {{ hw.screen }}{% endif %}{% if hw.timezone %} · {{ hw.timezone }}{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                    <form method="POST" action="/admin/unlock-requests/handle">
+                        <input type="hidden" name="req_id" value="{{ r.id }}" />
+                        <input type="hidden" name="action" value="approved" />
+                        <button type="submit" class="btn btn-success btn-sm">
+                            <i class="fas fa-check me-1"></i>Aprovar
+                        </button>
+                    </form>
+                    <form method="POST" action="/admin/unlock-requests/handle">
+                        <input type="hidden" name="req_id" value="{{ r.id }}" />
+                        <input type="hidden" name="action" value="denied" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-times me-1"></i>Negar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Approved -->
+    {% if approved %}
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-check-circle text-success me-2"></i>Aprovados Recentes</span>
+            {% if admin.role == 'owner' %}
+            <small class="text-muted" style="font-size:.7rem;"><i class="fas fa-trash me-1"></i>Apenas Owner pode apagar</small>
+            {% endif %}
+        </div>
+        {% for r in approved %}
+        <div class="req-row approved">
+            <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                <div style="flex:1;min-width:0;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <span class="badge status-badge-approved">Aprovado</span>
+                        <span class="ip-tag"
+                              data-bs-toggle="popover"
+                              data-bs-trigger="hover focus"
+                              data-bs-html="true"
+                              data-bs-placement="top"
+                              data-bs-content="{% if r.geo %}<div style='font-size:.72rem;line-height:1.6;'><i class='fas fa-map-marker-alt me-1 text-danger'></i><strong>Localização</strong><br>{{ r.geo | replace('|','<br><i class=&quot;fas fa-building me-1 text-warning&quot;></i>') }}<br>{% if r.ua %}<i class='fas fa-laptop me-1 text-info'></i><strong>Dispositivo</strong><br>{{ r.ua[:100] | replace('&quot;','') }}{% endif %}</div>{% else %}IP sem geolocalização disponível{% endif %}">{{ r.ip }}</span>
+                        <span class="text-muted" style="font-size:.7rem;">{{ r.ts | fmt_ts_short }}</span>
+                        {% if r.handled_by %}
+                        <span class="text-muted" style="font-size:.7rem;">por <strong>{{ r.handled_by }}</strong></span>
+                        {% endif %}
+                        {% if r.handled_at %}
+                        <span class="text-muted" style="font-size:.7rem;">em {{ r.handled_at | fmt_ts_short }}</span>
+                        {% endif %}
+                    </div>
+                    {% if r.geo %}<div class="meta"><i class="fas fa-map-marker-alt me-1"></i>{{ r.geo }}</div>{% endif %}
+                </div>
+                {% if admin.role == 'owner' %}
+                <div class="flex-shrink-0">
+                    <form method="POST" action="/admin/unlock-requests/delete">
+                        <input type="hidden" name="req_id" value="{{ r.id }}" />
+                        <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remover registro"
+                                onclick="return confirmFormSubmit(this.form, 'Remover este registro de aprovação?')">
+                            <i class="fas fa-trash" style="font-size:.75rem;"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Denied -->
+    {% if denied %}
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-times-circle text-danger me-2"></i>Negados Recentes</span>
+            {% if admin.role == 'owner' %}
+            <small class="text-muted" style="font-size:.7rem;"><i class="fas fa-trash me-1"></i>Apenas Owner pode apagar</small>
+            {% endif %}
+        </div>
+        {% for r in denied %}
+        <div class="req-row denied">
+            <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                <div style="flex:1;min-width:0;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <span class="badge status-badge-denied">Negado</span>
+                        <span class="ip-tag"
+                              data-bs-toggle="popover"
+                              data-bs-trigger="hover focus"
+                              data-bs-html="true"
+                              data-bs-placement="top"
+                              data-bs-content="{% if r.geo %}<div style='font-size:.72rem;line-height:1.6;'><i class='fas fa-map-marker-alt me-1 text-danger'></i><strong>Localização</strong><br>{{ r.geo | replace('|','<br><i class=&quot;fas fa-building me-1 text-warning&quot;></i>') }}<br>{% if r.ua %}<i class='fas fa-laptop me-1 text-info'></i><strong>Dispositivo</strong><br>{{ r.ua[:100] | replace('&quot;','') }}{% endif %}</div>{% else %}IP sem geolocalização disponível{% endif %}">{{ r.ip }}</span>
+                        <span class="text-muted" style="font-size:.7rem;">{{ r.ts | fmt_ts_short }}</span>
+                        {% if r.handled_by %}
+                        <span class="text-muted" style="font-size:.7rem;">por <strong>{{ r.handled_by }}</strong></span>
+                        {% endif %}
+                        {% if r.handled_at %}
+                        <span class="text-muted" style="font-size:.7rem;">em {{ r.handled_at | fmt_ts_short }}</span>
+                        {% endif %}
+                    </div>
+                    {% if r.geo %}<div class="meta"><i class="fas fa-map-marker-alt me-1"></i>{{ r.geo }}</div>{% endif %}
+                </div>
+                {% if admin.role == 'owner' %}
+                <div class="flex-shrink-0">
+                    <form method="POST" action="/admin/unlock-requests/delete">
+                        <input type="hidden" name="req_id" value="{{ r.id }}" />
+                        <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remover registro"
+                                onclick="return confirmFormSubmit(this.form, 'Remover este registro de negação?')">
+                            <i class="fas fa-trash" style="font-size:.75rem;"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+        new bootstrap.Popover(el, {
+            customClass: 'ip-info-popover',
+            sanitize: false,
+        });
+    });
+</script>
+<style>
+.ip-info-popover .popover-body {
+    background: #0d1117;
+    color: #e6edf3;
+    border-radius: 8px;
+    font-size: .72rem;
+    max-width: 280px;
+    padding: .6rem .8rem;
+}
+.ip-info-popover .popover {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+}
+.ip-info-popover .popover-arrow::after { border-top-color: #30363d !important; }
+</style>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

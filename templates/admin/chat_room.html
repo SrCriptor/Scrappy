@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conversa — {{ room.p1_name }} ↔ {{ room.p2_name }}</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background:#0d1117; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+        .chat-header { background:#161b22; border-bottom:1px solid #30363d; padding:.7rem 1.2rem; flex-shrink:0; display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
+        .chat-area { flex:1; overflow-y:auto; padding:1rem 1.2rem; display:flex; flex-direction:column; gap:.45rem; }
+        .chat-footer { background:#161b22; border-top:1px solid #30363d; padding:.75rem 1.2rem; flex-shrink:0; }
+        .msg-bubble { display:flex; align-items:flex-end; gap:.5rem; max-width:75%; }
+        .msg-bubble.mine { flex-direction:row-reverse; align-self:flex-end; }
+        .msg-bubble.other { align-self:flex-start; }
+        .avatar-xs { width:28px; height:28px; border-radius:50%; background:#21262d; display:flex; align-items:center; justify-content:center; font-size:.78rem; font-weight:600; flex-shrink:0; }
+        .bubble-content { padding:.5rem .85rem; border-radius:14px; font-size:.84rem; max-width:100%; word-break:break-word; }
+        .mine .bubble-content  { background:#1d4ed8; border-bottom-right-radius:4px; }
+        .other .bubble-content { background:#21262d; border:1px solid #30363d; border-bottom-left-radius:4px; }
+        .bubble-meta { font-size:.65rem; color:#6b7280; margin-bottom:.15rem; }
+        .mine .bubble-meta  { text-align:right; }
+        .other .bubble-meta { text-align:left; }
+        .system-msg { text-align:center; font-size:.72rem; color:#6b7280; margin:.4rem 0; padding:.3rem .8rem; background:#161b22; border-radius:99px; align-self:center; border:1px solid #21262d; }
+        .role-owner { color:#dc3545; }
+        .role-admin { color:#6ea8fe; }
+        .role-moderator { color:#ffc107; }
+        .role-helper { color:#6c757d; }
+        .closed-banner { background:#451a03; border:1px solid #92400e; border-radius:8px; padding:.65rem 1rem; margin:.5rem 0; text-align:center; color:#fbbf24; font-size:.83rem; }
+        .observer-notice { background:#1a0a2e; border:1px solid #7c3aed44; border-radius:8px; padding:.55rem 1rem; margin:.5rem 0; text-align:center; color:#a78bfa; font-size:.78rem; }
+        .msg-wrapper { display:flex; flex-direction:column; }
+        .av-letter { width:28px; height:28px; border-radius:50%; background:#21262d; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; flex-shrink:0; }
+        .av-wrap { position:relative; flex-shrink:0; }
+        .av-crown { position:absolute; top:-9px; left:50%; transform:translateX(-50%); font-size:.75rem; line-height:1; pointer-events:none; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="chat-header">
+    <a href="/admin/chat" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
+
+    <div class="d-flex align-items-center gap-1" style="flex:1;min-width:0;">
+        <i class="fas fa-comments text-primary" style="font-size:.9rem;"></i>
+        <strong style="font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            {{ room.p1_name }}
+            <span style="color:#8b949e;font-weight:400;">↔</span>
+            {{ room.p2_name }}
+        </strong>
+        {% if room.closed %}
+        <span class="badge bg-danger ms-1" style="font-size:.62rem;">🔴 Encerrada</span>
+        {% else %}
+        <span class="badge bg-success ms-1" style="font-size:.62rem;">● Aberta</span>
+        {% endif %}
+    </div>
+
+    <div class="d-flex gap-2 flex-shrink-0">
+        {% if admin.role == 'owner' %}
+        <a href="/admin/chat/room/{{ room.id }}/transcript"
+           class="btn btn-outline-secondary btn-sm"
+           title="Exportar transcript HTML">
+            <i class="fas fa-file-export me-1"></i>Transcript
+        </a>
+        {% endif %}
+        {% if is_participant and not room.closed %}
+        <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#closeRoomModal">
+            <i class="fas fa-times me-1"></i>Encerrar
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Chat area -->
+<div class="chat-area" id="chatArea">
+
+
+    {% if room.closed %}
+    <div class="closed-banner">
+        <i class="fas fa-lock me-1"></i>Esta conversa foi encerrada em {{ room.closed_at }} por <strong>{{ room.closed_by }}</strong>
+    </div>
+    {% endif %}
+
+    {% for m in messages %}
+    {% if m.admin_id == 0 %}
+    <div class="system-msg" data-id="{{ m.id }}">{{ m.message }}</div>
+    {% else %}
+    {% set is_mine = m.admin_id == admin.id %}
+    <div class="msg-bubble {{ 'mine' if is_mine else 'other' }}" data-id="{{ m.id }}">
+        <div class="av-wrap">
+            <div class="av-letter">{{ m.admin_name[:1] | upper }}</div>
+            {% if m.admin_id == crowned_id %}<span class="av-crown">👑</span>{% endif %}
+        </div>
+        <div class="msg-wrapper">
+            <div class="bubble-meta">
+                {% if not is_mine %}
+                <span class="role-{{ m.role }}">{{ role_meta[m.role].label }}</span>
+                <strong>{{ m.admin_name }}</strong> ·
+                {% endif %}
+                <span>{{ m.ts | fmt_ts }}</span>
+            </div>
+            <div class="bubble-content">{{ m.message }}</div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+</div>
+
+<!-- Footer input (only if participant and room open) -->
+{% if is_participant and not room.closed %}
+<div class="chat-footer">
+    <div class="d-flex gap-2 align-items-center">
+        <input type="text" id="chatInput" class="form-control" placeholder="Mensagem para {{ partner_name }}…"
+               maxlength="500" autocomplete="off" />
+        <button class="btn btn-primary px-3" id="sendBtn" onclick="sendMsg()">
+            <i class="fas fa-paper-plane"></i>
+        </button>
+    </div>
+    <div class="text-muted mt-1" style="font-size:.65rem;">
+        <i class="fas fa-lock me-1"></i>Conversa privada e criptografada.
+    </div>
+</div>
+{% elif is_participant and room.closed %}
+<div class="chat-footer">
+    <div class="text-center text-muted" style="font-size:.82rem;">
+        <i class="fas fa-lock me-1"></i>Esta conversa foi encerrada. Não é possível enviar novas mensagens.
+    </div>
+</div>
+{% else %}
+<div class="chat-footer">
+    <div class="text-center" style="font-size:.82rem;color:#a78bfa;">
+        <i class="fas fa-eye me-1"></i>Modo observador — apenas leitura.
+    </div>
+</div>
+{% endif %}
+
+<!-- Close room confirmation modal -->
+{% if is_participant and not room.closed %}
+<div class="modal fade" id="closeRoomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-0">
+                <h6 class="modal-title text-danger"><i class="fas fa-times-circle me-2"></i>Encerrar conversa</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.85rem;color:#8b949e;">
+                Isso encerrará permanentemente o chat. Ninguém poderá mais enviar mensagens nesta sala.
+                O transcript continuará disponível para consulta.
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <form method="post" action="/admin/chat/room/{{ room.id }}/close" style="display:inline;">
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="fas fa-lock me-1"></i>Encerrar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const chatArea  = document.getElementById('chatArea');
+    const chatInput = document.getElementById('chatInput');
+    const roomId    = {{ room.id }};
+    const isParticipant = {{ 'true' if is_participant else 'false' }};
+    const roomClosed    = {{ 'true' if room.closed else 'false' }};
+
+    function scrollBottom() {
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function getLastId() {
+        const els = chatArea.querySelectorAll('[data-id]');
+        if (!els.length) return 0;
+        return parseInt(els[els.length - 1].dataset.id);
+    }
+
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function appendMessage(m) {
+        let el;
+        if (m.system) {
+            el = document.createElement('div');
+            el.className = 'system-msg';
+            el.dataset.id = m.id;
+            el.textContent = m.msg;
+        } else {
+            el = document.createElement('div');
+            el.className = 'msg-bubble ' + (m.mine ? 'mine' : 'other');
+            el.dataset.id = m.id;
+            const letter = (m.name || '?')[0].toUpperCase();
+            const meta   = m.mine
+                ? `<span>${m.ts}</span>`
+                : `<span style="font-weight:600;">${escHtml(m.name)}</span> · <span>${m.ts}</span>`;
+            el.innerHTML = `
+                <div class="av-letter">${letter}</div>
+                <div class="msg-wrapper">
+                    <div class="bubble-meta">${meta}</div>
+                    <div class="bubble-content">${escHtml(m.msg)}</div>
+                </div>`;
+        }
+        chatArea.appendChild(el);
+    }
+
+    async function pollMessages() {
+        try {
+            const since = getLastId();
+            const r = await fetch(`/admin/chat/room/${roomId}/api?since=${since}`);
+            const msgs = await r.json();
+            const wasBottom = chatArea.scrollHeight - chatArea.scrollTop <= chatArea.clientHeight + 50;
+            msgs.forEach(m => appendMessage(m));
+            if (msgs.length && wasBottom) scrollBottom();
+        } catch {}
+    }
+
+    async function sendMsg() {
+        if (!isParticipant || roomClosed) return;
+        const msg = chatInput.value.trim();
+        if (!msg) return;
+        chatInput.value = '';
+        chatInput.disabled = true;
+        const sendBtn = document.getElementById('sendBtn');
+        if (sendBtn) sendBtn.disabled = true;
+        try {
+            await fetch(`/admin/chat/room/${roomId}/send`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: msg})
+            });
+            await pollMessages();
+        } catch {}
+        chatInput.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        chatInput.focus();
+    }
+
+    if (chatInput) {
+        chatInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') sendMsg();
+        });
+    }
+
+    scrollBottom();
+
+    if (!roomClosed) {
+        setInterval(pollMessages, 3000);
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

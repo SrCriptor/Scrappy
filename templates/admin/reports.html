@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relatórios — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+        .report-row { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: .9rem 1rem; margin-bottom: .5rem; }
+        .report-row.resolved { opacity: .55; }
+        .role-badge-owner     { background: #111827; color: #f9fafb; }
+        .role-badge-admin     { background: #c0392b; color: #fff; }
+        .role-badge-moderator { background: #16a34a; color: #fff; }
+        .role-badge-helper    { background: #ea580c; color: #fff; }
+        .to-badge { background: #1a2f1a; color: #4ade80; border: 1px solid #166534; font-size: .7rem; padding: 1px 8px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:900px;">
+    <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Voltar</a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-inbox text-success me-2"></i>Relatórios</h4>
+            <small class="text-muted">Envie ou visualize relatórios para hierarquia superior</small>
+        </div>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show" role="alert">
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Send report form (not for owner) -->
+    {% if admin.role != 'owner' %}
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-paper-plane text-info me-2"></i>Enviar Relatório</div>
+        {% set to_map = {'moderator': 'admin', 'admin': 'owner'} %}
+        {% set to_label = {'moderator': 'Admin', 'admin': 'Owner'} %}
+        <form method="post" action="/admin/reports">
+            <div class="mb-3">
+                <label class="form-label text-muted small">Destinatário</label>
+                {% if admin.role == 'helper' %}
+                <select name="to_role" class="form-select form-select-sm" style="max-width:200px;">
+                    <option value="moderator">Moderador</option>
+                    <option value="admin">Admin</option>
+                </select>
+                {% else %}
+                <div class="form-control-plaintext">
+                    <span class="to-badge"><i class="fas fa-arrow-up me-1"></i>{{ to_label[admin.role] }}</span>
+                </div>
+                <input type="hidden" name="to_role" value="{{ to_map[admin.role] }}" />
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small">Mensagem <span class="text-danger">*</span></label>
+                <textarea class="form-control" name="message" rows="4" maxlength="1000"
+                          placeholder="Descreva a situação ou solicitação..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-success btn-sm">
+                <i class="fas fa-paper-plane me-1"></i>Enviar Relatório
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Report inbox -->
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-inbox me-2"></i>Caixa de Entrada</span>
+            <span class="badge bg-success">{{ reports | selectattr('resolved', 'equalto', 0) | list | length }} pendentes</span>
+        </div>
+
+        {% set pending = reports | selectattr('resolved', 'equalto', 0) | list %}
+        {% set resolved = reports | selectattr('resolved', 'equalto', 1) | list %}
+
+        {% if pending %}
+        <h6 class="text-muted small mb-2"><i class="fas fa-circle text-warning me-1" style="font-size:.55rem;vertical-align:middle;"></i>Pendentes ({{ pending|length }})</h6>
+        {% for r in pending %}
+        <div class="report-row">
+            <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge role-badge-{{ r.from_role }}" style="font-size:.65rem;">{{ role_meta[r.from_role].label }}</span>
+                    <span class="fw-semibold" style="font-size:.85rem;">{{ r.from_name }}</span>
+                    <span class="to-badge"><i class="fas fa-arrow-right me-1"></i>{{ r.to_role | capitalize }}</span>
+                </div>
+                <span class="text-muted" style="font-size:.72rem;">{{ r.ts | fmt_ts }}</span>
+            </div>
+            <div class="mb-2" style="font-size:.85rem; color:#e6edf3;">{{ r.message }}</div>
+            <div class="d-flex gap-2 flex-wrap">
+            {% if admin.role in ('owner', 'admin', 'moderator') and r.from_id != admin.id %}
+            <form method="post" action="/admin/reports/resolve" class="d-inline">
+                <input type="hidden" name="report_id" value="{{ r.id }}" />
+                <button type="submit" class="btn btn-outline-success btn-sm" style="font-size:.72rem;">
+                    <i class="fas fa-check me-1"></i>Marcar como resolvido
+                </button>
+            </form>
+            {% endif %}
+            {% if admin.role == 'owner' %}
+            <form method="post" action="/admin/reports/delete" class="d-inline"
+                  onsubmit="return confirmFormSubmit(this, 'Excluir este relatório permanentemente?')">
+                <input type="hidden" name="report_id" value="{{ r.id }}" />
+                <button type="submit" class="btn btn-outline-danger btn-sm" style="font-size:.72rem;">
+                    <i class="fas fa-trash me-1"></i>Excluir
+                </button>
+            </form>
+            {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if resolved %}
+        <h6 class="text-muted small mb-2 mt-3"><i class="fas fa-check-circle text-success me-1" style="font-size:.55rem;vertical-align:middle;"></i>Resolvidos ({{ resolved|length }})</h6>
+        {% for r in resolved %}
+        <div class="report-row resolved">
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                <span class="badge role-badge-{{ r.from_role }}" style="font-size:.65rem;">{{ role_meta[r.from_role].label }}</span>
+                <span style="font-size:.83rem;">{{ r.from_name }}</span>
+                <span class="text-muted" style="font-size:.72rem;">{{ r.ts | fmt_ts }}</span>
+                <span class="badge bg-success" style="font-size:.65rem;"><i class="fas fa-check me-1"></i>Resolvido por {{ r.resolved_by }}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="text-muted" style="font-size:.8rem;flex:1;">{{ r.message[:120] }}{% if r.message|length > 120 %}…{% endif %}</div>
+                {% if admin.role == 'owner' %}
+                <form method="post" action="/admin/reports/delete" class="d-inline"
+                      onsubmit="return confirmFormSubmit(this, 'Excluir este relatório permanentemente?')">
+                    <input type="hidden" name="report_id" value="{{ r.id }}" />
+                    <button type="submit" class="btn btn-outline-danger btn-sm py-0" style="font-size:.68rem;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if not reports %}
+        <div class="text-center py-4">
+            <i class="fas fa-inbox text-muted" style="font-size:2rem; margin-bottom:.5rem; display:block;"></i>
+            <p class="text-muted small mb-0">Nenhum relatório ainda.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

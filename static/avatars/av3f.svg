@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="h3f" cx="36%" cy="28%" r="65%" fx="36%" fy="28%">
+      <stop offset="0%" stop-color="#f57070"/>
+      <stop offset="55%" stop-color="#cc2020"/>
+      <stop offset="100%" stop-color="#880000"/>
+    </radialGradient>
+    <radialGradient id="b3f" cx="38%" cy="20%" r="72%" fx="38%" fy="20%">
+      <stop offset="0%" stop-color="#e05050"/>
+      <stop offset="55%" stop-color="#aa1010"/>
+      <stop offset="100%" stop-color="#660000"/>
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="16" fill="#140505"/>
+  <ellipse cx="50" cy="91" rx="27" ry="5" fill="rgba(0,0,0,0.45)"/>
+  <ellipse cx="50" cy="74" rx="32" ry="22" fill="url(#b3f)"/>
+  <!-- Left hair strand -->
+  <path d="M28,22 Q15,35 15,55 Q15,68 20,77 Q25,82 30,79 Q27,67 28,53 Q29,40 35,28 Z" fill="#880000"/>
+  <!-- Right hair strand -->
+  <path d="M72,22 Q85,35 85,55 Q85,68 80,77 Q75,82 70,79 Q73,67 72,53 Q71,40 65,28 Z" fill="#880000"/>
+  <ellipse cx="52" cy="43" rx="20" ry="5" fill="rgba(0,0,0,0.2)"/>
+  <circle cx="50" cy="39" r="22" fill="url(#h3f)"/>
+  <!-- Top hair cap -->
+  <path d="M28,22 Q38,10 50,13 Q62,10 72,22 Q70,30 65,27 Q58,19 50,18 Q42,19 35,27 Z" fill="#880000"/>
+  <!-- Hair highlight -->
+  <path d="M41,13 Q50,9 59,13 Q54,16 50,16 Q46,16 41,13 Z" fill="#cc2020"/>
+  <ellipse cx="42" cy="31" rx="9" ry="7" fill="rgba(255,255,255,0.45)"/>
+  <circle cx="38.5" cy="28" r="3.5" fill="rgba(255,255,255,0.5)"/>
+  <!-- Shield+Star badge -->
+  <g transform="translate(57,60)">
+    <circle cx="15" cy="15" r="15" fill="#660000"/>
+    <path d="M15,2 L26,6 L26,14 Q26,23 15,28 Q4,23 4,14 L4,6 Z" fill="#cc2020"/>
+    <polygon points="15,7 17,12.5 23,12.5 18.5,15.8 20,21 15,17.8 10,21 11.5,15.8 7,12.5 13,12.5" fill="#ffd700"/>
+  </g>
+</svg>

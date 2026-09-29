@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webhooks Discord — Painel Admin</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <style>
+        body { background:#0d1117; color:#e6edf3; font-family:'Segoe UI',sans-serif; }
+
+        .page-header {
+            background: linear-gradient(135deg, #1a1f2e 0%, #161b22 100%);
+            border-bottom: 1px solid #21262d;
+            padding: 1.25rem 2rem;
+        }
+        .discord-icon { color:#5865f2; }
+
+        .wh-card {
+            background:#161b22;
+            border:1px solid #21262d;
+            border-radius:12px;
+            padding:1.25rem 1.5rem;
+            margin-bottom:1rem;
+            transition: border-color .2s;
+        }
+        .wh-card:hover { border-color:#30363d; }
+        .wh-card.disabled-wh { opacity:.55; }
+
+        .wh-name {
+            font-size:1rem; font-weight:700; color:#e6edf3;
+        }
+        .wh-url {
+            font-size:.72rem; color:#8b949e; word-break:break-all;
+            font-family:monospace;
+            background:#0d1117; border-radius:6px; padding:4px 8px;
+            border:1px solid #21262d; margin-top:.4rem;
+        }
+
+        .event-chip {
+            display:inline-block; font-size:.65rem; font-weight:600;
+            padding:2px 9px; border-radius:20px; margin:2px;
+            border:1px solid transparent;
+        }
+        .chip-admin_login    { background:#0d2a1c; color:#4ade80; border-color:#166534; }
+        .chip-admin_logout   { background:#1c1c1c; color:#9ca3af; border-color:#374151; }
+        .chip-brute_force    { background:#2a0d0d; color:#f87171; border-color:#7f1d1d; }
+        .chip-admin_action   { background:#0d1a2a; color:#60a5fa; border-color:#1e3a5f; }
+        .chip-payment        { background:#1e0d2a; color:#c084fc; border-color:#6b21a8; }
+        .chip-maintenance    { background:#2a1e0d; color:#fbbf24; border-color:#78350f; }
+        .chip-gateway_backup { background:#0d2a27; color:#2dd4bf; border-color:#115e59; }
+
+        .toggle-pill {
+            display:inline-flex; align-items:center; gap:6px;
+            font-size:.72rem; padding:3px 10px; border-radius:20px;
+            font-weight:600; cursor:pointer;
+        }
+        .toggle-pill.on  { background:#0d2a1c; color:#4ade80; border:1px solid #166534; }
+        .toggle-pill.off { background:#2a1212; color:#f87171; border:1px solid #7f1d1d; }
+
+        .btn-discord {
+            background:#5865f2; border:none; color:#fff; font-weight:600;
+            border-radius:8px; padding:8px 20px; font-size:.85rem;
+        }
+        .btn-discord:hover { background:#4752c4; color:#fff; }
+
+        .add-card {
+            background:#0d1117;
+            border:2px dashed #21262d;
+            border-radius:12px;
+            padding:2rem;
+            text-align:center;
+            cursor:pointer;
+            transition: border-color .2s, background .2s;
+        }
+        .add-card:hover { border-color:#5865f2; background:#1a1f2e; }
+
+        .section-label {
+            font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;
+            color:#8b949e; font-weight:600; margin-bottom:.6rem;
+        }
+
+        .event-group {
+            background:#0d1117;
+            border:1px solid #21262d;
+            border-radius:8px;
+            padding:.85rem 1rem;
+            margin-bottom:.6rem;
+        }
+        .event-group-title {
+            font-size:.72rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:.06em; margin-bottom:.6rem;
+        }
+
+        .event-check-row {
+            display:flex; align-items:flex-start; gap:.75rem; margin-bottom:.4rem;
+        }
+        .event-check-row input[type=checkbox] {
+            width:15px; height:15px; margin-top:2px; cursor:pointer;
+            accent-color:#5865f2;
+        }
+        .event-check-label { font-size:.82rem; color:#c9d1d9; cursor:pointer; }
+        .event-check-desc  { font-size:.69rem; color:#8b949e; margin-top:1px; }
+
+        .modal-content { background:#161b22; border:1px solid #30363d; color:#e6edf3; }
+        .modal-header  { border-bottom:1px solid #21262d; }
+        .modal-footer  { border-top:1px solid #21262d; }
+        .form-control, .form-select {
+            background:#0d1117; border:1px solid #30363d; color:#e6edf3;
+        }
+        .form-control:focus, .form-select:focus {
+            background:#0d1117; border-color:#5865f2; color:#e6edf3;
+            box-shadow:0 0 0 .2rem rgba(88,101,242,.25);
+        }
+        .form-control::placeholder { color:#4d5566; }
+
+        .test-btn {
+            background:#1a2a1a; border:1px solid #166534; color:#4ade80;
+            border-radius:6px; padding:4px 12px; font-size:.75rem; cursor:pointer;
+            transition: background .15s;
+        }
+        .test-btn:hover { background:#0d2a1c; }
+        .test-btn:disabled { opacity:.5; cursor:default; }
+
+        .back-btn {
+            color:#8b949e; text-decoration:none; font-size:.82rem;
+            display:inline-flex; align-items:center; gap:6px;
+        }
+        .back-btn:hover { color:#e6edf3; }
+
+        .empty-state { text-align:center; padding:3rem 1rem; color:#8b949e; }
+        .empty-state i { font-size:3rem; margin-bottom:1rem; color:#21262d; }
+
+        .alert-flash {
+            border-radius:8px; font-size:.85rem;
+            border:none; margin-bottom:1.25rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-3">
+        <a href="/admin/" class="back-btn"><i class="fas fa-arrow-left"></i>Voltar</a>
+        <div>
+            <h5 class="mb-0 d-flex align-items-center gap-2">
+                <i class="fab fa-discord discord-icon"></i>
+                Webhooks Discord
+            </h5>
+            <div style="font-size:.72rem;color:#8b949e;">Notificações em tempo real para o seu servidor Discord</div>
+        </div>
+    </div>
+</div>
+
+{% set event_groups = [
+    ('🔒 Segurança',    'danger',  ['brute_force', 'admin_login', 'admin_logout']),
+    ('⚙️ Equipe',       'primary', ['admin_action']),
+    ('💳 Pagamentos',   'success', ['payment']),
+    ('🔧 Sistema',      'warning', ['maintenance', 'gateway_backup']),
+] %}
+
+<div class="container-fluid py-4 px-4" style="max-width:960px;">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}{% endwith %}
+    {% if session.get('_admin_flash') %}
+    {% set fl = session.pop('_admin_flash') %}
+    <div class="alert alert-{{ fl.type }} alert-flash alert-dismissible fade show">
+        {{ fl.text }}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Info bar -->
+    <div class="d-flex gap-2 align-items-center mb-4 p-3"
+         style="background:#1a1f2e;border:1px solid #21262d;border-radius:10px;font-size:.8rem;color:#8b949e;">
+        <i class="fab fa-discord discord-icon" style="font-size:1.1rem;"></i>
+        <span>Configure webhooks para receber notificações automáticas no seu servidor Discord.
+        Cada webhook pode monitorar eventos diferentes — crie múltiplos para organizar em canais separados.</span>
+    </div>
+
+    {% if not webhooks %}
+    <div class="empty-state">
+        <i class="fab fa-discord"></i>
+        <div style="font-size:1rem;font-weight:600;color:#c9d1d9;margin-bottom:.5rem;">Nenhum webhook configurado</div>
+        <div style="font-size:.82rem;">Clique em <strong>Novo Webhook</strong> para começar a receber notificações no Discord.</div>
+    </div>
+    {% else %}
+
+    <div class="section-label"><i class="fas fa-link me-1"></i>{{ webhooks|length }} webhook(s) configurado(s)</div>
+
+    {% for wh in webhooks %}
+    <div class="wh-card {% if not wh.enabled %}disabled-wh{% endif %}" id="whCard{{ wh.id }}">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+            <div style="flex:1;min-width:0;">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="wh-name">
+                        <i class="fab fa-discord discord-icon me-1"></i>{{ wh.name }}
+                    </span>
+                    <span class="toggle-pill {% if wh.enabled %}on{% else %}off{% endif %}"
+                          id="pill{{ wh.id }}"
+                          onclick="toggleWebhook({{ wh.id }})"
+                          title="Clique para {% if wh.enabled %}desativar{% else %}ativar{% endif %}">
+                        <i class="fas fa-circle" style="font-size:.45rem;"></i>
+                        <span id="pillTxt{{ wh.id }}">{% if wh.enabled %}Ativo{% else %}Inativo{% endif %}</span>
+                    </span>
+                </div>
+                <div class="wh-url">
+                    {{ wh.url[:60] }}{% if wh.url|length > 60 %}…{% endif %}
+                </div>
+                <div class="mt-2">
+                    {% for ev in wh.events_list %}
+                    {% if ev in all_events %}
+                    <span class="event-chip chip-{{ ev }}">{{ all_events[ev].label }}</span>
+                    {% endif %}
+                    {% else %}
+                    <span style="font-size:.72rem;color:#8b949e;"><i class="fas fa-circle-exclamation me-1"></i>Nenhum evento selecionado</span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="d-flex gap-2 align-items-center flex-shrink-0 mt-1">
+                <button class="test-btn" onclick="testWebhook({{ wh.id }}, '{{ wh.url | e }}')"
+                        id="testBtn{{ wh.id }}" title="Enviar mensagem de teste">
+                    <i class="fas fa-paper-plane me-1"></i>Testar
+                </button>
+                <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                        onclick="openEditModal({{ wh.id }})"
+                        title="Editar">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm py-0 px-2"
+                        onclick="deleteWebhook({{ wh.id }}, '{{ wh.name | e }}')"
+                        title="Excluir">
+                    <i class="fas fa-trash-can"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Add card -->
+    <div class="add-card mt-3" data-bs-toggle="modal" data-bs-target="#addModal">
+        <i class="fab fa-discord discord-icon" style="font-size:1.5rem;margin-bottom:.5rem;"></i>
+        <div style="font-size:.85rem;color:#8b949e;">Adicionar novo webhook</div>
+    </div>
+
+    <!-- Event reference -->
+    <div class="mt-4">
+        <div class="section-label"><i class="fas fa-list me-1"></i>Eventos disponíveis</div>
+        <div class="row g-2">
+            {% for grp_name, grp_color, grp_events in event_groups %}
+            <div class="col-md-6">
+                <div class="event-group">
+                    <div class="event-group-title" style="color:#8b949e;">{{ grp_name }}</div>
+                    {% for ev in grp_events %}
+                    {% if ev in all_events %}
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                        <span class="event-chip chip-{{ ev }}">{{ all_events[ev].label }}</span>
+                        <span style="font-size:.7rem;color:#8b949e;">
+                            {% if ev == 'admin_login'    %}Login bem-sucedido com IP e geolocalização{% endif %}
+                            {% if ev == 'admin_logout'   %}Logout de qualquer administrador{% endif %}
+                            {% if ev == 'brute_force'    %}IP bloqueado após tentativas falhas{% endif %}
+                            {% if ev == 'admin_action'   %}Toda ação no painel (auditoria){% endif %}
+                            {% if ev == 'payment'        %}Pagamentos e eventos de gateway{% endif %}
+                            {% if ev == 'maintenance'    %}Ativação/desativação de manutenção{% endif %}
+                            {% if ev == 'gateway_backup' %}Criação/restauração de backups{% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══ ADD MODAL ═══ -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="fab fa-discord discord-icon me-2"></i>Novo Webhook Discord</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/admin/webhooks/add">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nome do webhook <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required maxlength="80"
+                               placeholder="Ex: #segurança-alerts, #ações-equipe" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">URL do webhook Discord <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-2">
+                            <input type="url" name="url" id="addUrl" class="form-control" required maxlength="500"
+                                   placeholder="https://discord.com/api/webhooks/..." />
+                            <button type="button" class="test-btn text-nowrap" onclick="testUrl('addUrl', this)">
+                                <i class="fas fa-paper-plane me-1"></i>Testar
+                            </button>
+                        </div>
+                        <div class="mt-1" style="font-size:.7rem;color:#8b949e;">
+                            Copie a URL do webhook no Discord: canal → Editar → Integrações → Webhooks
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="form-label small text-muted mb-0">Eventos a monitorar</label>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                    style="font-size:.72rem;" onclick="toggleAllEvents('add')">
+                                <i class="fas fa-check-double me-1"></i><span id="addSelectAllTxt">Selecionar tudo</span>
+                            </button>
+                        </div>
+                        <div class="row g-2">
+                            {% for grp_name, grp_color, grp_events in event_groups %}
+                            <div class="col-md-6">
+                                <div class="event-group">
+                                    <div class="event-group-title text-{{ grp_color }}">{{ grp_name }}</div>
+                                    {% for ev in grp_events %}
+                                    {% if ev in all_events %}
+                                    <div class="event-check-row">
+                                        <input type="checkbox" name="events" value="{{ ev }}" id="add_{{ ev }}" class="add-event-cb" />
+                                        <label for="add_{{ ev }}">
+                                            <div class="event-check-label">{{ all_events[ev].label }}</div>
+                                            <div class="event-check-desc">
+                                                {% if ev == 'admin_login'    %}Login com IP + geolocalização{% endif %}
+                                                {% if ev == 'admin_logout'   %}Logout de qualquer admin{% endif %}
+                                                {% if ev == 'brute_force'    %}IP bloqueado por brute force{% endif %}
+                                                {% if ev == 'admin_action'   %}Todas as ações de auditoria{% endif %}
+                                                {% if ev == 'payment'        %}Eventos de pagamento/gateway{% endif %}
+                                                {% if ev == 'maintenance'    %}Toggle de modo manutenção{% endif %}
+                                                {% if ev == 'gateway_backup' %}Backup/restauração do gateway{% endif %}
+                                            </div>
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn-discord">
+                        <i class="fas fa-plus me-1"></i>Criar Webhook
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ EDIT MODAL ═══ -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="fas fa-pen text-warning me-2"></i>Editar Webhook</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/admin/webhooks/update">
+                <input type="hidden" name="wh_id" id="editWhId" />
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nome</label>
+                        <input type="text" name="name" id="editName" class="form-control" required maxlength="80" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">URL do webhook</label>
+                        <div class="d-flex gap-2">
+                            <input type="url" name="url" id="editUrl" class="form-control" required maxlength="500" />
+                            <button type="button" class="test-btn text-nowrap" onclick="testUrl('editUrl', this)">
+                                <i class="fas fa-paper-plane me-1"></i>Testar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Status</label>
+                        <div class="d-flex gap-3">
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.85rem;">
+                                <input type="radio" name="enabled" value="1" id="editEnabled1" style="accent-color:#5865f2;" />
+                                <span class="toggle-pill on" style="pointer-events:none;">
+                                    <i class="fas fa-circle" style="font-size:.45rem;"></i>Ativo
+                                </span>
+                            </label>
+                            <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.85rem;">
+                                <input type="radio" name="enabled" value="0" id="editEnabled0" style="accent-color:#5865f2;" />
+                                <span class="toggle-pill off" style="pointer-events:none;">
+                                    <i class="fas fa-circle" style="font-size:.45rem;"></i>Inativo
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="form-label small text-muted mb-0">Eventos a monitorar</label>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                    style="font-size:.72rem;" onclick="toggleAllEvents('edit')">
+                                <i class="fas fa-check-double me-1"></i><span id="editSelectAllTxt">Selecionar tudo</span>
+                            </button>
+                        </div>
+                        <div class="row g-2">
+                            {% for grp_name, grp_color, grp_events in event_groups %}
+                            <div class="col-md-6">
+                                <div class="event-group">
+                                    <div class="event-group-title text-{{ grp_color }}">{{ grp_name }}</div>
+                                    {% for ev in grp_events %}
+                                    {% if ev in all_events %}
+                                    <div class="event-check-row">
+                                        <input type="checkbox" name="events" value="{{ ev }}" id="edit_{{ ev }}" class="edit-event-cb" />
+                                        <label for="edit_{{ ev }}">
+                                            <div class="event-check-label">{{ all_events[ev].label }}</div>
+                                            <div class="event-check-desc">
+                                                {% if ev == 'admin_login'    %}Login com IP + geolocalização{% endif %}
+                                                {% if ev == 'admin_logout'   %}Logout de qualquer admin{% endif %}
+                                                {% if ev == 'brute_force'    %}IP bloqueado por brute force{% endif %}
+                                                {% if ev == 'admin_action'   %}Todas as ações de auditoria{% endif %}
+                                                {% if ev == 'payment'        %}Eventos de pagamento/gateway{% endif %}
+                                                {% if ev == 'maintenance'    %}Toggle de modo manutenção{% endif %}
+                                                {% if ev == 'gateway_backup' %}Backup/restauração do gateway{% endif %}
+                                            </div>
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn-discord">
+                        <i class="fas fa-save me-1"></i>Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    const ALL_EVENTS = {{ all_events | tojson }};
+    const WEBHOOKS_DATA = {{ webhooks | tojson }};
+
+    function openEditModal(id) {
+        const wh = WEBHOOKS_DATA.find(w => w.id === id);
+        if (!wh) return;
+
+        document.getElementById('editWhId').value   = id;
+        document.getElementById('editName').value   = wh.name;
+        document.getElementById('editUrl').value    = wh.url;
+        document.getElementById('editEnabled1').checked = !!wh.enabled;
+        document.getElementById('editEnabled0').checked = !wh.enabled;
+
+        let evList = [];
+        try { evList = typeof wh.events === 'string' ? JSON.parse(wh.events) : (wh.events_list || []); } catch {}
+        Object.keys(ALL_EVENTS).forEach(ev => {
+            const cb = document.getElementById('edit_' + ev);
+            if (cb) cb.checked = evList.includes(ev);
+        });
+
+        syncSelectAllBtn('edit');
+
+        const modalEl = document.getElementById('editModal');
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        if (!modal) modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    function syncSelectAllBtn(prefix) {
+        const cbs = document.querySelectorAll('.' + prefix + '-event-cb');
+        const txtEl = document.getElementById(prefix + 'SelectAllTxt');
+        if (!txtEl) return;
+        const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
+        txtEl.textContent = allChecked ? 'Desmarcar tudo' : 'Selecionar tudo';
+    }
+
+    function toggleAllEvents(prefix) {
+        const cbs = document.querySelectorAll('.' + prefix + '-event-cb');
+        const allChecked = Array.from(cbs).every(cb => cb.checked);
+        cbs.forEach(cb => cb.checked = !allChecked);
+        syncSelectAllBtn(prefix);
+    }
+
+    document.querySelectorAll('.add-event-cb, .edit-event-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const prefix = cb.classList.contains('add-event-cb') ? 'add' : 'edit';
+            syncSelectAllBtn(prefix);
+        });
+    });
+
+    function toggleWebhook(id) {
+        const pill = document.getElementById('pill' + id);
+        const txt  = document.getElementById('pillTxt' + id);
+        const card = document.getElementById('whCard' + id);
+        if (!pill) return;
+        const fd = new FormData();
+        fd.append('wh_id', id);
+        pill.style.opacity = '.5';
+        fetch('/admin/webhooks/toggle', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                pill.style.opacity = '';
+                if (!d.ok) return;
+                if (d.enabled) {
+                    pill.className = 'toggle-pill on';
+                    pill.title = 'Clique para desativar';
+                    txt.textContent = 'Ativo';
+                    card.classList.remove('disabled-wh');
+                } else {
+                    pill.className = 'toggle-pill off';
+                    pill.title = 'Clique para ativar';
+                    txt.textContent = 'Inativo';
+                    card.classList.add('disabled-wh');
+                }
+            })
+            .catch(() => { pill.style.opacity = ''; });
+    }
+
+    function deleteWebhook(id, name) {
+        showConfirmModal({
+            title: 'Excluir Webhook',
+            message: 'Excluir o webhook "' + name + '"? Esta ação é irreversível.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: () => executarDeleteWebhook(id)
+        });
+    }
+
+    function executarDeleteWebhook(id) {
+        const fd = new FormData();
+        fd.append('wh_id', id);
+        fetch('/admin/webhooks/delete', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    const card = document.getElementById('whCard' + id);
+                    if (card) { card.style.transition = 'opacity .3s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 300); }
+                } else {
+                    alert('Erro ao excluir webhook.');
+                }
+            })
+            .catch(() => alert('Erro de rede.'));
+    }
+
+    function testWebhook(id, url) {
+        const btn = document.getElementById('testBtn' + id);
+        _doTest(url, btn);
+    }
+
+    function testUrl(inputId, btn) {
+        const url = document.getElementById(inputId).value.trim();
+        if (!url) { alert('Informe a URL primeiro.'); return; }
+        _doTest(url, btn);
+    }
+
+    function _doTest(url, btn) {
+        if (!url) return;
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Enviando…';
+        const fd = new FormData();
+        fd.append('url', url);
+        fetch('/admin/webhooks/test', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                btn.innerHTML = d.ok
+                    ? '<i class="fas fa-check me-1"></i>Enviado!'
+                    : '<i class="fas fa-times me-1"></i>Erro ' + (d.code || '');
+                btn.style.color = d.ok ? '#4ade80' : '#f87171';
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    btn.style.color = '';
+                    btn.disabled = false;
+                }, 3000);
+            })
+            .catch(() => {
+                btn.innerHTML = '<i class="fas fa-times me-1"></i>Falhou';
+                btn.style.color = '#f87171';
+                setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; btn.disabled = false; }, 3000);
+            });
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

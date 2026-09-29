@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ranking de Doadores — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+
+        /* ── Leaderboard table ── */
+        .rank-table { width: 100%; border-collapse: collapse; }
+        .rank-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; color: #8b949e; padding: .5rem .75rem; border-bottom: 1px solid #21262d; text-align: left; }
+        .rank-table td { padding: .65rem .75rem; border-bottom: 1px solid #21262d; vertical-align: middle; }
+        .rank-table tr:last-child td { border-bottom: none; }
+        .rank-table tr:hover td { background: rgba(255,255,255,.03); }
+
+        /* ── Position medal ── */
+        .rank-pos { font-size: 1rem; font-weight: 700; width: 36px; text-align: center; }
+        .rank-pos.gold   { color: #f5c518; }
+        .rank-pos.silver { color: #a8a8a8; }
+        .rank-pos.bronze { color: #cd7f32; }
+        .rank-pos.normal { color: #8b949e; }
+
+        /* ── Vertical avatar + VIP badge block ── */
+        .profile-block {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            gap: 0.4rem !important;
+        }
+        .profile-block img {
+            border-radius: 50% !important;
+            object-fit: cover !important;
+            width: 50px !important;
+            height: 50px !important;
+            border: 2px solid #30363d;
+        }
+
+        /* ── VIP badge keyframes ── */
+        @keyframes lavaFlow {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes cyanBreathe {
+            0%,100% { box-shadow: 0 0 6px #00f0ff, 0 0 12px rgba(0,240,255,.3); }
+            50%      { box-shadow: 0 0 16px #00f0ff, 0 0 28px rgba(0,240,255,.65); }
+        }
+        @keyframes metalShimmer {
+            0%   { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes neonSwipeLaser {
+            0%   { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes adminPulse {
+            0%,100% { opacity: 1; }
+            50%      { opacity: .6; }
+        }
+
+        /* ── VIP tier badges ── */
+        .vip-badge { font-size: .68rem; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; letter-spacing: .3px; display: inline-block; }
+        /* VIP 0 — Supremo: animated lava fire */
+        .vip-0 { background: linear-gradient(90deg,#7f0000,#ff4500,#ffa500,#ffe000,#ff4500,#7f0000); background-size: 300% auto; color: #fff8e1; box-shadow: 0 0 12px #ff4500; border: 1px solid rgba(255,170,0,0.5); animation: lavaFlow 2s linear infinite; }
+        /* VIP 1 — Diamante: cyan-blue neon breathing pulse */
+        .vip-1 { background: linear-gradient(135deg,#0ea5e9,#00f0ff,#6366f1); color: #fff; border: 1px solid #00f0ff; animation: cyanBreathe 2.2s ease-in-out infinite; }
+        /* VIP 2 — Ouro: liquid gold metallic shimmer (OBLITERATED PURPLE) */
+        .vip-2 { background: linear-gradient(90deg,#7c5a00,#ffd700,#ffb300,#ffe57f,#ffd700,#7c5a00); background-size: 300% auto; color: #3b2000; border: 1px solid #ffd700; box-shadow: 0 0 8px rgba(255,215,0,.5); animation: metalShimmer 2.5s linear infinite; }
+        /* VIP 3 — Prata: polished mirror-silver with metallic sheen */
+        .vip-3 { background: linear-gradient(135deg,#94a3b8,#e2e8f0,#64748b); color: #0d1117; border: 1px solid #94a3b8; box-shadow: 0 0 5px rgba(148,163,184,.4); }
+        /* VIP 4 — Bronze: hot cyber-bronze / polished copper (OBLITERATED MUDDY GREY) */
+        .vip-4 { background: linear-gradient(135deg,#e28743,#ff7f50,#c96a2a); color: #fff; border: 1px solid #ff7f50; box-shadow: 0 0 6px rgba(255,127,80,.4); }
+        /* VIP 5 — Estelar: soft pastel star-blue, flat with micro-star border */
+        .vip-5 { background: #64748b; color: #e2e8f0; border: 1px dashed rgba(123,164,199,.5); box-shadow: 0 0 3px rgba(100,116,139,.3); }
+
+        /* ── Nickname cell ── */
+        .nick-cell { font-size: .9rem; font-weight: 600; color: #e6edf3; }
+
+        /* ── Amount cell ── */
+        .amount-cell { font-size: .88rem; color: #22c55e; font-weight: 600; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:900px;">
+
+    <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Voltar
+        </a>
+        <div>
+            <h4 class="mb-0">
+                <i class="fas fa-trophy text-warning me-2" style="filter:drop-shadow(0 0 4px rgba(255,193,7,.4));"></i>Ranking de Doadores
+            </h4>
+            <small class="text-muted">Top apoiadores ordenados por valor total doado</small>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center">
+            <span>
+                <i class="fas fa-medal text-warning me-2"></i>Leaderboard
+                <span class="badge bg-secondary ms-2" style="font-size:.72rem;">{{ rows|length }} doadores</span>
+            </span>
+            {% if admin.get('role') == 'owner' %}
+            <button class="btn btn-outline-success btn-sm custom-add-donation-btn ms-auto" id="triggerManualDonationModal">
+                <i class="fas fa-plus-circle me-1"></i> Criar Doação Manual
+            </button>
+            {% endif %}
+        </div>
+
+        {% if rows %}
+        <div class="table-responsive">
+            <table class="rank-table">
+                <thead>
+                    <tr>
+                        <th style="width:44px;">#</th>
+                        <th style="width:80px;">Perfil</th>
+                        <th>Apoiador</th>
+                        <th>Total Doado</th>
+                        <th>Tier</th>
+                        <th>Data</th>
+                        <th style="width:80px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in rows %}
+                {% set pos = loop.index %}
+                <tr id="rank-row-{{ r.id }}">
+                    <!-- Position medal -->
+                    <td>
+                        <div class="rank-pos {% if pos == 1 %}gold{% elif pos == 2 %}silver{% elif pos == 3 %}bronze{% else %}normal{% endif %}">
+                            {% if pos == 1 %}🥇{% elif pos == 2 %}🥈{% elif pos == 3 %}🥉{% else %}{{ pos }}{% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Vertical avatar + VIP badge -->
+                    <td>
+                        <div class="profile-block">
+                            <img src="/static/donors/donor_{{ r.avatar_id }}.png"
+                                 alt="Avatar {{ r.nickname }}"
+                                 onerror="this.src='/static/donors/donor_m_1.png'" />
+                            <span class="vip-badge vip-{{ r.vip_level }}">
+                                {% if r.vip_level == 0 %}🔥 VIP SUPREMO
+                                {% elif r.vip_level == 1 %}<i class="fas fa-gem"></i> VIP 1
+                                {% elif r.vip_level == 2 %}<i class="fas fa-medal"></i> VIP 2
+                                {% elif r.vip_level == 3 %}<i class="fas fa-award"></i> VIP 3
+                                {% elif r.vip_level == 4 %}<i class="fas fa-trophy"></i> VIP 4
+                                {% else %}<i class="fas fa-star"></i> VIP 5{% endif %}
+                            </span>
+                        </div>
+                    </td>
+
+                    <!-- Nickname -->
+                    <td class="nick-cell">
+                        {{ r.nickname }}<span class="text-muted ms-1" style="font-size:.8em;opacity:.6;">#{{ r.discriminator or '????' }}</span>
+                    </td>
+
+                    <!-- Total donated -->
+                    <td class="amount-cell">
+                        R$ {{ "%.2f"|format(r.total_donated|float) }}
+                    </td>
+
+                    <!-- Tier label -->
+                    <td>
+                        {% if r.vip_level == 0 %}
+                            <span class="vip-badge vip-0"><i class="fas fa-fire"></i> VIP SUPREMO</span>
+                        {% elif r.vip_level == 1 %}
+                            <span class="vip-badge vip-1"><i class="fas fa-gem"></i> Diamante</span>
+                        {% elif r.vip_level == 2 %}
+                            <span class="vip-badge vip-2"><i class="fas fa-medal"></i> Ouro</span>
+                        {% elif r.vip_level == 3 %}
+                            <span class="vip-badge vip-3"><i class="fas fa-award"></i> Prata</span>
+                        {% elif r.vip_level == 4 %}
+                            <span class="vip-badge vip-4"><i class="fas fa-trophy"></i> Bronze</span>
+                        {% else %}
+                            <span class="vip-badge vip-5"><i class="fas fa-star"></i> Estelar</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Date -->
+                    <td style="font-size:.75rem;color:#8b949e;">
+                        {{ r.ts[:10] if r.ts else '—' }}
+                    </td>
+
+                    <!-- Action tools: audit (all admins) + regenerate key + delete (owner only) -->
+                    <td style="white-space:nowrap;">
+                        {% if admin.get('role') == 'owner' %}
+                        <button type="button" onclick="regenerateSupporterShaKey('{{ r.id }}')" class="btn btn-sm btn-outline-warning" title="Gerar nova chave SHA-256" style="padding: 2px 8px !important; font-weight: bold !important; font-size: 0.8rem !important; border-radius: 4px !important;">⚡</button>
+                        {% endif %}
+                        <button type="button" onclick="auditSupporterDeviceRealtime('{{ r.id }}')" class="btn btn-sm btn-outline-info" title="Auditar Assinatura de Hardware do Apoiador" style="padding: 2px 8px !important; font-weight: bold !important; font-size: 0.8rem !important; border-radius: 4px !important; margin-left: 4px !important;">📖</button>
+                        {% if admin.get('role') == 'owner' %}
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" title="Remover do ranking"
+                                onclick="confirmDelete({{ r.id }}, '{{ r.nickname|e }}')" style="margin-left:4px !important;">
+                            <i class="fas fa-trash-alt" style="font-size:.75rem;"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-trophy text-warning d-block"></i>
+            <div style="font-weight:600;margin-bottom:.4rem;">Nenhum doador ainda</div>
+            <small>Os apoiadores aparecerão aqui após a primeira doação confirmada.</small>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- VIP tier legend — vertical list-group (DB-driven) -->
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-info-circle text-secondary me-2"></i>Tiers VIP &amp; Benefícios de Scraping</span>
+        </div>
+        <ul class="list-group list-group-flush" style="background:transparent;">
+            {% for tier in tiers %}
+            <li class="list-group-item d-flex align-items-center justify-content-between"
+                style="background:#0d1117;border-color:#30363d;padding:.65rem .5rem;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="vip-badge vip-{{ tier.tier_id }}">{% if tier.tier_id == 0 %}<i class="fas fa-fire"></i> VIP SUPREMO{% elif tier.tier_id == 1 %}<i class="fas fa-gem"></i> VIP 1{% elif tier.tier_id == 2 %}<i class="fas fa-medal"></i> VIP 2{% elif tier.tier_id == 3 %}<i class="fas fa-award"></i> VIP 3{% elif tier.tier_id == 4 %}<i class="fas fa-trophy"></i> VIP 4{% else %}<i class="fas fa-star"></i> VIP 5{% endif %}</span>
+                    <small class="text-muted" style="font-size:.75rem;">
+                        Mín. R$ {{ '%.0f'|format(tier.min_value) }} &nbsp;·&nbsp; +{{ tier.bonus_urls }} URLs bônus
+                    </small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span style="font-size:.72rem;color:#8b949e;">base + {{ tier.bonus_urls }}</span>
+                    {% if admin.get('role') == 'owner' %}
+                    <button class="btn btn-link text-warning p-0 ms-1 tier-edit-btn"
+                            data-tier-id="{{ tier.tier_id }}"
+                            data-tier-name="{{ tier.tier_name }}"
+                            data-min-value="{{ tier.min_value }}"
+                            data-bonus-urls="{{ tier.bonus_urls }}"
+                            title="Personalizar regras do tier"
+                            style="font-size:.85rem;line-height:1;">
+                        <i class="fas fa-pencil"></i>
+                    </button>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+</div>
+
+{% if admin.get('role') == 'owner' %}
+<!-- ── Owner: Tier Config Modal ── -->
+<div class="modal fade" id="tierConfigModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title text-warning"><i class="fas fa-pencil me-2"></i>Personalizar Regras do Tier</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <p class="text-muted mb-3" style="font-size:.78rem;">Tier: <strong id="tierConfigName" class="text-light"></strong></p>
+                <input type="hidden" id="tierConfigId" />
+                <div class="mb-2">
+                    <label class="form-label text-muted" style="font-size:.8rem;">Valor Mínimo de Contribuição (R$)</label>
+                    <input type="number" id="tierConfigMinValue" class="form-control form-control-sm bg-dark text-white border-secondary"
+                           min="0" step="0.01" placeholder="Ex: 100" />
+                </div>
+                <div class="mb-1">
+                    <label class="form-label text-muted" style="font-size:.8rem;">Bônus de URLs Extras</label>
+                    <input type="number" id="tierConfigBonusUrls" class="form-control form-control-sm bg-dark text-white border-secondary"
+                           min="0" step="1" placeholder="Ex: 100" />
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm" id="tierConfigSaveBtn">
+                    <i class="fas fa-save me-1"></i>Salvar Regras
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    document.querySelectorAll('.tier-edit-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('tierConfigId').value          = btn.dataset.tierId;
+            document.getElementById('tierConfigName').textContent  = btn.dataset.tierName;
+            document.getElementById('tierConfigMinValue').value    = btn.dataset.minValue;
+            document.getElementById('tierConfigBonusUrls').value   = btn.dataset.bonusUrls;
+            new bootstrap.Modal(document.getElementById('tierConfigModal')).show();
+        });
+    });
+
+    document.getElementById('tierConfigSaveBtn').addEventListener('click', async function() {
+        var tierId    = document.getElementById('tierConfigId').value;
+        var minValue  = parseFloat(document.getElementById('tierConfigMinValue').value);
+        var bonusUrls = parseInt(document.getElementById('tierConfigBonusUrls').value, 10);
+        if (isNaN(minValue) || isNaN(bonusUrls) || minValue < 0 || bonusUrls < 0) {
+            alert('Por favor, insira valores numéricos positivos.');
+            return;
+        }
+        var btn = this;
+        btn.disabled = true; btn.textContent = 'Salvando…';
+        try {
+            var r = await fetch('/admin/ranking/config/update/' + tierId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ min_value: minValue, bonus_urls: bonusUrls })
+            });
+            var d = await r.json();
+            if (d.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('tierConfigModal')).hide();
+                /* Refresh the page so the live list-group reflects new values */
+                location.reload();
+            } else {
+                alert('Erro: ' + (d.error || 'tente novamente.'));
+            }
+        } catch(err) {
+            alert('Erro de rede. Tente novamente.');
+        }
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Salvar Regras';
+    });
+})();
+</script>
+{% endif %}
+
+<!-- Manual Donation Creation Modal (owner only) -->
+{% if admin.get('role') == 'owner' %}
+<div class="modal fade" id="manualDonationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1" style="border-bottom:1px solid #21262d !important;">
+                <h6 class="modal-title text-success fw-bold">
+                    <i class="fas fa-plus-circle me-2"></i>Simular Nova Doação para o Ranking
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="color:#c9d1d9;">
+
+                <!-- Apelido -->
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:.82rem;color:#8b949e;">Apelido / Nick do Doador</label>
+                    <input type="text" id="manualNick" class="form-control form-control-sm"
+                           style="background:#0d1117;border-color:#30363d;color:#e6edf3;"
+                           placeholder="Ex: TurboDoador99" maxlength="40" />
+                </div>
+
+                <!-- Valor -->
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:.82rem;color:#8b949e;">Valor Total Apoiado (R$)</label>
+                    <div style="position:relative;">
+                        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#8b949e;font-size:.85rem;pointer-events:none;">R$</span>
+                        <input type="number" id="manualAmount" class="form-control form-control-sm"
+                               style="background:#0d1117;border-color:#30363d;color:#e6edf3;padding-left:2.5rem;"
+                               placeholder="0,00" min="0.01" step="0.01" />
+                    </div>
+                    <div id="manualVipPreview" style="margin-top:6px;font-size:.78rem;color:#fbbf24;display:none;">
+                        <i class="fas fa-star me-1"></i><span id="manualVipText"></span>
+                    </div>
+                </div>
+
+                <!-- Avatar Grid -->
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.82rem;color:#8b949e;">Avatar do Doador</label>
+                    <div id="manualAvatarGrid" style="display:flex;flex-wrap:wrap;gap:8px;max-height:180px;overflow-y:auto;padding:4px;">
+                        <div class="text-muted" style="font-size:.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Carregando avatares…</div>
+                    </div>
+                    <input type="hidden" id="manualAvatarId" value="" />
+                </div>
+
+                <div id="manualDonationError" style="display:none;color:#f87171;font-size:.78rem;margin-top:6px;">
+                    <i class="fas fa-exclamation-circle me-1"></i><span id="manualDonationErrorMsg"></span>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" id="manualDonationSubmit">
+                    <i class="fas fa-trophy me-1"></i>Inserir no Pódio
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    const tiers = {{ tiers | tojson }};
+
+    function computeVipPreview(amount) {
+        if (!tiers || !tiers.length) return null;
+        const sorted = [...tiers].sort((a, b) => b.min_value - a.min_value);
+        for (const t of sorted) {
+            if (amount >= parseFloat(t.min_value)) return t;
+        }
+        return sorted[sorted.length - 1];
+    }
+
+    const triggerBtn  = document.getElementById('triggerManualDonationModal');
+    const modalEl     = document.getElementById('manualDonationModal');
+    const grid        = document.getElementById('manualAvatarGrid');
+    const avatarInput = document.getElementById('manualAvatarId');
+    const amtInput    = document.getElementById('manualAmount');
+    const vipPreview  = document.getElementById('manualVipPreview');
+    const vipText     = document.getElementById('manualVipText');
+    const submitBtn   = document.getElementById('manualDonationSubmit');
+    const errBox      = document.getElementById('manualDonationError');
+    const errMsg      = document.getElementById('manualDonationErrorMsg');
+
+    let avatarsLoaded = false;
+
+    function loadAvatars() {
+        if (avatarsLoaded) return;
+        fetch('/api/donor-avatars').then(r => r.json()).then(data => {
+            avatarsLoaded = true;
+            const all = [
+                ...(data.m || data.masculino || []).map(id => ({id, label:'♂'})),
+                ...(data.f || data.feminino  || []).map(id => ({id, label:'♀'}))
+            ];
+            grid.innerHTML = all.map(a => `
+                <div class="manual-avatar-cell" data-avid="${a.id}"
+                     style="cursor:pointer;border:2px solid #30363d;border-radius:8px;padding:3px;transition:border-color .15s;width:52px;text-align:center;">
+                    <img src="/static/donors/donor_${a.id}.png"
+                         onerror="this.src='/static/donors/donor_m_1.png'"
+                         style="width:44px;height:44px;object-fit:cover;border-radius:6px;display:block;margin:auto;" />
+                    <div style="font-size:.6rem;color:#8b949e;margin-top:2px;">${a.label}</div>
+                </div>`).join('');
+            grid.querySelectorAll('.manual-avatar-cell').forEach(cell => {
+                cell.addEventListener('click', function() {
+                    grid.querySelectorAll('.manual-avatar-cell').forEach(c => {
+                        c.style.borderColor = '#30363d';
+                        c.style.background  = 'transparent';
+                    });
+                    this.style.borderColor = '#22c55e';
+                    this.style.background  = '#052e16';
+                    avatarInput.value = this.dataset.avid;
+                });
+            });
+            // Auto-select first avatar
+            const first = grid.querySelector('.manual-avatar-cell');
+            if (first) first.click();
+        }).catch(() => {
+            grid.innerHTML = '<div class="text-muted" style="font-size:.78rem;">Erro ao carregar avatares.</div>';
+        });
+    }
+
+    if (triggerBtn) {
+        triggerBtn.addEventListener('click', function() {
+            loadAvatars();
+            // Reset form
+            document.getElementById('manualNick').value = '';
+            amtInput.value = '';
+            vipPreview.style.display = 'none';
+            errBox.style.display = 'none';
+            new bootstrap.Modal(modalEl).show();
+        });
+    }
+
+    amtInput.addEventListener('input', function() {
+        const v = parseFloat(this.value);
+        if (!isNaN(v) && v > 0) {
+            const tier = computeVipPreview(v);
+            if (tier) {
+                vipText.textContent = 'Tier calculado: ' + tier.tier_name + ' — ' + tier.bonus_urls + ' URLs de bônus';
+                vipPreview.style.display = '';
+            }
+        } else {
+            vipPreview.style.display = 'none';
+        }
+    });
+
+    submitBtn.addEventListener('click', async function() {
+        errBox.style.display = 'none';
+        const nick   = document.getElementById('manualNick').value.trim();
+        const amount = parseFloat(amtInput.value);
+        const avid   = avatarInput.value.trim();
+
+        if (!nick || nick.length < 2) {
+            errMsg.textContent = 'Apelido deve ter pelo menos 2 caracteres.';
+            errBox.style.display = '';
+            return;
+        }
+        if (isNaN(amount) || amount < 0.01) {
+            errMsg.textContent = 'Valor deve ser maior que R$ 0,00.';
+            errBox.style.display = '';
+            return;
+        }
+        if (!avid) {
+            errMsg.textContent = 'Selecione um avatar para o doador.';
+            errBox.style.display = '';
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Inserindo…';
+
+        try {
+            const resp = await fetch('/admin/ranking/create-manual', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nickname: nick, amount: amount, avatar_id: avid})
+            });
+            const d = await resp.json();
+            if (d.ok) {
+                bootstrap.Modal.getInstance(modalEl).hide();
+                // Append new row or reload the leaderboard
+                location.reload();
+            } else {
+                errMsg.textContent = d.error || 'Erro desconhecido.';
+                errBox.style.display = '';
+            }
+        } catch(e) {
+            errMsg.textContent = 'Erro de rede. Tente novamente.';
+            errBox.style.display = '';
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-trophy me-1"></i>Inserir no Pódio';
+    });
+})();
+</script>
+{% endif %}
+
+<!-- Audit / Key-Gen Modal (all admins) -->
+<div class="modal fade" id="adminAuditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#0d1117;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title" id="adminAuditModalTitle" style="color:#a5b4fc;"><i class="fas fa-shield-alt me-2"></i>Auditoria de Assinatura — Apoiador</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="adminAuditModalBody" style="font-size:.85rem;color:#c9d1d9;">
+                <div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Carregando…</div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    function _openAuditModal(titleHtml, bodyHtml) {
+        document.getElementById('adminAuditModalTitle').innerHTML = titleHtml;
+        document.getElementById('adminAuditModalBody').innerHTML  = bodyHtml;
+        var el = document.getElementById('adminAuditModal');
+        var existing = bootstrap.Modal.getInstance(el);
+        (existing || new bootstrap.Modal(el)).show();
+    }
+
+    function _copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text).then(function() {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiado!';
+            btn.classList.replace('btn-outline-info', 'btn-success');
+            setTimeout(function() {
+                btn.innerHTML = orig;
+                btn.classList.replace('btn-success', 'btn-outline-info');
+            }, 2000);
+        }).catch(function() {
+            btn.textContent = 'Erro ao copiar';
+        });
+    }
+
+    window.auditSupporterDeviceRealtime = async function(supporterId) {
+        _openAuditModal(
+            '<i class="fas fa-shield-alt me-2"></i>Auditoria de Assinatura — Apoiador',
+            '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Carregando…</div>'
+        );
+        try {
+            var resp = await fetch('/api/admin/audit-supporter/' + supporterId, { cache: 'no-store' });
+            var data = await resp.json();
+            if (resp.ok && data.status === 'success') {
+                var sigHtml = '<code style="font-family:monospace;font-size:.72rem;word-break:break-all;overflow-wrap:anywhere;color:#a5b4fc;display:block;line-height:1.6;">' + (data.device_signature || '—') + '</code>';
+                var deviceInfoHtml = '<span style="color:#e2e8f0;font-size:.80rem;">' + (data.browser_device_info || 'Usuário Legado / Não Identificado') + '</span>';
+                document.getElementById('adminAuditModalBody').innerHTML =
+                    '<table class="table table-sm table-dark mb-0" style="font-size:.82rem;">' +
+                    '<tbody>' +
+                    '<tr><th style="color:#8b949e;width:40%;">Apoiador</th><td class="text-white fw-semibold">' + (data.nickname || '—') + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;">Ativado?</th><td>' + (data.is_activated ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-secondary">Não</span>') + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;">Ativado em</th><td>' + (data.activated_at || '—') + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;">Dados do Navegador</th><td>' + deviceInfoHtml + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;">Assinatura SHA-256</th><td>' + sigHtml + '</td></tr>' +
+                    '</tbody></table>';
+            } else {
+                document.getElementById('adminAuditModalBody').innerHTML =
+                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + (data.message || data.error || 'Erro ao carregar dados.') + '</p>';
+            }
+        } catch (e) {
+            document.getElementById('adminAuditModalBody').innerHTML =
+                '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Erro de rede.</p>';
+        }
+    };
+
+    {% if admin.get('role') == 'owner' %}
+    window.regenerateSupporterShaKey = async function(supporterId) {
+        if (!confirm('Tem certeza que deseja gerar uma nova chave SHA-256 para este apoiador? A chave e a vinculação atual serão destruídas.')) return;
+        _openAuditModal(
+            '<i class="fas fa-key me-2" style="color:#fbbf24;"></i>Geração de Nova Chave SHA-256',
+            '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Gerando chave…</div>'
+        );
+        try {
+            var resp = await fetch('/api/admin/regenerate-key/' + supporterId, { method: 'POST', cache: 'no-store' });
+            var data = await resp.json();
+            if (resp.ok && data.status === 'success') {
+                var key = data.new_key || '';
+                var bodyHtml =
+                    '<p style="color:#fbbf24;font-weight:700;font-size:0.82rem;margin-bottom:10px;">' +
+                    '🔑 Nova Chave SHA-256 Gerada! Copie e envie para o apoiador no privado:</p>' +
+                    '<div style="background:#090d16;border:1px solid rgba(99,102,241,.4);border-radius:8px;padding:12px 14px;margin-bottom:10px;">' +
+                    '<code id="_newKeyDisplay" style="font-size:.72rem;word-break:break-all;color:#a5b4fc;display:block;line-height:1.6;">' + key + '</code>' +
+                    '</div>' +
+                    '<button id="_copyNewKeyBtn" class="btn btn-outline-info btn-sm w-100" style="font-size:.78rem;font-weight:600;">' +
+                    '<i class="fas fa-copy me-1"></i>Copiar Chave</button>' +
+                    '<p style="color:#6b7280;font-size:.72rem;margin-top:10px;margin-bottom:0;">' +
+                    '<i class="fas fa-info-circle me-1"></i>' + (data.message || 'Perfil legado atualizado com sucesso.') + '</p>';
+                document.getElementById('adminAuditModalBody').innerHTML = bodyHtml;
+                document.getElementById('_copyNewKeyBtn').addEventListener('click', function() {
+                    _copyToClipboard(key, this);
+                });
+            } else {
+                document.getElementById('adminAuditModalBody').innerHTML =
+                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + (data.message || data.error || 'Erro ao gerar chave.') + '</p>';
+            }
+        } catch (e) {
+            document.getElementById('adminAuditModalBody').innerHTML =
+                '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Erro de rede. Tente novamente.</p>';
+        }
+    };
+    {% endif %}
+})();
+</script>
+
+<!-- Delete Confirmation Modal (owner only) -->
+{% if admin.get('role') == 'owner' %}
+<div class="modal fade" id="deleteRankModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title text-danger"><i class="fas fa-trash-alt me-2"></i>Remover do Ranking</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.88rem;color:#c9d1d9;">
+                Tem certeza que deseja remover <strong id="deleteRankNick" class="text-white"></strong> do ranking?
+                <br><small class="text-muted">Esta ação não pode ser desfeita.</small>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="deleteRankConfirmBtn">
+                    <i class="fas fa-trash-alt me-1"></i>Remover
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var _pendingDeleteId = null;
+
+    window.confirmDelete = function(userId, nickname) {
+        _pendingDeleteId = userId;
+        document.getElementById('deleteRankNick').textContent = nickname;
+        new bootstrap.Modal(document.getElementById('deleteRankModal')).show();
+    };
+
+    document.getElementById('deleteRankConfirmBtn').addEventListener('click', async function() {
+        if (!_pendingDeleteId) return;
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Removendo…';
+
+        try {
+            var resp = await fetch('/admin/ranking/delete/' + _pendingDeleteId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            var data = await resp.json();
+            if (data.ok) {
+                /* Close modal */
+                bootstrap.Modal.getInstance(document.getElementById('deleteRankModal')).hide();
+                /* Fade-remove the row */
+                var row = document.getElementById('rank-row-' + _pendingDeleteId);
+                if (row) {
+                    row.style.transition = 'opacity .35s ease';
+                    row.style.opacity    = '0';
+                    setTimeout(function() { row.remove(); }, 370);
+                }
+                _pendingDeleteId = null;
+            } else {
+                alert('Erro: ' + (data.error || 'tente novamente.'));
+            }
+        } catch (err) {
+            alert('Erro de rede. Tente novamente.');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt me-1"></i>Remover';
+    });
+})();
+</script>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- ⚡ Real-time leaderboard auto-refresh: polls latest_ranking_event every 15s -->
+<script>
+(function() {
+    var _adminLastSeenTs = 0;
+    var _reloadScheduled  = false;
+
+    function _anyModalOpen() {
+        return document.querySelector('.modal.show') !== null;
+    }
+
+    function _scheduleReload() {
+        if (_reloadScheduled) return;
+        _reloadScheduled = true;
+        /* Wait until no modal is open, then reload */
+        (function _try() {
+            if (!_anyModalOpen()) {
+                location.reload();
+            } else {
+                setTimeout(_try, 800);
+            }
+        })();
+    }
+
+    function pollAdminRanking() {
+        fetch('/api/ranking/latest', { cache: 'no-store' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d.ok || !d.event) return;
+                var evTs = parseFloat(d.event.ts || 0);
+                if (_adminLastSeenTs === 0) {
+                    /* First poll — just record current timestamp as baseline */
+                    _adminLastSeenTs = evTs;
+                    return;
+                }
+                if (evTs > _adminLastSeenTs) {
+                    _adminLastSeenTs = evTs;
+                    _scheduleReload();
+                }
+            }).catch(function() {});
+    }
+
+    /* Start polling after 3s to let page settle, then every 15s */
+    setTimeout(function() {
+        pollAdminRanking();
+        setInterval(pollAdminRanking, 15000);
+    }, 3000);
+})();
+</script>
+</body>
+</html>

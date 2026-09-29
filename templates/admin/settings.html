@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurações do Sistema — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:900px;">
+    <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Voltar</a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-sliders text-secondary me-2"></i>Configurações do Sistema</h4>
+            <small class="text-muted">Configurações de operação do sistema</small>
+        </div>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show mb-3">
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Maintenance mode -->
+    <div class="section-card" id="maintenanceSection">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span>
+                <i class="fas fa-tools {% if maintenance and maintenance.enabled %}text-warning{% else %}text-secondary{% endif %} me-2"></i>
+                Modo Manutenção
+            </span>
+            {% if maintenance and maintenance.enabled %}
+            <span class="badge bg-warning text-dark"><i class="fas fa-circle me-1" style="font-size:.55rem;vertical-align:middle;"></i>ATIVO</span>
+            {% else %}
+            <span class="badge bg-secondary"><i class="fas fa-circle me-1" style="font-size:.55rem;vertical-align:middle;"></i>Inativo</span>
+            {% endif %}
+        </div>
+        <form method="post" action="/admin/maintenance" id="maintenanceForm">
+            <div class="mb-2">
+                <div class="text-muted small mb-1">Mensagens rápidas:</div>
+                <div class="d-flex flex-wrap gap-1">
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('maintMsgInput').value='Site em manutenção. Voltamos em breve.'">
+                        🔧 Breve
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('maintMsgInput').value='Manutenção programada em andamento. Aguarde.'">
+                        📅 Programada
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('maintMsgInput').value='Sistema em atualização. Voltamos em instantes.'">
+                        ⬆️ Atualização
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('maintMsgInput').value='Site temporariamente fora do ar. Em breve voltamos ao normal.'">
+                        ⏸️ Indisponível
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="document.getElementById('maintMsgInput').value='Estamos corrigindo um problema técnico. Obrigado pela paciência.'">
+                        🛠️ Técnico
+                    </button>
+                </div>
+            </div>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label text-muted small">Mensagem para usuários</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="text" class="form-control form-control-sm" id="maintMsgInput"
+                               value="{{ maintenance.message if maintenance else 'Site em manutenção. Voltamos em breve.' }}"
+                               maxlength="300"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();saveMaintMsg();}" />
+                        <button type="button" class="btn btn-sm btn-outline-info" style="white-space:nowrap;"
+                                onclick="saveMaintMsg()" title="Salvar apenas o texto">
+                            <i class="fas fa-save me-1"></i>Salvar
+                        </button>
+                    </div>
+                    <div id="maintMsgFeedback" style="font-size:.72rem;margin-top:4px;display:none;"></div>
+                </div>
+                <div class="col-auto d-flex align-items-end">
+                    {% if maintenance and maintenance.enabled %}
+                    <input type="hidden" name="enabled" value="0" />
+                    <input type="hidden" name="reason" value="Ação do Owner" />
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="fas fa-power-off me-1"></i>Desativar
+                    </button>
+                    {% else %}
+                    <input type="hidden" name="enabled" value="1" />
+                    <input type="hidden" name="reason" value="Ação do Owner" />
+                    <button type="submit" class="btn btn-outline-warning btn-sm">
+                        <i class="fas fa-tools me-1"></i>Ativar
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% if maintenance and maintenance.set_by %}
+            <div class="mt-2 text-muted small">
+                Última alteração por <strong>{{ maintenance.set_by }}</strong>
+                {% if maintenance.set_at %} em {{ maintenance.set_at | fmt_ts }}{% endif %}
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    async function saveMaintMsg() {
+        const inp = document.getElementById('maintMsgInput');
+        const fb  = document.getElementById('maintMsgFeedback');
+        if (!inp || !fb) return;
+        const msg = inp.value.trim();
+        if (!msg) return;
+        fb.style.display = 'block';
+        fb.style.color   = '#8b949e';
+        fb.textContent   = 'Salvando…';
+        try {
+            const r = await fetch('/admin/maintenance/message', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({message: msg})
+            });
+            const d = await r.json();
+            if (d.ok) {
+                fb.style.color = '#4ade80';
+                fb.textContent = '✓ Mensagem salva com sucesso.';
+            } else {
+                fb.style.color = '#f87171';
+                fb.textContent = '✗ ' + (d.error || 'Erro ao salvar.');
+            }
+        } catch {
+            fb.style.color = '#f87171';
+            fb.textContent = '✗ Erro de rede.';
+        }
+        setTimeout(() => { if(fb) fb.style.display = 'none'; }, 3000);
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

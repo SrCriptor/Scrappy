@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="h8" cx="36%" cy="28%" r="65%" fx="36%" fy="28%">
+      <stop offset="0%" stop-color="#f870c8"/>
+      <stop offset="55%" stop-color="#c81878"/>
+      <stop offset="100%" stop-color="#880040"/>
+    </radialGradient>
+    <radialGradient id="b8" cx="38%" cy="20%" r="72%" fx="38%" fy="20%">
+      <stop offset="0%" stop-color="#e050a8"/>
+      <stop offset="55%" stop-color="#a81060"/>
+      <stop offset="100%" stop-color="#660030"/>
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="16" fill="#140610"/>
+  <ellipse cx="50" cy="91" rx="27" ry="5" fill="rgba(0,0,0,0.45)"/>
+  <ellipse cx="50" cy="74" rx="32" ry="22" fill="url(#b8)"/>
+  <ellipse cx="52" cy="43" rx="20" ry="5" fill="rgba(0,0,0,0.2)"/>
+  <circle cx="50" cy="39" r="22" fill="url(#h8)"/>
+  <ellipse cx="42" cy="31" rx="9" ry="7" fill="rgba(255,255,255,0.45)"/>
+  <circle cx="38.5" cy="28" r="3.5" fill="rgba(255,255,255,0.5)"/>
+  <!-- Star badge -->
+  <g transform="translate(57,61)">
+    <circle cx="14" cy="14" r="14" fill="#660030"/>
+    <polygon points="14,3 17,10 24,10 18.5,14.5 20.5,21.5 14,17.5 7.5,21.5 9.5,14.5 4,10 11,10" fill="#ffd700"/>
+  </g>
+</svg>

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — Acesso</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background: #0d1117;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0;
+        }
+        .login-wrap {
+            width: 100%; max-width: 400px; padding: 1rem;
+        }
+        .login-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 14px;
+            padding: 2.5rem 2rem;
+        }
+        .avatar-grid {
+            display: grid; grid-template-columns: repeat(4,1fr); gap: 8px;
+            margin-bottom: 1rem;
+        }
+        .avatar-option {
+            cursor: pointer; border-radius: 10px; overflow: hidden;
+            border: 2px solid transparent; transition: border-color .15s;
+        }
+        .avatar-option:hover { border-color: #4d90fe; }
+        .avatar-option.selected { border-color: #4d90fe; box-shadow: 0 0 0 3px rgba(77,144,254,.3); }
+        .avatar-option img { width: 100%; display: block; }
+        .strength-bar { height: 4px; border-radius: 2px; margin-top: 4px; transition: all .3s; }
+        .lock-ring {
+            width: 60px; height: 60px;
+            background: rgba(77,144,254,.12);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.5rem;
+        }
+        .lockout-timer { font-variant-numeric: tabular-nums; }
+    </style>
+</head>
+<body>
+<div class="login-wrap">
+    <div class="login-card">
+        <div class="lock-ring">
+            <i class="fas fa-shield-halved fa-xl text-primary"></i>
+        </div>
+        <h5 class="text-center mb-1">Painel Administrativo</h5>
+        <p class="text-center text-muted small mb-4">Acesso restrito a administradores autorizados</p>
+
+        {% if error %}
+        <div class="alert alert-danger py-2 small mb-3">
+            <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+        </div>
+        {% endif %}
+
+        {% if locked %}
+        <div style="background:#1a0a0a;border:1px solid #7f1d1d;border-radius:10px;padding:1.2rem 1rem;margin-bottom:1rem;">
+            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem;">
+                <span style="font-size:1.6rem;">🚨</span>
+                <div>
+                    <div style="font-size:.9rem;font-weight:700;color:#f87171;">ACESSO BLOQUEADO</div>
+                    <div style="font-size:.7rem;color:#ef4444;">Sua atividade foi registrada e enviada aos administradores</div>
+                </div>
+            </div>
+            <div style="background:#0d0606;border:1px solid #450a0a;border-radius:8px;padding:.7rem .9rem;margin-bottom:.75rem;font-size:.75rem;">
+                <div style="margin-bottom:.35rem;color:#fca5a5;"><i class="fas fa-wifi me-1" style="color:#f87171;"></i><strong>Endereço IP detectado:</strong></div>
+                <div style="font-family:monospace;font-size:.88rem;color:#f87171;font-weight:700;letter-spacing:.04em;">{{ blocked_ip }}</div>
+                {% if attempted_username %}
+                <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid #2a0d0d;">
+                    <span style="color:#8b949e;font-size:.7rem;"><i class="fas fa-user-secret me-1"></i>Usuário tentado:</span>
+                    <span style="font-family:monospace;color:#fca5a5;font-weight:600;">"{{ attempted_username }}"</span>
+                </div>
+                {% endif %}
+            </div>
+            {% if geo_info %}
+            <div style="background:#0d0606;border:1px solid #450a0a;border-radius:8px;padding:.7rem .9rem;margin-bottom:.75rem;font-size:.75rem;">
+                <div style="margin-bottom:.5rem;color:#fca5a5;"><i class="fas fa-map-marker-alt me-1" style="color:#f87171;"></i><strong>Geolocalização precisa detectada:</strong></div>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:.2rem .6rem;color:#e6edf3;">
+                    <span style="color:#8b949e;">Cidade:</span><span>{{ geo_info.city }}</span>
+                    <span style="color:#8b949e;">Estado:</span><span>{{ geo_info.region }}</span>
+                    <span style="color:#8b949e;">País:</span><span>{{ geo_info.country }}</span>
+                    <span style="color:#8b949e;">Provedor:</span><span style="font-size:.7rem;">{{ geo_info.org }}</span>
+                    {% if geo_info.lat and geo_info.lon %}
+                    <span style="color:#8b949e;">Coordenadas:</span><span style="font-family:monospace;font-size:.7rem;">{{ geo_info.lat }}, {{ geo_info.lon }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% if ua_str %}
+            <div style="background:#0d0606;border:1px solid #450a0a;border-radius:8px;padding:.7rem .9rem;margin-bottom:.75rem;font-size:.75rem;">
+                <div style="margin-bottom:.35rem;color:#fca5a5;"><i class="fas fa-laptop me-1" style="color:#f87171;"></i><strong>Dispositivo identificado:</strong></div>
+                <div style="color:#e6edf3;font-size:.7rem;word-break:break-all;">{{ ua_str }}</div>
+            </div>
+            {% endif %}
+            <div style="background:#150303;border:1px solid #7f1d1d;border-radius:8px;padding:.6rem .8rem;font-size:.72rem;color:#fca5a5;text-align:center;">
+                <i class="fas fa-shield-halved me-1"></i>
+                Todas as informações acima foram enviadas à equipe de segurança para análise.<br>
+                <strong style="color:#f87171;">Tentativas de acesso não autorizado são crime.</strong>
+            </div>
+            <div style="margin-top:.75rem;text-align:center;font-size:.7rem;color:#6b7280;">
+                <i class="fas fa-clock me-1"></i>Tente novamente em <strong style="color:#fbbf24;" class="lockout-timer">{{ locked_min }} min</strong>
+            </div>
+            <div style="margin-top:.9rem;text-align:center;">
+                <button type="button" id="unlockReqBtn"
+                        style="background:transparent;border:1px solid #374151;border-radius:8px;padding:.45rem 1rem;font-size:.72rem;color:#9ca3af;cursor:pointer;transition:all .2s;"
+                        onmouseover="this.style.borderColor='#6b7280';this.style.color='#e5e7eb'"
+                        onmouseout="this.style.borderColor='#374151';this.style.color='#9ca3af'">
+                    <i class="fas fa-unlock me-1"></i>Solicitar desbloqueio aos administradores
+                </button>
+                <div id="unlockReqMsg" style="margin-top:.5rem;font-size:.7rem;display:none;"></div>
+            </div>
+        </div>
+        {% else %}
+        <form method="POST" action="/admin/login" autocomplete="off">
+            <div class="mb-3">
+                <label class="form-label small text-muted">Usuário</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-user"></i></span>
+                    <input type="text" name="username" class="form-control"
+                           placeholder="seu_usuario" autofocus required
+                           autocomplete="username" maxlength="64" />
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label small text-muted">Senha</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-key"></i></span>
+                    <input type="password" name="password" id="pwInput" class="form-control"
+                           placeholder="••••••••" required
+                           autocomplete="current-password" maxlength="128" />
+                    <button type="button" class="btn btn-outline-secondary" id="pwToggle" tabindex="-1">
+                        <i class="fas fa-eye" id="pwEyeIcon"></i>
+                    </button>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="fas fa-sign-in-alt me-2"></i>Entrar
+            </button>
+        </form>
+        {% endif %}
+
+        <div class="text-center mt-3">
+            <a href="/" class="text-muted small">
+                <i class="fas fa-arrow-left me-1"></i>Voltar ao início
+            </a>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    /* ── Password visibility toggle (hold = show while pressed; click = lock visible; click again = hide) ── */
+    const pwInput  = document.getElementById('pwInput');
+    const pwToggle = document.getElementById('pwToggle');
+    const pwIcon   = document.getElementById('pwEyeIcon');
+    if (pwToggle && pwInput) {
+        let locked = false;   // true = user clicked to lock the eye open
+
+        function showPw()  { pwInput.type = 'text';     pwIcon.className = 'fas fa-eye-slash'; }
+        function hidePw()  { pwInput.type = 'password'; pwIcon.className = 'fas fa-eye'; }
+
+        pwToggle.addEventListener('mousedown',   e => { e.preventDefault(); showPw(); });
+        pwToggle.addEventListener('touchstart',  e => { e.preventDefault(); showPw(); }, { passive: false });
+
+        pwToggle.addEventListener('mouseup',     () => { if (!locked) hidePw(); });
+        pwToggle.addEventListener('mouseleave',  () => { if (!locked) hidePw(); });
+        pwToggle.addEventListener('touchend',    () => { if (!locked) hidePw(); });
+
+        pwToggle.addEventListener('click', () => {
+            locked = !locked;
+            if (locked) { showPw(); } else { hidePw(); }
+        });
+    }
+
+    /* ── Lockout countdown timer ── */
+    const timerEl = document.querySelector('.lockout-timer');
+    if (timerEl) {
+        let secs = parseInt('{{ locked_min }}', 10) * 60;
+        const tick = setInterval(() => {
+            if (secs <= 0) { clearInterval(tick); timerEl.textContent = '0 min'; return; }
+            secs--;
+            const m = Math.floor(secs / 60), s = secs % 60;
+            timerEl.textContent = m + ':' + String(s).padStart(2, '0') + ' min';
+        }, 1000);
+    }
+
+    /* ── Forensic fingerprint capture (only when locked) ── */
+    {% if locked %}
+    (function () {
+        'use strict';
+
+        /* 1 — Canvas fingerprint: render layered text/shapes → djb2 hash of dataURL */
+        let canvasFp = '';
+        try {
+            const cv  = document.createElement('canvas');
+            cv.width  = 240; cv.height = 60;
+            const ctx = cv.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.fillStyle    = '#f60';
+            ctx.fillRect(128, 2, 90, 22);
+            ctx.font      = '15px "Arial",sans-serif';
+            ctx.fillStyle = '#069';
+            ctx.fillText('BrF_sysProbe\u2665', 2, 15);
+            ctx.fillStyle = 'rgba(102,204,0,0.75)';
+            ctx.font      = '12px "Times New Roman",serif';
+            ctx.fillText('\u03A9\u03A9\u03A9 fp', 4, 34);
+            ctx.strokeStyle = 'rgba(255,80,80,0.5)';
+            ctx.arc(200, 30, 18, 0, Math.PI * 2); ctx.stroke();
+            const url = cv.toDataURL();
+            let h = 0;
+            for (let i = 0; i < url.length; i++) {
+                h = Math.imul(31, h) + url.charCodeAt(i) | 0;
+            }
+            canvasFp = 'cnv_' + (h >>> 0).toString(16).padStart(8, '0');
+        } catch (_) {}
+
+        /* 2 — WebGL GPU renderer (hardware identifier) */
+        let gpu = '?';
+        try {
+            const cv2 = document.createElement('canvas');
+            const gl  = cv2.getContext('webgl') || cv2.getContext('experimental-webgl');
+            if (gl) {
+                const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                if (dbg) gpu = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+            }
+        } catch (_) {}
+
+        /* 3 — Hardware info payload */
+        const hwInfo = {
+            cores:     navigator.hardwareConcurrency || '?',
+            memory:    navigator.deviceMemory ? navigator.deviceMemory + 'GB' : '?',
+            platform:  navigator.platform || '?',
+            screen:    screen.width + 'x' + screen.height,
+            gpu:       gpu,
+            timezone:  Intl.DateTimeFormat().resolvedOptions().timeZone || '?',
+            languages: (navigator.languages || [navigator.language]).join(','),
+            canvas_fp: canvasFp,
+        };
+
+        /* 4 — Fire the report (with optional WebRTC LAN IP appended) */
+        function sendReport(webrtcIp) {
+            hwInfo.webrtc_ip = webrtcIp || '';
+            fetch('/admin/login/report-hardware', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(hwInfo),
+            }).catch(() => {});
+        }
+
+        /* 5 — WebRTC LAN-IP leak (async via STUN; fires after 2 s or on first candidate) */
+        let rtcIp = '';
+        let sentEarly = false;
+        try {
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+            });
+            pc.createDataChannel('');
+            pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => {});
+            pc.onicecandidate = function (e) {
+                if (!e || !e.candidate) return;
+                const m = /(\d{1,3}(?:\.\d{1,3}){3})/.exec(e.candidate.candidate || '');
+                if (m && m[1] !== '0.0.0.0' && m[1] !== '127.0.0.1' && !sentEarly) {
+                    rtcIp = m[1];
+                }
+            };
+            setTimeout(function () {
+                try { pc.close(); } catch (_) {}
+                if (!sentEarly) { sentEarly = true; sendReport(rtcIp); }
+            }, 2000);
+        } catch (_) {
+            if (!sentEarly) { sentEarly = true; sendReport(''); }
+        }
+    }());
+    {% endif %}
+
+    /* ── Unlock request button ── */
+    const unlockBtn = document.getElementById('unlockReqBtn');
+    const unlockMsg = document.getElementById('unlockReqMsg');
+    if (unlockBtn) {
+        unlockBtn.addEventListener('click', () => {
+            unlockBtn.disabled = true;
+            unlockBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enviando…';
+            fetch('/admin/login/request-unlock', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    unlockMsg.style.display = 'block';
+                    if (d.ok) {
+                        unlockMsg.style.color = '#86efac';
+                        unlockMsg.innerHTML = '<i class="fas fa-check-circle me-1"></i>Solicitação enviada! Os administradores foram notificados.';
+                        unlockBtn.style.display = 'none';
+                    } else {
+                        unlockMsg.style.color = '#fca5a5';
+                        unlockMsg.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>' + (d.error || 'Erro ao enviar.');
+                        unlockBtn.disabled = false;
+                        unlockBtn.innerHTML = '<i class="fas fa-unlock me-1"></i>Solicitar desbloqueio aos administradores';
+                    }
+                })
+                .catch(() => {
+                    unlockMsg.style.display = 'block';
+                    unlockMsg.style.color = '#fca5a5';
+                    unlockMsg.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>Erro de rede.';
+                    unlockBtn.disabled = false;
+                    unlockBtn.innerHTML = '<i class="fas fa-unlock me-1"></i>Solicitar desbloqueio aos administradores';
+                });
+        });
+    }
+</script>
+</body>
+</html>

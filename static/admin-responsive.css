@@ -1,0 +1,75 @@
+/* ── Responsividade mobile para o Painel Administrativo ──────────────────
+   Aplicado em todas as páginas /admin/*. Não altera o layout em telas
+   grandes (>768px); apenas ajusta espaçamentos, tamanhos de fonte e
+   empilhamento de elementos em telas pequenas. */
+
+@media (max-width: 768px) {
+    .container-fluid {
+        padding-left: .75rem !important;
+        padding-right: .75rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    h1, h2, h3, .h1, .h2, .h3 { font-size: 1.25rem !important; }
+    h4, .h4 { font-size: 1.1rem !important; }
+    h5, .h5 { font-size: 1rem !important; }
+
+    /* Cabeçalhos de página: empilha título + ações */
+    .page-header,
+    .d-flex.align-items-center.justify-content-between {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: .6rem;
+    }
+    .page-header > *,
+    .d-flex.align-items-center.justify-content-between > * {
+        width: 100%;
+    }
+
+    /* Grupos de botões — ocupam a largura toda e quebram linha */
+    .d-flex.gap-2, .d-flex.gap-3, .d-flex.gap-4 {
+        flex-wrap: wrap;
+    }
+    .btn { font-size: .82rem; }
+    .btn-sm { font-size: .76rem; padding: .3rem .55rem; }
+
+    /* Tabelas: permite rolagem horizontal suave com indicação visual */
+    .table-responsive {
+        border-radius: 8px;
+        -webkit-overflow-scrolling: touch;
+    }
+    table.table { font-size: .78rem; }
+    table.table th, table.table td {
+        white-space: nowrap;
+        padding: .5rem .5rem;
+    }
+
+    /* Cards/linhas de listagem (reports, audit, suspicious, unlock-requests) */
+    .section-card { padding: .9rem !important; }
+    .req-row, .report-row, .audit-row { padding: .7rem !important; }
+
+    /* Modais ocupam quase toda a largura da tela */
+    .modal-dialog { margin: .75rem; max-width: calc(100% - 1.5rem); }
+
+    /* Popovers não devem estourar a viewport */
+    .popover { max-width: 260px; }
+
+    /* Dropdown de notificações vira quase full-width */
+    #notifDropdown {
+        width: calc(100vw - 2rem) !important;
+        right: -0.5rem !important;
+        max-width: 360px;
+    }
+
+    /* Grid de avatares menor em telas pequenas */
+    .avatar-pick, .avatar-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .container-fluid { padding-left: .5rem !important; padding-right: .5rem !important; }
+    table.table { font-size: .72rem; }
+    .btn-sm { font-size: .7rem; padding: .25rem .45rem; }
+}

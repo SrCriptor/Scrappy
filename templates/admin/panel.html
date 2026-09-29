@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — Painel</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .role-badge-owner     { background: #111827; color: #f9fafb; }
+        .role-badge-admin     { background: #c0392b; color: #fff; }
+        .role-badge-moderator { background: #16a34a; color: #fff; }
+        .role-badge-helper    { background: #ea580c; color: #fff; }
+        .stat-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.2rem; text-align:center; }
+        .stat-num  { font-size:1.9rem; font-weight:700; }
+        .session-row { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:.8rem 1rem; margin-bottom:.5rem; }
+        .log-row { border-bottom:1px solid #21262d; padding:.5rem .2rem; font-size:.8rem; }
+        .log-row:last-child { border-bottom:none; }
+        .log-row.hidden-entry { opacity:.45; background: repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,200,0,.02) 4px,rgba(255,200,0,.02) 8px); }
+        .log-viewer { background:#0d1117; border:1px solid #30363d; border-radius:8px;
+                      max-height:420px; overflow-y:auto; padding:.75rem; }
+        .avatar-sm { width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid #30363d; }
+        .avatar-md { width:52px; height:52px; border-radius:50%; object-fit:cover; border:2px solid #30363d; }
+        .avatar-wrap { position:relative; display:inline-block; }
+        .crown-badge { position:absolute; top:-10px; left:50%; transform:translateX(-50%); font-size:.95rem; line-height:1; pointer-events:none; z-index:2; filter:drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
+        .profile-bubble {
+            position:fixed; bottom:20px; right:20px; z-index:9999;
+            display:flex; align-items:center; gap:10px;
+            background:#161b22; border:1px solid #30363d;
+            border-radius:50px; padding:6px 14px 6px 6px;
+            box-shadow:0 4px 20px rgba(0,0,0,.5);
+            cursor:pointer; transition: box-shadow .2s;
+        }
+        .profile-bubble:hover { box-shadow:0 6px 28px rgba(0,0,0,.7); }
+        .profile-bubble .av { width:36px; height:36px; border-radius:50%; object-fit:cover; }
+        .profile-bubble .name { font-size:.82rem; font-weight:600; line-height:1; }
+        .profile-bubble .role-pill {
+            font-size:.67rem; padding:1px 7px; border-radius:20px; color:#fff; margin-top:3px; display:inline-block;
+        }
+        .section-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; }
+        .section-title { font-size:.95rem; font-weight:600; margin-bottom:1rem; padding-bottom:.5rem; border-bottom:1px solid #21262d; }
+        .quick-btn { border-radius:10px; padding:.7rem 1rem; text-align:center; border:1px solid #30363d;
+                     background:#0d1117; transition: background .15s; text-decoration:none; display:block; color:#e6edf3; }
+        .quick-btn:hover { background:#21262d; color:#e6edf3; }
+        .quick-btn i { font-size:1.4rem; margin-bottom:.4rem; display:block; }
+        .quick-btn small { font-size:.75rem; color:#8b949e; }
+        .json-viewer { font-family: 'Courier New', monospace; font-size:.75rem; white-space:pre; }
+        /* Status indicator */
+        .status-dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+        .status-online    { background:#22c55e; box-shadow:0 0 6px #22c55e; }
+        .status-busy      { background:#f59e0b; box-shadow:0 0 6px #f59e0b; }
+        .status-invisible { background:#6b7280; }
+        .status-offline   { background:#374151; }
+        .member-row { display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.4rem .6rem; border-radius:6px; margin-bottom:.2rem; background:#0d1117; }
+        .member-row-main { display:flex; align-items:center; gap:.6rem; min-width:0; }
+        .member-row .status-dot { position:static; border:none; }
+        /* Maintenance banner */
+        .maint-banner { background:#451a03; border:1px solid #92400e; border-radius:8px; padding:.75rem 1rem; margin-bottom:1rem; color:#fbbf24; font-size:.85rem; display:flex; align-items:center; gap:.6rem; }
+        /* Notification badge */
+        .notif-badge { position:absolute; top:-4px; right:-4px; width:16px; height:16px; background:#ef4444; border-radius:50%; font-size:.55rem; display:flex; align-items:center; justify-content:center; font-weight:700; }
+        /* Backup card */
+        .backup-row { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; border-radius:6px; background:#0d1117; border:1px solid #21262d; margin-bottom:.3rem; font-size:.78rem; }
+        /* Immutable badge */
+        .immutable-badge { background:#1e3a2f; color:#4ade80; border:1px solid #166534; font-size:.68rem; padding:1px 7px; border-radius:20px; }
+    </style>
+</head>
+<body>
+
+<!-- Profile bubble (fixed) -->
+<div class="profile-bubble" id="profileBubble">
+    <div style="position:relative;">
+        <img src="/static/avatars/{{ admin.avatar }}.svg" class="av" alt="avatar" />
+        {% set sdot = 'status-' + (admin.status or 'offline') %}
+        <span class="status-dot {{ sdot }}" style="position:absolute;bottom:0;right:0;border:2px solid #161b22;"></span>
+    </div>
+    <div>
+        <div class="name">{{ admin.display_name }}</div>
+        <span class="role-pill role-badge-{{ admin.role }}">
+            {{ role_meta[admin.role].label }}
+        </span>
+    </div>
+    {% if unread_count %}
+    <span class="notif-badge">{{ unread_count if unread_count < 10 else '9+' }}</span>
+    {% endif %}
+    <i class="fas fa-chevron-up ms-1 text-muted" style="font-size:.7rem;"></i>
+</div>
+<ul class="dropdown-menu dropdown-menu-end" id="profileMenu" style="min-width:200px;">
+    <li><a class="dropdown-item" href="/admin/profile"><i class="fas fa-user-circle me-2"></i>Meu Perfil</a></li>
+    <li>
+        <div class="px-3 py-1">
+            <div class="text-muted" style="font-size:.72rem; margin-bottom:.3rem;">Status</div>
+            <div class="d-flex gap-1 flex-wrap">
+                <button type="button" class="btn btn-sm {% if admin.status == 'online' %}btn-success{% else %}btn-outline-secondary{% endif %} px-2 py-0" style="font-size:.7rem;" title="Disponível" onclick="setAdminStatus('online')">
+                    <i class="fas fa-circle text-success me-1"></i>Online
+                </button>
+                <button type="button" class="btn btn-sm {% if admin.status == 'busy' %}btn-warning{% else %}btn-outline-secondary{% endif %} px-2 py-0" style="font-size:.7rem;" title="Ocupado" onclick="setAdminStatus('busy')">
+                    <i class="fas fa-circle text-warning me-1"></i>Ocupado
+                </button>
+                {% if admin.role == 'owner' %}
+                <button type="button" class="btn btn-sm {% if admin.status == 'invisible' %}btn-secondary{% else %}btn-outline-secondary{% endif %} px-2 py-0" style="font-size:.7rem;" title="Invisível" onclick="setAdminStatus('invisible')">
+                    <i class="fas fa-circle-dot text-secondary me-1"></i>Invisível
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </li>
+    <li><hr class="dropdown-divider"></li>
+    <li>
+        <a class="dropdown-item" href="/admin/notifications">
+            <i class="fas fa-bell me-2"></i>Notificações
+            {% if unread_count %}<span class="badge bg-danger ms-1" style="font-size:.65rem;">{{ unread_count }}</span>{% endif %}
+        </a>
+    </li>
+    <li><a class="dropdown-item" href="/admin/reports"><i class="fas fa-inbox me-2"></i>Relatórios</a></li>
+    {% if admin.role == 'owner' %}
+    <li><a class="dropdown-item" href="/admin/audit"><i class="fas fa-shield-halved text-warning me-2"></i>Audit Log</a></li>
+    <li><a class="dropdown-item" href="/admin/webhooks"><i class="fab fa-discord text-indigo me-2" style="color:#5865f2;"></i>Webhooks Discord</a></li>
+    {% endif %}
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item text-danger" href="/admin/logout"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+</ul>
+
+<div class="container-fluid py-4 px-4" style="max-width:1200px;">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0">
+                <i class="fas fa-shield-halved text-primary me-2"></i>Painel Administrativo
+            </h4>
+            <small class="text-muted">Bem-vindo(a), <strong>{{ admin.display_name }}</strong></small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if has_perm(admin.role, 'manage_admins') %}
+            <a href="/admin/manage" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-users-cog me-1"></i>Gerenciar Admins
+            </a>
+            {% endif %}
+            <div class="position-relative" style="display:inline-block;">
+                <button type="button" id="notifBellBtn" class="btn btn-outline-info btn-sm position-relative" onclick="toggleNotifDropdown()">
+                    <i class="fas fa-bell"></i>
+                    <span class="notif-badge" id="bellBadge" style="display:{% if unread_count %}flex{% else %}none{% endif %};">{{ unread_count if unread_count < 10 else '9+' }}</span>
+                </button>
+                <div id="notifDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:360px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.7);z-index:9998;">
+                    <div style="padding:.65rem 1rem;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;border-radius:12px 12px 0 0;background:#161b22;">
+                        <span style="font-size:.85rem;font-weight:600;"><i class="fas fa-bell text-info me-2"></i>Notificações</span>
+                        <a href="/admin/notifications" style="font-size:.72rem;color:#6ea8fe;text-decoration:none;">Ver todas</a>
+                    </div>
+                    <div id="notifDropdownBody" style="max-height:380px;overflow-y:scroll;padding:.4rem .5rem;scrollbar-width:thin;scrollbar-color:#30363d #161b22;">
+                        <div class="text-center text-muted py-3" style="font-size:.82rem;"><i class="fas fa-spinner fa-spin me-2"></i>Carregando…</div>
+                    </div>
+                    <div style="padding:.45rem .75rem;border-top:1px solid #21262d;display:flex;gap:.4rem;justify-content:flex-end;border-radius:0 0 12px 12px;background:#161b22;">
+                        <button onclick="markAllNotifsRead()" style="background:none;border:1px solid #30363d;border-radius:6px;color:#8b949e;font-size:.68rem;padding:3px 8px;cursor:pointer;" title="Marcar todas como lidas">
+                            <i class="fas fa-check-double me-1"></i>Lidas
+                        </button>
+                        <button onclick="clearNotifDropdown()" style="background:none;border:1px solid #30363d;border-radius:6px;color:#8b949e;font-size:.68rem;padding:3px 8px;cursor:pointer;" title="Apagar todas as notificações">
+                            <i class="fas fa-trash-can me-1"></i>Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <a href="/admin/logout" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-sign-out-alt me-1"></i>Sair
+            </a>
+        </div>
+    </div>
+
+    <!-- Flash message -->
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show mb-3" role="alert">
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Payments disabled banner -->
+    {% if payments_disabled and has_perm(admin.role, 'gateway') %}
+    <div class="maint-banner" style="background:#1a0a2e;border-color:#7c3aed66;color:#c4b5fd;">
+        <i class="fas fa-ban"></i>
+        <span><strong>Meios de Pagamento DESATIVADOS</strong> — nenhum gateway de pagamento está ativo no momento.</span>
+        <a href="/payment/admin" class="btn btn-sm ms-auto" style="background:#7c3aed;color:#fff;border:none;">
+            <i class="fas fa-toggle-on me-1"></i>Reativar
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Maintenance banner (if active) -->
+    {% if maintenance and maintenance.enabled %}
+    <div class="maint-banner">
+        <i class="fas fa-tools"></i>
+        <span><strong>Modo Manutenção ATIVO</strong> — o site está inacessível para usuários externos.</span>
+        {% if admin.role == 'owner' %}
+        <form method="post" action="/admin/maintenance" class="ms-auto d-flex gap-2 align-items-center" id="maintOffForm">
+            <input type="hidden" name="enabled" value="0" />
+            <input type="hidden" name="message" value="{{ maintenance.message }}" />
+            <input type="hidden" name="reason" value="Desativado pelo Owner" />
+            <button type="submit" class="btn btn-warning btn-sm"><i class="fas fa-power-off me-1"></i>Desativar</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- === OWNER / ADMIN === -->
+    {% if has_perm(admin.role, 'manage_admins') %}
+
+    <!-- Stats row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-num text-primary">{{ all_admins | length }}</div>
+                <div class="text-muted small">Admins cadastrados</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-num text-success">{{ active_sessions | length }}</div>
+                <div class="text-muted small">Sessões ativas</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-num text-warning">{{ log_entries | length }}</div>
+                <div class="text-muted small">Ações registradas</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-num text-info">{{ summary.total }}</div>
+                <div class="text-muted small">URLs com falha</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick access -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-bolt text-warning me-2"></i>Acesso Rápido</div>
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
+                <a href="/admin/manage" class="quick-btn">
+                    <i class="fas fa-users-cog text-primary"></i>
+                    Gerenciar Admins
+                    <br><small>Criar, promover, desativar</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/debug" class="quick-btn">
+                    <i class="fas fa-bug text-danger"></i>
+                    Painel Debug
+                    <br><small>URLs com falha</small>
+                </a>
+            </div>
+            {% if has_perm(admin.role, 'gateway') %}
+            <div class="col-6 col-md-3">
+                <a href="/payment/admin" class="quick-btn">
+                    <i class="fas fa-credit-card text-success"></i>
+                    Gateway
+                    <br><small>Pagamentos</small>
+                </a>
+            </div>
+            {% endif %}
+            <div class="col-6 col-md-3">
+                <a href="/admin/activity/export" class="quick-btn">
+                    <i class="fas fa-file-download text-info"></i>
+                    Exportar Log
+                    <br><small>Download JSON</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/reports" class="quick-btn">
+                    <i class="fas fa-inbox text-success"></i>
+                    Relatórios
+                    <br><small>Caixa de entrada</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="quick-btn" onclick="openChatBall()" style="cursor:pointer;">
+                    <i class="fas fa-comments text-info"></i>
+                    Chat da Equipe
+                    <br><small>Clique para abrir o chat</small>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/batch/panel" class="quick-btn">
+                    <i class="fas fa-layer-group text-warning"></i>
+                    Painel Batch Scraper
+                    <br><small>Configurar lotes</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/ranking" class="quick-btn">
+                    <i class="fas fa-crown text-warning"></i>
+                    Ranking de Doadores
+                    <br><small>Pódio &amp; Tiers VIP</small>
+                </a>
+            </div>
+            {% if has_perm(admin.role, 'debug') %}
+            <div class="col-6 col-md-3">
+                <a href="/dashboard/config" class="quick-btn">
+                    <i class="fas fa-gauge-high text-info"></i>
+                    Configurações do Dashboard
+                    <br><small>Métricas &amp; overrides</small>
+                </a>
+            </div>
+            {% endif %}
+            {% if has_perm(admin.role, 'manage_admins') %}
+            <div class="col-6 col-md-3">
+                <a href="/admin/unlock-requests" class="quick-btn" style="position:relative;">
+                    <i class="fas fa-unlock text-warning"></i>
+                    Desbloqueios de IP
+                    <br><small>Solicitações de admins</small>
+                    {% if pending_unlock_count > 0 %}
+                    <span class="notif-badge">{{ pending_unlock_count }}</span>
+                    {% endif %}
+                </a>
+            </div>
+            {% endif %}
+            {% if admin.role == 'owner' %}
+            <div class="col-6 col-md-3">
+                <a href="/admin/audit" class="quick-btn">
+                    <i class="fas fa-shield-halved text-warning"></i>
+                    Audit Log
+                    <br><small>Registro imutável</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/webhooks" class="quick-btn">
+                    <i class="fab fa-discord" style="color:#5865f2;font-size:1.4rem;margin-bottom:.4rem;display:block;"></i>
+                    Webhooks Discord
+                    <br><small>Configurar notificações</small>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/security" class="quick-btn" style="position:relative;">
+                    <i class="fas fa-fingerprint" style="color:#f87171;font-size:1.4rem;margin-bottom:.4rem;display:block;"></i>
+                    Segurança &amp; Forense
+                    <br><small>Ataques · Força Bruta · Fingerprint</small>
+                    {% if brute_force_today > 0 %}
+                    <span style="position:absolute;top:6px;right:8px;background:#7f1d1d;color:#fca5a5;border-radius:20px;font-size:.6rem;padding:1px 6px;font-weight:700;">{{ brute_force_today }} hoje</span>
+                    {% endif %}
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/settings" class="quick-btn">
+                    <i class="fas fa-sliders {% if maintenance and maintenance.enabled %}text-warning{% else %}text-secondary{% endif %}"></i>
+                    Configurações do Sistema
+                    <br><small>Modo Manutenção {% if maintenance and maintenance.enabled %}(Ativo){% endif %}</small>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Online members (all roles) -->
+    <div class="section-card" id="onlineMembersSection" {% if not online_members %}style="display:none;"{% endif %}>
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-users text-success me-2"></i>Membros Online</span>
+            <span class="badge bg-success" id="totalOnlineCounter">{{ online_members | length }}</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2" id="onlineUsersContainer">
+        {% for m in online_members %}
+        <div class="member-row" data-online-id="{{ m.id }}" style="min-width:180px;">
+            <div class="member-row-main">
+                <div class="avatar-wrap">
+                    <img src="/static/avatars/{{ m.avatar }}.svg" class="avatar-sm" />
+                    {% if m.crowned %}<span class="crown-badge" title="Funcionário do Mês">👑</span>{% endif %}
+                </div>
+                <div>
+                    <div style="font-size:.82rem;font-weight:600;">{{ m.display_name }}</div>
+                    <span class="badge role-badge-{{ m.role }}" style="font-size:.62rem;">{{ role_meta[m.role].label }}</span>
+                    {% if m.crowned %}<div style="font-size:.6rem;color:#f59e0b;">✦ Func. do Mês</div>{% endif %}
+                </div>
+            </div>
+            <span class="status-dot status-{{ m.status }}"></span>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+
+
+    <!-- Active sessions (item 8) -->
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-circle text-success me-2" style="font-size:.6rem;vertical-align:middle;"></i>Sessões Ativas</span>
+            <span class="badge bg-success">{{ active_sessions | length }}</span>
+        </div>
+        {% if active_sessions %}
+        {% for s in active_sessions %}
+        <div class="session-row d-flex align-items-center gap-3">
+            <div class="avatar-wrap">
+                <img src="/static/avatars/{{ s.avatar }}.svg" class="avatar-sm" />
+                {% if s.crowned %}<span class="crown-badge" title="Funcionário do Mês">👑</span>{% endif %}
+            </div>
+            <div class="flex-grow-1">
+                <div class="fw-semibold" style="font-size:.85rem;">{{ s.display_name }}</div>
+                <div class="text-muted" style="font-size:.75rem;">
+                    <span class="badge role-badge-{{ s.role }} me-1">{{ role_meta[s.role].label }}</span>
+                    {% if s.ip %}
+                    <span class="session-geo-flag" data-ip="{{ s.ip }}" style="cursor:help;"
+                          title="Carregando localização…">🌐</span>
+                    <span class="session-geo-ip" data-ip="{{ s.ip }}"
+                          style="font-family:monospace;font-size:.72rem;cursor:help;"
+                          title="Carregando localização…">{{ s.ip }}</span>
+                    {% else %}—{% endif %}
+                    · Último acesso: {{ s.last_seen | fmt_ts_short }}
+                </div>
+            </div>
+            <div class="text-muted" style="font-size:.72rem; white-space:nowrap;">desde {{ s.created_at | fmt_ts_short }}</div>
+            {% if can_terminate(admin.role, s.role) and s.token != current_token %}
+            <button class="btn btn-outline-danger btn-sm py-1 px-2" style="font-size:.72rem;"
+                    title="Encerrar sessão de {{ s.display_name }}"
+                    onclick="openTerminateModal('{{ s.token }}', '{{ s.display_name }}')">
+                <i class="fas fa-power-off"></i>
+            </button>
+            {% else %}
+            <span class="badge bg-success" style="font-size:.65rem;">Você</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted small mb-0">Nenhuma outra sessão ativa.</p>
+        {% endif %}
+    </div>
+
+    <!-- Suspicious attacks summary (owner only — item 8, painel unificado) -->
+    {% if admin.role == 'owner' and suspicious_requests %}
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-triangle-exclamation text-danger me-2"></i>Ataques Suspeitos Recentes</span>
+            <div class="d-flex gap-2 align-items-center">
+                {% if suspicious_today > 0 %}
+                <span class="badge bg-danger" style="font-size:.7rem;">{{ suspicious_today }} hoje</span>
+                {% endif %}
+                <a href="/admin/security" class="btn btn-outline-danger btn-sm" style="font-size:.72rem;">
+                    <i class="fas fa-eye me-1"></i>Ver todos
+                </a>
+            </div>
+        </div>
+        <div style="max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#30363d #0d1117;">
+        {% for r in suspicious_requests[:10] %}
+        {% set atype = r.attack_type | lower | replace(' ', '') %}
+        <div style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem .4rem;border-bottom:1px solid #1e2633;">
+            <div style="width:26px;height:26px;border-radius:50%;background:{% if 'xss' in atype %}#3d1a1a{% elif 'sql' in atype %}#1a1a3d{% else %}#1a2e1a{% endif %};display:flex;align-items:center;justify-content:center;font-size:.65rem;color:{% if 'xss' in atype %}#f87171{% elif 'sql' in atype %}#818cf8{% else %}#86efac{% endif %};flex-shrink:0;">
+                <i class="fas {% if 'xss' in atype %}fa-code{% elif 'sql' in atype %}fa-database{% else %}fa-folder-open{% endif %}"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:2px;">
+                    <span style="font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:20px;background:{% if 'xss' in atype %}#3d1a1a{% elif 'sql' in atype %}#1a1a3d{% else %}#1a2e1a{% endif %};color:{% if 'xss' in atype %}#f87171{% elif 'sql' in atype %}#818cf8{% else %}#86efac{% endif %};">{{ r.attack_type }}</span>
+                    <code style="font-size:.7rem;color:#60a5fa;">{{ r.ip }}</code>
+                    <span style="font-size:.65rem;color:#8b949e;">{{ r.ts | fmt_ts }}</span>
+                    {% if r.count > 1 %}<span style="font-size:.62rem;background:#451a03;color:#fbbf24;padding:1px 5px;border-radius:10px;">{{ r.count }}×</span>{% endif %}
+                </div>
+                <div style="font-family:monospace;font-size:.68rem;color:#f59e0b;word-break:break-all;background:#0d1117;padding:1px 5px;border-radius:3px;">{{ r.url_path[:120] }}{% if r.url_path|length > 120 %}…{% endif %}</div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% if suspicious_requests | length > 10 %}
+        <div class="text-center mt-2" style="font-size:.75rem;color:#8b949e;">
+            + {{ suspicious_requests|length - 10 }} mais — <a href="/admin/security" style="color:#6ea8fe;">ver todos</a>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Activity log (items 5, 7) -->
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <span><i class="fas fa-history text-info me-2"></i>Log de Atividade</span>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if admin.role == 'owner' %}
+                <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#clearLogsModal">
+                    <i class="fas fa-trash me-1"></i>Limpar Tudo
+                </button>
+                {% endif %}
+                <button class="btn btn-sm btn-outline-secondary" id="toggleLogViewBtn">
+                    <i class="fas fa-code me-1"></i>Ver JSON
+                </button>
+                <a href="/admin/activity/export" class="btn btn-sm btn-outline-info">
+                    <i class="fas fa-download me-1"></i>Exportar
+                </a>
+            </div>
+        </div>
+
+        <!-- Table view -->
+        <div id="logTableView">
+            {% if log_entries %}
+            <div class="log-viewer">
+                {% for entry in log_entries[:50] %}
+                <div class="log-row d-flex gap-2 align-items-start {% if entry.hidden_by %}hidden-entry{% endif %}">
+                    <span class="text-muted" style="min-width:140px;font-size:.72rem;">{{ entry.ts | fmt_ts }}</span>
+                    <span class="badge role-badge-{{ entry.role }}" style="font-size:.65rem;min-width:68px;text-align:center;">
+                        {{ role_meta[entry.role].label }}
+                    </span>
+                    <span style="min-width:90px;font-weight:600;">{{ entry.admin_name }}</span>
+                    <span class="text-info">{{ entry.action }}</span>
+                    {% if entry.detail %}
+                    <span class="text-muted">— {{ entry.detail[:80] }}{% if entry.detail|length > 80 %}…{% endif %}</span>
+                    {% endif %}
+                    {% if entry.hidden_by %}
+                    <span class="text-warning ms-auto" style="font-size:.65rem;"><i class="fas fa-eye-slash"></i></span>
+                    {% endif %}
+                    {% if admin.role == 'owner' and not entry.hidden_by %}
+                    <button class="btn btn-link btn-sm text-muted ms-auto p-0" style="font-size:.65rem;"
+                            onclick="openHideLogModal({{ entry.id }})">
+                        <i class="fas fa-eye-slash"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if log_entries | length > 50 %}
+                <div class="text-center text-muted mt-2" style="font-size:.78rem;">
+                    + {{ log_entries|length - 50 }} entradas mais antigas — <a href="/admin/activity/export">baixar tudo em JSON</a>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted small mb-0">Nenhuma atividade registrada ainda.</p>
+            {% endif %}
+        </div>
+
+        <!-- JSON view -->
+        <div id="logJsonView" style="display:none;">
+            <div class="log-viewer">
+                <pre class="json-viewer text-success mb-0" id="logJsonPre"></pre>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+    <!-- === END ADMIN/OWNER === -->
+
+    <!-- === MODERATOR === -->
+    {% if admin.role == 'moderator' %}
+
+    <!-- Membros Online (moderator) -->
+    <div class="section-card" id="onlineMembersSection" {% if not online_members %}style="display:none;"{% endif %}>
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-users text-success me-2"></i>Membros Online</span>
+            <span class="badge bg-success" id="totalOnlineCounter">{{ online_members | length }}</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2" id="onlineUsersContainer">
+        {% for m in online_members %}
+        <div class="member-row" data-online-id="{{ m.id }}" style="min-width:180px;">
+            <div class="member-row-main">
+                <div class="avatar-wrap">
+                    <img src="/static/avatars/{{ m.avatar }}.svg" class="avatar-sm" />
+                    {% if m.crowned %}<span class="crown-badge" title="Funcionário do Mês">👑</span>{% endif %}
+                </div>
+                <div>
+                    <div style="font-size:.82rem;font-weight:600;">{{ m.display_name }}</div>
+                    <span class="badge role-badge-{{ m.role }}" style="font-size:.62rem;">{{ role_meta[m.role].label }}</span>
+                    {% if m.crowned %}<div style="font-size:.6rem;color:#f59e0b;">✦ Func. do Mês</div>{% endif %}
+                </div>
+            </div>
+            <span class="status-dot status-{{ m.status }}"></span>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+
+    <!-- Moderator: Debug URLs -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-bug text-danger me-2"></i>Debug — URLs com Falha</div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <a href="/debug" class="quick-btn">
+                    <i class="fas fa-list-ul text-danger"></i>
+                    Ver URLs com Falha
+                    <br><small>Listar, filtrar e resolver URLs</small>
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="/admin/reports" class="quick-btn">
+                    <i class="fas fa-inbox text-success"></i>
+                    Relatórios
+                    <br><small>Enviar e visualizar relatórios</small>
+                </a>
+            </div>
+        </div>
+        <div class="mt-3 p-3" style="background:#0d1117;border-radius:8px;border:1px solid #30363d;">
+            <div class="text-muted small">
+                <i class="fas fa-info-circle me-1"></i>
+                Painel de URLs com falha: marque como resolvida, filtre por domínio, limpe registros antigos.
+            </div>
+        </div>
+    </div>
+
+    <!-- Moderator: Batch Config (separate) -->
+    <div class="section-card mt-3">
+        <div class="section-title"><i class="fas fa-layer-group text-warning me-2"></i>Configurações do Batch Scraper</div>
+        <div class="row g-3">
+            <div class="col-md-12">
+                <a href="/batch/panel" class="quick-btn">
+                    <i class="fas fa-sliders-h text-warning"></i>
+                    Configurar Batch Scraper
+                    <br><small>Limite de URLs por lote e delay entre requisições</small>
+                </a>
+            </div>
+        </div>
+        <div class="mt-3 p-3" style="background:#0d1117;border-radius:8px;border:1px solid #30363d;">
+            <div class="text-muted small">
+                <i class="fas fa-info-circle me-1"></i>
+                Controle quantas URLs o batch processa por vez e o intervalo entre requisições para evitar bloqueios.
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+
+    <!-- === HELPER === -->
+    {% if admin.role == 'helper' %}
+
+    <!-- Membros Online (helper) -->
+    <div class="section-card" id="onlineMembersSection" {% if not online_members %}style="display:none;"{% endif %}>
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-users text-success me-2"></i>Membros Online</span>
+            <span class="badge bg-success" id="totalOnlineCounter">{{ online_members | length }}</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2" id="onlineUsersContainer">
+        {% for m in online_members %}
+        <div class="member-row" data-online-id="{{ m.id }}" style="min-width:180px;">
+            <div class="member-row-main">
+                <div class="avatar-wrap">
+                    <img src="/static/avatars/{{ m.avatar }}.svg" class="avatar-sm" />
+                    {% if m.crowned %}<span class="crown-badge" title="Funcionário do Mês">👑</span>{% endif %}
+                </div>
+                <div>
+                    <div style="font-size:.82rem;font-weight:600;">{{ m.display_name }}</div>
+                    <span class="badge role-badge-{{ m.role }}" style="font-size:.62rem;">{{ role_meta[m.role].label }}</span>
+                    {% if m.crowned %}<div style="font-size:.6rem;color:#f59e0b;">✦ Func. do Mês</div>{% endif %}
+                </div>
+            </div>
+            <span class="status-dot status-{{ m.status }}"></span>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-hand-holding-heart text-secondary me-2"></i>Área do Ajudante</div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <a href="/debug" class="quick-btn">
+                    <i class="fas fa-check-circle text-success"></i>
+                    Resolver URLs
+                    <br><small>Marcar URLs como resolvidas</small>
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="/admin/reports" class="quick-btn">
+                    <i class="fas fa-inbox text-info"></i>
+                    Relatórios
+                    <br><small>Reportar ao Moderador</small>
+                </a>
+            </div>
+        </div>
+        <div class="mt-3 p-3" style="background:#0d1117;border-radius:8px;border:1px solid #30363d;">
+            <div class="text-muted small">
+                <i class="fas fa-info-circle me-1"></i>
+                Sua função é marcar URLs com falha como resolvidas no painel debug.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- ═══ MODALS ════════════════════════════════════════════════════════════ -->
+
+<!-- Terminate session modal (items 8+11) -->
+<div class="modal fade" id="terminateModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-bottom" style="border-color:#21262d !important;">
+                <h5 class="modal-title text-danger"><i class="fas fa-power-off me-2"></i>Encerrar Sessão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Você está prestes a encerrar a sessão de <strong id="terminateTarget"></strong>.</p>
+                <label class="form-label text-muted small">Motivo <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="terminateReason" rows="2" placeholder="Ex: suspeita de acesso não autorizado..."></textarea>
+            </div>
+            <div class="modal-footer border-top" style="border-color:#21262d !important;">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-danger btn-sm" onclick="submitTerminate()">
+                    <i class="fas fa-power-off me-1"></i>Encerrar Sessão
+                </button>
+            </div>
+            <form id="terminateForm" method="post" action="/admin/sessions/terminate">
+                <input type="hidden" name="token" id="terminateToken" />
+                <input type="hidden" name="reason" id="terminateReasonHidden" />
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Hide log modal (item 5+11) -->
+<div class="modal fade" id="hideLogModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-bottom" style="border-color:#21262d !important;">
+                <h5 class="modal-title text-warning"><i class="fas fa-eye-slash me-2"></i>Ocultar Entrada de Log</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Esta entrada ficará oculta para moderadores e helpers. O Owner ainda poderá vê-la.</p>
+                <label class="form-label text-muted small">Motivo <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="hideLogReason" rows="2" placeholder="Ex: informação sensível..."></textarea>
+            </div>
+            <div class="modal-footer border-top" style="border-color:#21262d !important;">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-warning btn-sm" onclick="submitHideLog()">
+                    <i class="fas fa-eye-slash me-1"></i>Ocultar
+                </button>
+            </div>
+            <form id="hideLogForm" method="post" action="/admin/logs/hide">
+                <input type="hidden" name="entry_id" id="hideLogEntryId" />
+                <input type="hidden" name="reason" id="hideLogReasonHidden" />
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Clear all logs modal (item 5+11) -->
+<div class="modal fade" id="clearLogsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-bottom" style="border-color:#21262d !important;">
+                <h5 class="modal-title text-danger"><i class="fas fa-trash me-2"></i>Limpar Todos os Logs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2" style="font-size:.82rem;">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Esta ação é irreversível. Todos os registros de atividade serão permanentemente apagados.
+                </div>
+                <label class="form-label text-muted small">Motivo <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="clearLogsReason" rows="2" placeholder="Motivo obrigatório..."></textarea>
+            </div>
+            <div class="modal-footer border-top" style="border-color:#21262d !important;">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-danger btn-sm" onclick="submitClearLogs()">
+                    <i class="fas fa-trash me-1"></i>Confirmar e Apagar Tudo
+                </button>
+            </div>
+            <form id="clearLogsForm" method="post" action="/admin/logs/clear">
+                <input type="hidden" name="reason" id="clearLogsReasonHidden" />
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reason modal (generic — item 11) -->
+<div class="modal fade" id="reasonModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-bottom" style="border-color:#21262d !important;">
+                <h5 class="modal-title" id="reasonModalTitle"><i class="fas fa-edit me-2"></i>Motivo Obrigatório</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label text-muted small">Informe o motivo <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="reasonModalInput" rows="2" placeholder="Motivo..."></textarea>
+            </div>
+            <div class="modal-footer border-top" style="border-color:#21262d !important;">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary btn-sm" onclick="submitReasonModal()">
+                    <i class="fas fa-check me-1"></i>Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ SCRIPTS ═══════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    const IS_OWNER = {{ 'true' if admin.role == 'owner' else 'false' }};
+
+    // Profile bubble dropdown — fully custom (no data-bs-toggle="dropdown" on
+    // the bubble) so Bootstrap's own Popper-based dropdown.js never attaches
+    // a second, conflicting positioning system to the same element. That
+    // double-toggle was the root cause of the menu "teleporting" whenever an
+    // interactive element inside it (like the status buttons) was clicked.
+    const bubble  = document.getElementById('profileBubble');
+    const menu    = document.getElementById('profileMenu');
+    function positionProfileMenu() {
+        const rect = bubble.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.bottom   = (window.innerHeight - rect.top + 8) + 'px';
+        menu.style.right    = (window.innerWidth - rect.right) + 'px';
+        menu.style.top      = 'auto';
+    }
+    function closeProfileMenu() {
+        menu.style.display = 'none';
+        menu.classList.remove('show');
+    }
+    if (bubble && menu) {
+        document.addEventListener('click', e => {
+            if (bubble.contains(e.target)) {
+                const opening = menu.style.display !== 'block';
+                if (opening) {
+                    positionProfileMenu();
+                    menu.style.display = 'block';
+                    menu.classList.add('show');
+                } else {
+                    closeProfileMenu();
+                }
+            } else if (!menu.contains(e.target)) {
+                closeProfileMenu();
+            }
+        });
+    }
+
+    // AJAX status change — avoids a full page reload (and the visual jump
+    // that came with it) when clicking a status button inside the dropdown.
+    window.setAdminStatus = async function(status) {
+        try {
+            const r = await fetch('/admin/status', {
+                method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: 'status=' + encodeURIComponent(status)
+            });
+            if (r.redirected || r.ok) {
+                closeProfileMenu();
+                location.reload();
+            }
+        } catch {
+            closeProfileMenu();
+        }
+    };
+
+    // Log JSON toggle
+    const toggleBtn = document.getElementById('toggleLogViewBtn');
+    const tableView = document.getElementById('logTableView');
+    const jsonView  = document.getElementById('logJsonView');
+    const jsonPre   = document.getElementById('logJsonPre');
+    let   jsonLoaded = false;
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', async () => {
+            const showJson = tableView.style.display !== 'none';
+            if (showJson) {
+                tableView.style.display = 'none';
+                jsonView.style.display  = 'block';
+                toggleBtn.innerHTML     = '<i class="fas fa-table me-1"></i>Ver Tabela';
+                if (!jsonLoaded) {
+                    jsonPre.textContent = 'Carregando…';
+                    try {
+                        const r = await fetch('/admin/activity/json');
+                        const d = await r.json();
+                        jsonPre.textContent = JSON.stringify(d, null, 2);
+                        jsonLoaded = true;
+                    } catch { jsonPre.textContent = 'Erro ao carregar.'; }
+                }
+            } else {
+                tableView.style.display = 'block';
+                jsonView.style.display  = 'none';
+                toggleBtn.innerHTML     = '<i class="fas fa-code me-1"></i>Ver JSON';
+            }
+        });
+    }
+
+    // ── Session termination (item 8) ────────────────────────────────────
+    let _terminateModal = null;
+    function openTerminateModal(token, name) {
+        document.getElementById('terminateToken').value = token;
+        document.getElementById('terminateTarget').textContent = name;
+        document.getElementById('terminateReason').value = '';
+        if (IS_OWNER) {
+            document.getElementById('terminateReasonHidden').value = 'Encerrado pelo Owner';
+            document.getElementById('terminateForm').submit();
+            return;
+        }
+        _terminateModal = _terminateModal || new bootstrap.Modal(document.getElementById('terminateModal'));
+        _terminateModal.show();
+    }
+    function submitTerminate() {
+        const reason = document.getElementById('terminateReason').value.trim();
+        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        document.getElementById('terminateReasonHidden').value = reason;
+        document.getElementById('terminateForm').submit();
+    }
+
+    // ── Hide log (item 5) ────────────────────────────────────────────────
+    let _hideLogModal = null;
+    function openHideLogModal(entryId) {
+        document.getElementById('hideLogEntryId').value = entryId;
+        document.getElementById('hideLogReason').value = '';
+        if (IS_OWNER) {
+            document.getElementById('hideLogReasonHidden').value = 'Ocultado pelo Owner';
+            document.getElementById('hideLogForm').submit();
+            return;
+        }
+        _hideLogModal = _hideLogModal || new bootstrap.Modal(document.getElementById('hideLogModal'));
+        _hideLogModal.show();
+    }
+    function submitHideLog() {
+        const reason = document.getElementById('hideLogReason').value.trim();
+        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        document.getElementById('hideLogReasonHidden').value = reason;
+        document.getElementById('hideLogForm').submit();
+    }
+
+    // ── Clear all logs (item 5) ──────────────────────────────────────────
+    function submitClearLogs() {
+        if (IS_OWNER) {
+            document.getElementById('clearLogsReasonHidden').value = 'Logs limpos pelo Owner';
+            document.getElementById('clearLogsForm').submit();
+            return;
+        }
+        const reason = document.getElementById('clearLogsReason').value.trim();
+        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        document.getElementById('clearLogsReasonHidden').value = reason;
+        document.getElementById('clearLogsForm').submit();
+    }
+
+    // ── Generic reason modal (item 11) ────────────────────────────────────
+    let _reasonFormId = null;
+    let _reasonModal  = null;
+    function requireReason(formId, label) {
+        _reasonFormId = formId;
+        if (IS_OWNER) {
+            const form = document.getElementById(formId);
+            let inp = form.querySelector('[name="reason"]');
+            if (!inp) { inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'reason'; form.appendChild(inp); }
+            inp.value = 'Ação do Owner';
+            form.submit();
+            return;
+        }
+        document.getElementById('reasonModalTitle').innerHTML = '<i class="fas fa-edit me-2"></i>' + label;
+        document.getElementById('reasonModalInput').value = '';
+        _reasonModal = _reasonModal || new bootstrap.Modal(document.getElementById('reasonModal'));
+        _reasonModal.show();
+    }
+    function submitReasonModal() {
+        const reason = document.getElementById('reasonModalInput').value.trim();
+        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        const form = document.getElementById(_reasonFormId);
+        let inp = form.querySelector('[name="reason"]');
+        if (!inp) { inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'reason'; form.appendChild(inp); }
+        inp.value = reason;
+        form.submit();
+    }
+
+    // ── Notification dropdown ─────────────────────────────────────────────
+    let _notifOpen = false;
+    function toggleNotifDropdown() {
+        _notifOpen = !_notifOpen;
+        const dd = document.getElementById('notifDropdown');
+        if (dd) dd.style.display = _notifOpen ? 'block' : 'none';
+        if (_notifOpen) loadNotifDropdown();
+    }
+    document.addEventListener('click', e => {
+        const btn = document.getElementById('notifBellBtn');
+        const dd  = document.getElementById('notifDropdown');
+        if (!btn || !dd) return;
+        if (!btn.contains(e.target) && !dd.contains(e.target)) {
+            dd.style.display = 'none';
+            _notifOpen = false;
+        }
+    });
+    // ── Módulo 2: notificações "Limpas" no dropdown do sino (client-side) ──
+    // Persistido apenas no localStorage do navegador — NÃO afeta o banco de
+    // dados nem a página permanente /admin/notifications (histórico intacto).
+    function getClearedNotifIds() {
+        try { return JSON.parse(localStorage.getItem('notificacoes_limpas') || '[]'); }
+        catch { return []; }
+    }
+
+    async function loadNotifDropdown() {
+        const body = document.getElementById('notifDropdownBody');
+        if (!body) return;
+        try {
+            const r = await fetch('/admin/notifications/api');
+            const d = await r.json();
+            const clearedIds = new Set(getClearedNotifIds());
+            const visible = (d.notifications || []).filter(n => !clearedIds.has(n.id));
+            const count = visible.length ? (d.unread || 0) : 0;
+            updateBadges(count);
+            if (!visible.length) {
+                body.innerHTML = '<div class="text-center text-muted py-3" style="font-size:.82rem;"><i class="fas fa-bell-slash me-2"></i>Nenhuma nova notificação</div>';
+                return;
+            }
+            const iconMap = {security:'fa-shield-halved',report:'fa-flag',success:'fa-check-circle',warning:'fa-exclamation-triangle',info:'fa-info-circle',payment:'fa-money-bill-wave'};
+            const bgMap   = {security:'#3d1a1a',report:'#1e3a8a',success:'#0f2d1b',warning:'#451a03',info:'#0c2340'};
+            const clrMap  = {security:'#f87171',report:'#93c5fd',success:'#4ade80',warning:'#fbbf24',info:'#60a5fa'};
+            _lastLoadedNotifIds = visible.map(n => n.id);
+            body.innerHTML = visible.map(n => `
+                <a href="${n.link || '/admin/notifications'}" style="display:flex;gap:.6rem;padding:.55rem .4rem;border-bottom:1px solid #1e2633;align-items:flex-start;text-decoration:none;cursor:pointer;transition:background .15s;border-radius:6px;"
+                   onmouseover="this.style.background='#1c2230'" onmouseout="this.style.background='transparent'">
+                    <div style="width:28px;height:28px;border-radius:50%;background:${bgMap[n.type]||bgMap.info};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.7rem;color:${clrMap[n.type]||clrMap.info};">
+                        <i class="fas ${iconMap[n.type]||'fa-bell'}"></i>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:.68rem;color:#8b949e;">${n.ts}</div>
+                        <div style="font-size:.78rem;color:#e6edf3;line-height:1.4;word-break:break-word;">${n.message}</div>
+                        <div style="font-size:.65rem;color:#4d90fe;margin-top:2px;"><i class="fas fa-arrow-right me-1" style="font-size:.55rem;"></i>Clique para ver</div>
+                    </div>
+                </a>`).join('');
+        } catch { if(body) body.innerHTML = '<div class="text-center text-muted py-2" style="font-size:.78rem;">Erro ao carregar.</div>'; }
+    }
+
+    // ── Cyber-security audio chime (AudioContext synthesizer — no external deps) ──
+    const _chime = (function () {
+        let _ctx = null;
+        function _getCtx() {
+            if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+            return _ctx;
+        }
+        return function playChime() {
+            try {
+                const ctx  = _getCtx();
+                const gain = ctx.createGain();
+                gain.connect(ctx.destination);
+                gain.gain.setValueAtTime(0, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+                // Two-tone cyber ping: high + slightly lower
+                [1480, 1108].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
+                    osc.connect(gain);
+                    osc.start(ctx.currentTime + i * 0.12);
+                    osc.stop(ctx.currentTime + i * 0.12 + 0.35);
+                });
+            } catch {}
+        };
+    })();
+
+    // ── Poll unread notifications ─────────────────────────────────────────
+    let _prevNotifCount = -1;   // -1 = not yet initialized (skip first-load chime)
+
+    function updateBadges(count) {
+        document.querySelectorAll('.notif-badge').forEach(b => {
+            if (count > 0) { b.textContent = count < 10 ? count : '9+'; b.style.display='flex'; }
+            else { b.style.display='none'; }
+        });
+        const bb = document.getElementById('bellBadge');
+        if (bb) {
+            if (count > 0) { bb.textContent = count < 10 ? count : '9+'; bb.style.display='flex'; }
+            else { bb.style.display = 'none'; }
+        }
+        // Fire chime only when count genuinely rises after first load
+        if (_prevNotifCount >= 0 && count > _prevNotifCount) {
+            _chime();
+        }
+        _prevNotifCount = count;
+    }
+    async function pollNotifications() {
+        try {
+            const r = await fetch('/admin/notifications/api');
+            const d = await r.json();
+            updateBadges(d.unread || 0);
+        } catch {}
+    }
+    setInterval(pollNotifications, 30000);
+
+    async function markAllNotifsRead() {
+        try {
+            await fetch('/admin/notifications/mark-all-read', {method:'POST'});
+            updateBadges(0);
+            // Só zera o badge — não mexe na lista exibida
+        } catch {}
+    }
+
+    let _lastLoadedNotifIds = [];
+
+    async function clearNotifDropdown() {
+        // Módulo 2: visual/local only — grava os IDs exibidos no localStorage
+        // do navegador. NÃO apaga nada do banco: /admin/notifications continua
+        // listando 100% do histórico permanente, sem nenhuma alteração.
+        const cleared = new Set(getClearedNotifIds());
+        _lastLoadedNotifIds.forEach(id => cleared.add(id));
+        localStorage.setItem('notificacoes_limpas', JSON.stringify([...cleared]));
+        updateBadges(0);
+        const body = document.getElementById('notifDropdownBody');
+        if (body) body.innerHTML = '<div class="text-center text-muted py-3" style="font-size:.82rem;"><i class="fas fa-bell-slash me-2"></i>Nenhuma nova notificação</div>';
+        const dd = document.getElementById('notifDropdown');
+        if (dd) dd.style.display = 'none';
+        _notifOpen = false;
+    }
+
+    // ── Session geo lookup (country flag + city on hover) ────────────────
+    (async function loadSessionGeo() {
+        const flags = document.querySelectorAll('.session-geo-flag[data-ip]');
+        const ips   = document.querySelectorAll('.session-geo-ip[data-ip]');
+        const seen  = {};
+        for (const el of flags) {
+            const ip = el.dataset.ip;
+            if (!ip || seen[ip]) continue;
+            seen[ip] = true;
+            try {
+                const r = await fetch(`/admin/geo/${ip}`);
+                const d = await r.json();
+                if (d.flag || d.city) {
+                    const label = `${d.city || '?'}, ${d.region || '?'}, ${d.country || '?'}${d.org ? ' — ' + d.org : ''}`;
+                    document.querySelectorAll(`.session-geo-flag[data-ip="${ip}"]`).forEach(f => {
+                        f.textContent = d.flag || '🌐';
+                        f.title = label;
+                    });
+                    document.querySelectorAll(`.session-geo-ip[data-ip="${ip}"]`).forEach(f => {
+                        f.title = label;
+                    });
+                }
+            } catch {}
+        }
+    })();
+
+</script>
+
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

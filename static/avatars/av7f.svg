@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="h7f" cx="36%" cy="28%" r="65%" fx="36%" fy="28%">
+      <stop offset="0%" stop-color="#50e8e8"/>
+      <stop offset="55%" stop-color="#0a9898"/>
+      <stop offset="100%" stop-color="#065858"/>
+    </radialGradient>
+    <radialGradient id="b7f" cx="38%" cy="20%" r="72%" fx="38%" fy="20%">
+      <stop offset="0%" stop-color="#30c8c8"/>
+      <stop offset="55%" stop-color="#087878"/>
+      <stop offset="100%" stop-color="#043838"/>
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="16" fill="#061414"/>
+  <ellipse cx="50" cy="91" rx="27" ry="5" fill="rgba(0,0,0,0.45)"/>
+  <ellipse cx="50" cy="74" rx="32" ry="22" fill="url(#b7f)"/>
+  <!-- Left hair strand -->
+  <path d="M28,22 Q15,35 15,55 Q15,68 20,77 Q25,82 30,79 Q27,67 28,53 Q29,40 35,28 Z" fill="#065858"/>
+  <!-- Right hair strand -->
+  <path d="M72,22 Q85,35 85,55 Q85,68 80,77 Q75,82 70,79 Q73,67 72,53 Q71,40 65,28 Z" fill="#065858"/>
+  <ellipse cx="52" cy="43" rx="20" ry="5" fill="rgba(0,0,0,0.2)"/>
+  <circle cx="50" cy="39" r="22" fill="url(#h7f)"/>
+  <!-- Top hair cap -->
+  <path d="M28,22 Q38,10 50,13 Q62,10 72,22 Q70,30 65,27 Q58,19 50,18 Q42,19 35,27 Z" fill="#065858"/>
+  <!-- Hair highlight -->
+  <path d="M41,13 Q50,9 59,13 Q54,16 50,16 Q46,16 41,13 Z" fill="#0a9898"/>
+  <ellipse cx="42" cy="31" rx="9" ry="7" fill="rgba(255,255,255,0.45)"/>
+  <circle cx="38.5" cy="28" r="3.5" fill="rgba(255,255,255,0.5)"/>
+  <!-- Ring / portal badge -->
+  <g transform="translate(57,61)">
+    <circle cx="14" cy="14" r="14" fill="#065858"/>
+    <circle cx="14" cy="14" r="10" fill="none" stroke="#50e8e8" stroke-width="3"/>
+    <circle cx="14" cy="14" r="5" fill="#50e8e8"/>
+    <circle cx="14" cy="14" r="2.5" fill="#065858"/>
+  </g>
+</svg>

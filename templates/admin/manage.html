@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin — Gerenciar Administradores</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .avatar-sm { width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid #30363d; }
+        .avatar-wrap { position:relative; display:inline-block; }
+        .crown-badge {
+            position:absolute; top:-10px; left:50%; transform:translateX(-50%);
+            font-size:1rem; line-height:1; pointer-events:none; z-index:2;
+            filter: drop-shadow(0 1px 3px rgba(0,0,0,.9));
+        }
+        .btn-crown { color:#f59e0b; border-color:#78350f; }
+        .btn-crown:hover { background:#451a03; color:#fbbf24; border-color:#92400e; }
+        .btn-crown.crowned { background:#451a03; color:#fbbf24; border-color:#f59e0b; }
+        .section-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; }
+        .section-title { font-size:.95rem; font-weight:600; margin-bottom:1rem; padding-bottom:.5rem; border-bottom:1px solid #21262d; }
+        .role-badge-owner     { background: #111827; color: #f9fafb; }
+        .role-badge-admin     { background: #c0392b; color: #fff; }
+        .role-badge-moderator { background: #16a34a; color: #fff; }
+        .role-badge-helper    { background: #ea580c; color: #fff; }
+        .av-opt.av-locked     { opacity:.38; cursor:not-allowed; position:relative; }
+        .av-opt.av-locked::after {
+            content:'\f023'; font-family:'Font Awesome 6 Free'; font-weight:900;
+            position:absolute; bottom:4px; right:4px; font-size:.6rem;
+            color:#f9fafb; background:rgba(0,0,0,.65); border-radius:3px; padding:1px 3px;
+        }
+        .avatar-pick { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+        .av-opt { cursor:pointer; border-radius:8px; overflow:hidden; border:2px solid transparent; transition:.15s; }
+        .av-opt:hover { border-color:#4d90fe; }
+        .av-opt.selected { border-color:#4d90fe; box-shadow:0 0 0 3px rgba(77,144,254,.3); }
+        .av-opt img { width:100%; display:block; }
+        .profile-bubble {
+            position:fixed; bottom:20px; right:20px; z-index:9999;
+            display:flex; align-items:center; gap:10px;
+            background:#161b22; border:1px solid #30363d;
+            border-radius:50px; padding:6px 14px 6px 6px;
+            box-shadow:0 4px 20px rgba(0,0,0,.5); cursor:pointer;
+        }
+        .profile-bubble .av { width:36px; height:36px; border-radius:50%; }
+        .profile-bubble .name { font-size:.82rem; font-weight:600; line-height:1; }
+        .profile-bubble .role-pill { font-size:.67rem; padding:1px 7px; border-radius:20px; color:#fff; margin-top:3px; display:inline-block; }
+        .inactive-row { opacity:.45; }
+    </style>
+</head>
+<body>
+
+<!-- Profile bubble -->
+<div class="profile-bubble" id="profileBubble">
+    <img src="/static/avatars/{{ admin.avatar }}.svg" class="av" />
+    <div>
+        <div class="name">{{ admin.display_name }}</div>
+        <span class="role-pill role-badge-{{ admin.role }}">{{ role_meta[admin.role].label }}</span>
+    </div>
+    <i class="fas fa-chevron-up ms-1 text-muted" style="font-size:.7rem;"></i>
+</div>
+<ul class="dropdown-menu dropdown-menu-end" id="profileMenu" style="min-width:180px;">
+    <li><a class="dropdown-item" href="/admin/"><i class="fas fa-home me-2"></i>Painel</a></li>
+    <li><a class="dropdown-item" href="/admin/profile"><i class="fas fa-user-circle me-2"></i>Meu Perfil</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item text-danger" href="/admin/logout"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
+</ul>
+
+<div class="container-fluid py-4 px-4" style="max-width:1100px;">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0">
+                <i class="fas fa-users-cog text-primary me-2"></i>Gerenciar Administradores
+            </h4>
+            <small class="text-muted">Crie, promova e desative membros da equipe</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/admin/" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Painel
+            </a>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createModal">
+                <i class="fas fa-user-plus me-1"></i>Novo Admin
+            </button>
+        </div>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show py-2 mb-3">
+        <i class="fas fa-{{ 'check-circle' if flash_msg.type == 'success' else 'exclamation-triangle' }} me-1"></i>
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Admin list -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-list me-2"></i>Equipe ({{ all_admins | length }})</div>
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Admin</th>
+                        <th>Cargo</th>
+                        <th>Criado em</th>
+                        <th>Criado por</th>
+                        <th>Status</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for a in all_admins %}
+                <tr class="{{ 'inactive-row' if not a.active else '' }}">
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="avatar-wrap">
+                                <img src="/static/avatars/{{ a.avatar }}.svg" class="avatar-sm" />
+                                {% if a.crowned %}<span class="crown-badge">👑</span>{% endif %}
+                            </div>
+                            <div>
+                                <div style="font-size:.88rem; font-weight:600;">
+                                    {{ a.display_name }}
+                                    {% if a.crowned %}<span style="font-size:.65rem;color:#f59e0b;margin-left:4px;" title="Funcionário do Mês">Func. do Mês</span>{% endif %}
+                                </div>
+                                <div class="text-muted" style="font-size:.74rem;">@{{ a.username }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge role-badge-{{ a.role }}">{{ role_meta[a.role].label }}</span>
+                    </td>
+                    <td><small class="text-muted">{{ a.created_at[:10] }}</small></td>
+                    <td><small class="text-muted">{{ a.created_by or '—' }}</small></td>
+                    <td>
+                        {% if a.active %}
+                        <span class="badge bg-success">Ativo</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inativo</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if a.id == admin.id %}
+                        <div class="d-flex gap-1 justify-content-end align-items-center">
+                            <span class="text-muted me-1" style="font-size:.72rem;"><i class="fas fa-user me-1"></i>Você</span>
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    title="Editar minha conta"
+                                    onclick="openEditModal({{ a.id }}, '{{ a.display_name }}', '{{ a.username }}', '{{ a.role }}', '{{ a.avatar }}', {{ 'true' if a.active else 'false' }})">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                        </div>
+                        {% elif can_manage(admin.role, a.role) %}
+                        <div class="d-flex gap-1 justify-content-end">
+                            {% if admin.role == 'owner' and a.role != 'owner' %}
+                            <button class="btn btn-sm btn-outline-secondary btn-crown {% if a.crowned %}crowned{% endif %}"
+                                    id="crownBtn{{ a.id }}"
+                                    title="{{ 'Remover coroa (Funcionário do Mês)' if a.crowned else 'Dar coroa (Funcionário do Mês)' }}"
+                                    onclick="toggleCrown({{ a.id }}, this)">
+                                <i class="fas fa-crown"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    title="Editar"
+                                    onclick="openEditModal({{ a.id }}, '{{ a.display_name }}', '{{ a.username }}', '{{ a.role }}', '{{ a.avatar }}', {{ 'true' if a.active else 'false' }})">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            {% if a.role != 'owner' %}
+                            <button class="btn btn-sm btn-outline-danger"
+                                    title="Excluir"
+                                    onclick="confirmDelete({{ a.id }}, '{{ a.display_name }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted" style="font-size:.75rem;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Roles legend -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-info-circle me-2 text-info"></i>Permissões por Cargo</div>
+        <div class="row g-2">
+            <div class="col-md-3">
+                <div class="p-3" style="background:#0d1117;border-radius:8px;border:1px solid #37415144;">
+                    <div class="mb-2"><span class="badge role-badge-owner">Owner</span></div>
+                    <small class="text-muted">Acesso total. Gerencia todos os outros cargos.</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3" style="background:#0d1117;border-radius:8px;border:1px solid #c0392b44;">
+                    <div class="mb-2"><span class="badge role-badge-admin">Admin</span></div>
+                    <small class="text-muted">Debug, batch, gateway, cria moderadores e ajudantes.</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3" style="background:#0d1117;border-radius:8px;border:1px solid #16a34a44;">
+                    <div class="mb-2"><span class="badge role-badge-moderator">Moderador</span></div>
+                    <small class="text-muted">Resolve URLs, configura batch. Sem gateway.</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3" style="background:#0d1117;border-radius:8px;border:1px solid #ea580c44;">
+                    <div class="mb-2"><span class="badge role-badge-helper">Ajudante</span></div>
+                    <small class="text-muted">Apenas resolve URLs com falha.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Create admin modal -->
+<div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="fas fa-user-plus text-primary me-2"></i>Novo Administrador</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/admin/manage/create">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Avatar</label>
+                        <div class="d-flex gap-4 justify-content-center" id="createAvatarPick">
+                            <div class="text-center">
+                                <div class="av-opt selected" id="createAvM" onclick="selectAvGender('create','male',this)">
+                                    <img id="createImgM" src="/static/avatars/av4.svg" style="width:64px;display:block;" />
+                                </div>
+                                <div class="text-muted mt-1" style="font-size:.72rem;"><i class="fas fa-mars me-1"></i>Masculino</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="av-opt" id="createAvF" onclick="selectAvGender('create','female',this)">
+                                    <img id="createImgF" src="/static/avatars/av4f.svg" style="width:64px;display:block;" />
+                                </div>
+                                <div class="text-muted mt-1" style="font-size:.72rem;"><i class="fas fa-venus me-1"></i>Feminino</div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="avatar" id="createAvatarInput" value="av4" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nome de exibição</label>
+                        <input type="text" name="display_name" class="form-control" required maxlength="50" placeholder="Ex: João Silva" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Usuário (login)</label>
+                        <input type="text" name="username" class="form-control" required maxlength="32"
+                               placeholder="joao_silva" pattern="[a-zA-Z0-9_]+" title="Apenas letras, números e _" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Senha inicial</label>
+                        {% if admin.role == 'owner' %}
+                        <input type="password" name="password" class="form-control" required minlength="1" maxlength="128" placeholder="Senha livre (mínimo 1)" />
+                        {% else %}
+                        <input type="password" name="password" class="form-control" required minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" />
+                        {% endif %}
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small text-muted">Cargo</label>
+                        <select name="role" id="createRole" class="form-select" onchange="updateCreateAvatars()">
+                            {% if admin.role == 'owner' %}
+                            <option value="admin">Admin</option>
+                            {% endif %}
+                            <option value="moderator">Moderador</option>
+                            <option value="helper" selected>Ajudante</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-user-plus me-1"></i>Criar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit admin modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="fas fa-pen text-warning me-2"></i>Editar Admin</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/admin/manage/update">
+                <input type="hidden" name="admin_id" id="editAdminId" />
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Avatar</label>
+                        <div class="d-flex gap-4 justify-content-center" id="editAvatarPick">
+                            <div class="text-center">
+                                <div class="av-opt selected" id="editAvM" onclick="selectAvGender('edit','male',this)">
+                                    <img id="editImgM" src="/static/avatars/av4.svg" style="width:64px;display:block;" />
+                                </div>
+                                <div class="text-muted mt-1" style="font-size:.72rem;"><i class="fas fa-mars me-1"></i>Masculino</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="av-opt" id="editAvF" onclick="selectAvGender('edit','female',this)">
+                                    <img id="editImgF" src="/static/avatars/av4f.svg" style="width:64px;display:block;" />
+                                </div>
+                                <div class="text-muted mt-1" style="font-size:.72rem;"><i class="fas fa-venus me-1"></i>Feminino</div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="avatar" id="editAvatarInput" value="av4" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nome de exibição</label>
+                        <input type="text" name="display_name" id="editDisplayName" class="form-control" required maxlength="50" />
+                    </div>
+                    {% if admin.role == 'owner' %}
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">
+                            <i class="fas fa-user-tag me-1 text-warning"></i>Username (login)
+                            <span class="text-warning ms-1" style="font-size:.7rem;">(Owner only)</span>
+                        </label>
+                        <input type="text" name="new_username" id="editUsername" class="form-control"
+                               maxlength="32" pattern="[a-zA-Z0-9_]+" title="Apenas letras, números e _"
+                               placeholder="Deixe vazio para não alterar" />
+                    </div>
+                    {% endif %}
+                    <div class="mb-3" id="editRoleWrapper">
+                        <label class="form-label small text-muted">Cargo</label>
+                        <select name="role" id="editRole" class="form-select">
+                            {% if admin.role == 'owner' %}
+                            <option value="admin">Admin</option>
+                            {% endif %}
+                            <option value="moderator">Moderador</option>
+                            <option value="helper">Ajudante</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 d-none" id="editRoleOwnerWrapper">
+                        <label class="form-label small text-muted">Cargo</label>
+                        <div class="form-control bg-dark text-light border-secondary" style="cursor:not-allowed;">
+                            <i class="fas fa-crown text-warning me-1"></i>Owner (Mestre)
+                        </div>
+                        <input type="hidden" name="role" value="owner" />
+                        <small class="text-muted" style="font-size:.7rem;"><i class="fas fa-lock me-1"></i>O cargo Owner não pode ser alterado.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nova senha <span class="text-muted">(deixe vazio para não alterar)</span></label>
+                        {% if admin.role == 'owner' %}
+                        <input type="password" name="new_password" class="form-control" minlength="1" maxlength="128" placeholder="Livre (mínimo 1 dígito)" />
+                        {% else %}
+                        <input type="password" name="new_password" class="form-control" minlength="8" maxlength="128" placeholder="••••••••" />
+                        {% endif %}
+                    </div>
+                    <div class="mb-0">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="active" id="editActive" value="1" checked />
+                            <label class="form-check-label small" for="editActive">Conta ativa</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-warning"><i class="fas fa-save me-1"></i>Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+            <div class="modal-body text-center p-4">
+                <div style="width:48px;height:48px;background:rgba(192,57,43,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto .8rem;">
+                    <i class="fas fa-trash text-danger"></i>
+                </div>
+                <h6>Excluir admin?</h6>
+                <p class="text-muted small mb-0"><strong id="deleteAdminName"></strong> será removido permanentemente e suas sessões encerradas.</p>
+            </div>
+            <div class="modal-footer border-0 pt-0 justify-content-center">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="POST" action="/admin/manage/delete" id="deleteForm" style="display:inline">
+                    <input type="hidden" name="admin_id" id="deleteAdminId" />
+                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash me-1"></i>Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const ROLE_AV_MAP = {{ role_avatar_map | tojson }};
+
+    function setGenderPicker(ctx, role, currentAvatar) {
+        const avs = ROLE_AV_MAP[role] || ['av1','av1f'];
+        const maleAv   = avs[0];
+        const femaleAv = avs[1];
+        document.getElementById(ctx + 'ImgM').src = '/static/avatars/' + maleAv + '.svg';
+        document.getElementById(ctx + 'ImgF').src = '/static/avatars/' + femaleAv + '.svg';
+        const isFemale = currentAvatar && currentAvatar.endsWith('f');
+        const mBtn = document.getElementById(ctx + 'AvM');
+        const fBtn = document.getElementById(ctx + 'AvF');
+        mBtn.classList.toggle('selected', !isFemale);
+        fBtn.classList.toggle('selected',  isFemale);
+        document.getElementById(ctx + 'AvatarInput').value = isFemale ? femaleAv : maleAv;
+    }
+
+    function selectAvGender(ctx, gender, el) {
+        document.getElementById(ctx + 'AvM').classList.remove('selected');
+        document.getElementById(ctx + 'AvF').classList.remove('selected');
+        el.classList.add('selected');
+        const role = ctx === 'create'
+            ? document.getElementById('createRole').value
+            : document.getElementById('editRole').value;
+        const avs = ROLE_AV_MAP[role] || ['av1','av1f'];
+        document.getElementById(ctx + 'AvatarInput').value = gender === 'male' ? avs[0] : avs[1];
+    }
+
+    function updateCreateAvatars() {
+        const role = document.getElementById('createRole').value;
+        setGenderPicker('create', role, null);
+    }
+
+    function openEditModal(id, name, username, role, avatar, active) {
+        document.getElementById('editAdminId').value     = id;
+        document.getElementById('editDisplayName').value = name;
+        document.getElementById('editActive').checked    = active;
+        const usernameEl = document.getElementById('editUsername');
+        if (usernameEl) { usernameEl.value = ''; usernameEl.placeholder = '@' + username + ' (vazio = não alterar)'; }
+
+        const roleWrapper      = document.getElementById('editRoleWrapper');
+        const roleOwnerWrapper = document.getElementById('editRoleOwnerWrapper');
+        if (role === 'owner') {
+            roleWrapper.classList.add('d-none');
+            roleOwnerWrapper.classList.remove('d-none');
+            document.getElementById('editRole').removeAttribute('name');
+        } else {
+            roleWrapper.classList.remove('d-none');
+            roleOwnerWrapper.classList.add('d-none');
+            document.getElementById('editRole').setAttribute('name', 'role');
+            document.getElementById('editRole').value = role;
+        }
+
+        setGenderPicker('edit', role, avatar);
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+
+    function toggleCrown(adminId, btn) {
+        const fd = new FormData();
+        fd.append('admin_id', adminId);
+        btn.disabled = true;
+        fetch('/admin/manage/crown', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                btn.disabled = false;
+                if (!d.ok) { alert('Erro: ' + (d.error || '?')); return; }
+                if (d.crowned) {
+                    btn.classList.add('crowned');
+                    btn.title = 'Remover coroa (Funcionário do Mês)';
+                    document.querySelectorAll('.btn-crown.crowned').forEach(b => {
+                        if (b !== btn) { b.classList.remove('crowned'); b.title = 'Dar coroa (Funcionário do Mês)'; }
+                    });
+                } else {
+                    btn.classList.remove('crowned');
+                    btn.title = 'Dar coroa (Funcionário do Mês)';
+                }
+                location.reload();
+            })
+            .catch(() => { btn.disabled = false; alert('Erro de rede.'); });
+    }
+
+    function confirmDelete(id, name) {
+        document.getElementById('deleteAdminId').value = id;
+        document.getElementById('deleteAdminName').textContent = name;
+        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    }
+
+    // Init create modal avatars on open
+    document.getElementById('createModal').addEventListener('show.bs.modal', () => {
+        const role = document.getElementById('createRole').value;
+        setGenderPicker('create', role, null);
+    });
+
+    // Profile bubble dropdown
+    const bubble = document.getElementById('profileBubble');
+    const menu   = document.getElementById('profileMenu');
+    if (bubble && menu) {
+        document.addEventListener('click', e => {
+            if (bubble.contains(e.target)) {
+                const show = menu.style.display !== 'block';
+                menu.style.display = show ? 'block' : 'none';
+                if (show) {
+                    const rect = bubble.getBoundingClientRect();
+                    menu.style.cssText += `;position:fixed;bottom:${window.innerHeight - rect.top + 8}px;right:${window.innerWidth - rect.right}px;top:auto;`;
+                    menu.classList.add('show');
+                }
+            } else if (!menu.contains(e.target)) {
+                menu.style.display = 'none';
+                menu.classList.remove('show');
+            }
+        });
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

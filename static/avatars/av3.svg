@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="h3" cx="36%" cy="28%" r="65%" fx="36%" fy="28%">
+      <stop offset="0%" stop-color="#f57070"/>
+      <stop offset="55%" stop-color="#cc2020"/>
+      <stop offset="100%" stop-color="#880000"/>
+    </radialGradient>
+    <radialGradient id="b3" cx="38%" cy="20%" r="72%" fx="38%" fy="20%">
+      <stop offset="0%" stop-color="#e05050"/>
+      <stop offset="55%" stop-color="#aa1010"/>
+      <stop offset="100%" stop-color="#660000"/>
+    </radialGradient>
+  </defs>
+  <rect width="100" height="100" rx="16" fill="#140505"/>
+  <ellipse cx="50" cy="91" rx="27" ry="5" fill="rgba(0,0,0,0.45)"/>
+  <ellipse cx="50" cy="74" rx="32" ry="22" fill="url(#b3)"/>
+  <ellipse cx="52" cy="43" rx="20" ry="5" fill="rgba(0,0,0,0.2)"/>
+  <circle cx="50" cy="39" r="22" fill="url(#h3)"/>
+  <ellipse cx="42" cy="31" rx="9" ry="7" fill="rgba(255,255,255,0.45)"/>
+  <circle cx="38.5" cy="28" r="3.5" fill="rgba(255,255,255,0.5)"/>
+  <!-- Shield+Star badge -->
+  <g transform="translate(57,60)">
+    <circle cx="15" cy="15" r="15" fill="#660000"/>
+    <path d="M15,2 L26,6 L26,14 Q26,23 15,28 Q4,23 4,14 L4,6 Z" fill="#cc2020"/>
+    <polygon points="15,7 17,12.5 23,12.5 18.5,15.8 20,21 15,17.8 10,21 11.5,15.8 7,12.5 13,12.5" fill="#ffd700"/>
+  </g>
+</svg>

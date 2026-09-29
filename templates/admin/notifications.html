@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notificações — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+        .notif-row { display: flex; align-items: flex-start; gap: .75rem; padding: .75rem; border-radius: 8px; margin-bottom: .4rem; background: #0d1117; border: 1px solid #21262d; }
+        .notif-icon { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
+        .notif-icon.report   { background: #1e3a8a; color: #93c5fd; }
+        .notif-icon.warning  { background: #451a03; color: #fbbf24; }
+        .notif-icon.info     { background: #0c2340; color: #60a5fa; }
+        .notif-icon.success  { background: #0f2d1b; color: #4ade80; }
+        .notif-type { font-size: .68rem; padding: 1px 7px; border-radius: 20px; color: #fff; }
+        .type-report  { background: #1e3a8a; }
+        .type-warning { background: #92400e; }
+        .type-info    { background: #0c2340; }
+        .type-success { background: #14532d; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:900px;">
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Voltar</a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-bell text-info me-2"></i>Notificações</h4>
+            <small class="text-muted">Alertas e eventos do sistema</small>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-title d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-bell me-2"></i>Todas as Notificações</span>
+            <div class="d-flex align-items-center gap-2">
+                {% if notifications %}
+                <button type="button" class="btn btn-sm" style="background:none;border:1px solid #30363d;border-radius:6px;color:#8b949e;padding:2px 8px;" title="Limpar histórico" onclick="clearNotifHistory()">
+                    <i class="fas fa-trash-can"></i>
+                </button>
+                {% endif %}
+                <span class="badge bg-info" id="notifCountBadge">{{ notifications | length }}</span>
+            </div>
+        </div>
+
+        {% if notifications %}
+        <div id="notifListContainer" style="max-height:70vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#30363d #0d1117;padding-right:4px;">
+        {% for n in notifications %}
+        {% set icon_map = {'report': 'fa-flag', 'warning': 'fa-exclamation-triangle', 'info': 'fa-info-circle', 'success': 'fa-check-circle', 'security': 'fa-shield-halved'} %}
+        <div class="notif-row" data-notif-row>
+            <div class="notif-icon {{ n.type if n.type in ['report','warning','info','success'] else 'warning' }}" style="{% if n.type == 'security' %}background:#3d1a1a;color:#f87171;{% endif %}">
+                <i class="fas {{ icon_map.get(n.type, 'fa-bell') }}"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                    <span class="notif-type type-{{ n.type if n.type in ['report','warning','info','success'] else 'warning' }}"
+                          style="{% if n.type == 'security' %}background:#7f1d1d;color:#fca5a5;{% endif %}">
+                        {{ n.type | upper }}
+                    </span>
+                    <span class="text-muted" style="font-size:.72rem;">{{ n.ts | fmt_ts }}</span>
+                </div>
+                <div style="font-size:.85rem;white-space:pre-line;">{{ n.message }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4" id="notifEmptyState">
+            <i class="fas fa-bell-slash text-muted" style="font-size:2rem; margin-bottom:.5rem; display:block;"></i>
+            <p class="text-muted small mb-0">Nenhuma notificação ainda.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    function clearNotifHistory() {
+        showConfirmModal({
+            title: 'Limpar Histórico de Notificações',
+            message: 'Limpar todo o histórico de notificações? Esta ação é irreversível.',
+            confirmText: 'Confirmar e Apagar Tudo',
+            onConfirm: async () => {
+                try {
+                    const r = await fetch('/admin/notifications/clear-all', { method: 'POST' });
+                    const d = await r.json();
+                    if (d.ok) {
+                        const container = document.getElementById('notifListContainer');
+                        if (container) container.remove();
+                        const badge = document.getElementById('notifCountBadge');
+                        if (badge) badge.textContent = '0';
+                        const card = document.querySelector('.section-card');
+                        if (card && !document.getElementById('notifEmptyState')) {
+                            const empty = document.createElement('div');
+                            empty.className = 'text-center py-4';
+                            empty.id = 'notifEmptyState';
+                            empty.innerHTML = '<i class="fas fa-bell-slash text-muted" style="font-size:2rem; margin-bottom:.5rem; display:block;"></i><p class="text-muted small mb-0">Nenhuma notificação ainda.</p>';
+                            card.appendChild(empty);
+                        }
+                    }
+                } catch {}
+            }
+        });
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

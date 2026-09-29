@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conversas Privadas — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; color: #e6edf3; min-height: 100vh; }
+        .page-header { background: #161b22; border-bottom: 1px solid #30363d; padding: .85rem 1.4rem; display: flex; align-items: center; gap: .75rem; }
+        .room-list { max-width: 680px; margin: 2rem auto; padding: 0 1rem; }
+        .room-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: .85rem 1.1rem; margin-bottom: .6rem; display: flex; align-items: center; gap: 1rem; cursor: pointer; text-decoration: none; color: inherit; transition: border-color .15s, background .15s; }
+        .room-card:hover { border-color: #58a6ff; background: #1c2128; color: inherit; }
+        .room-card.closed { opacity: .65; }
+        .room-av { width: 42px; height: 42px; border-radius: 50%; background: #21262d; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #58a6ff; flex-shrink: 0; border: 2px solid #30363d; }
+        .room-av.closed-av { border-color: #e74c3c44; color: #e74c3c88; }
+        .room-info { flex: 1; min-width: 0; }
+        .room-name { font-weight: 600; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .room-preview { font-size: .78rem; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .room-meta { flex-shrink: 0; text-align: right; }
+        .room-ts { font-size: .68rem; color: #8b949e; }
+        .badge-closed { background: #e74c3c33; color: #e74c3c; border-radius: 99px; padding: .15rem .55rem; font-size: .65rem; font-weight: 600; }
+        .badge-open { background: #22c55e22; color: #22c55e; border-radius: 99px; padding: .15rem .55rem; font-size: .65rem; font-weight: 600; }
+        .observer-badge { background: #7c3aed22; color: #a78bfa; border-radius: 99px; padding: .15rem .55rem; font-size: .65rem; font-weight: 600; }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
+        .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; display: block; }
+        .section-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .7px; color: #8b949e; margin-bottom: .5rem; margin-top: 1.4rem; padding-left: .1rem; }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
+    <i class="fas fa-comments text-primary"></i>
+    <strong style="font-size:.95rem;">Conversas Privadas</strong>
+    <div class="ms-auto d-flex gap-2">
+        {% if admin.role != 'owner' %}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newRoomModal">
+            <i class="fas fa-plus me-1"></i>Nova conversa
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="room-list">
+
+{% if admin.role == 'owner' and rooms %}
+<div class="section-label"><i class="fas fa-comments me-1"></i>Todas as conversas</div>
+{% endif %}
+
+{% if rooms %}
+    {% for r in rooms %}
+    {% set is_obs = admin.role == 'owner' and r.p1_id != admin.id and r.p2_id != admin.id %}
+    <a href="/admin/chat/room/{{ r.id }}" class="room-card {{ 'closed' if r.closed else '' }}">
+        <div class="room-av {{ 'closed-av' if r.closed else '' }}">
+            <i class="fas {{ 'fa-lock' if r.closed else 'fa-comments' }}"></i>
+        </div>
+        <div class="room-info">
+            <div class="room-name">
+                {{ r.p1_name }} <span style="color:#8b949e;font-weight:400;">↔</span> {{ r.p2_name }}
+            </div>
+            <div class="room-preview">{{ r.last_msg[:80] if r.last_msg else 'Nenhuma mensagem' }}</div>
+        </div>
+        <div class="room-meta">
+            <div class="room-ts">{{ r.last_ts }}</div>
+            <div class="mt-1">
+                {% if r.closed %}
+                <span class="badge-closed"><i class="fas fa-lock me-1"></i>Encerrada</span>
+                {% else %}
+                <span class="badge-open"><i class="fas fa-circle me-1" style="font-size:.45rem;vertical-align:middle;"></i>Aberta</span>
+                {% endif %}
+            </div>
+        </div>
+    </a>
+    {% endfor %}
+{% else %}
+<div class="empty-state">
+    <i class="fas fa-comments"></i>
+    <p class="fw-semibold mb-1">Nenhuma conversa ainda</p>
+    <p class="small">{% if admin.role == 'owner' %}Nenhuma sala privada foi criada ainda.{% else %}Clique em "Nova conversa" para começar.{% endif %}</p>
+    {% if admin.role != 'owner' %}
+    <button class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#newRoomModal">
+        <i class="fas fa-plus me-1"></i>Iniciar conversa
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+
+</div>
+
+{% if admin.role != 'owner' %}
+<!-- New Room Modal -->
+<div class="modal fade" id="newRoomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#161b22;border-color:#30363d;">
+            <div class="modal-header border-bottom" style="border-color:#21262d !important;">
+                <h5 class="modal-title"><i class="fas fa-comments text-primary me-2"></i>Nova conversa privada</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/admin/chat/room/create">
+                <div class="modal-body">
+                    <label class="form-label small text-muted">Escolha com quem conversar:</label>
+                    <select name="target_id" class="form-select" required style="background:#0d1117;border-color:#30363d;color:#e6edf3;">
+                        <option value="" disabled selected>Selecione um membro da equipe…</option>
+                        {% for a in all_admins %}
+                        <option value="{{ a.id }}">
+                            {{ a.display_name }} ({{ role_meta[a.role].label }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer border-top" style="border-color:#21262d !important;">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-comments me-1"></i>Iniciar conversa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

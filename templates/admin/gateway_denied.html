@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acesso Negado — Gateways</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background:#0d1117; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+        .denied-card {
+            background:#161b22; border:1px solid #7f1d1d; border-radius:16px;
+            padding:2.5rem 2rem; max-width:440px; width:100%; text-align:center;
+        }
+        .denied-icon {
+            width:72px; height:72px; border-radius:50%;
+            background:#2d1111; display:flex; align-items:center; justify-content:center;
+            font-size:1.9rem; color:#f87171; margin:0 auto 1.25rem;
+            box-shadow:0 0 18px rgba(248,113,113,.25);
+        }
+        h2 { color:#f87171; font-size:1.15rem; font-weight:700; margin-bottom:.5rem; }
+        p  { color:#8b949e; font-size:.85rem; line-height:1.6; margin-bottom:1.5rem; }
+        .back-btn {
+            display:inline-flex; align-items:center; gap:.5rem;
+            background:#161b22; border:1px solid #30363d; color:#e6edf3;
+            border-radius:8px; padding:.45rem 1.2rem; font-size:.82rem;
+            text-decoration:none; transition:border-color .2s, background .2s;
+        }
+        .back-btn:hover { background:#1c2128; border-color:#58a6ff; color:#58a6ff; }
+        .role-badge {
+            display:inline-block; background:#21262d; border:1px solid #30363d;
+            color:#8b949e; border-radius:20px; font-size:.72rem; padding:2px 12px;
+            margin-bottom:1.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="denied-card">
+        <div class="denied-icon"><i class="fas fa-lock"></i></div>
+        <h2>Acesso Negado</h2>
+        <span class="role-badge">
+            <i class="fas fa-user-tag me-1"></i>{{ role_meta[admin.role]['label'] }}
+        </span>
+        <p>
+            Apenas o <strong style="color:#e6edf3;">Proprietário (Owner)</strong> pode
+            gerenciar os métodos de pagamento.<br><br>
+            Se você precisa de acesso, solicite ao Owner que ative a permissão
+            <em>"Permitir que Administradores gerenciem Gateways"</em> nas configurações.
+        </p>
+        <a href="/admin" class="back-btn">
+            <i class="fas fa-arrow-left"></i>Voltar ao Painel
+        </a>
+    </div>
+</body>
+</html>
