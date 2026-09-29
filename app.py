@@ -4332,5 +4332,5 @@ if __name__ == '__main__':
         app_logger.info("🏓 Auto-ping BackgroundScheduler ativado para manter o servidor online")
         threading.Thread(target=_pix_expiry_worker, daemon=True).start()
         app_logger.info("⏰ Thread de expiração de PIX ativada")
-
+    is_debug = os.environ.get('RENDER_DEBUG', 'false').lower() == 'true'
     app.run(host="0.0.0.0", port=5000, debug=True)
