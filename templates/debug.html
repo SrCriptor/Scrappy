@@ -495,7 +495,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.success) {
-                alert('Erro: ' + (data.error || 'Falha na exclusão.'));
+                showSiteNotice('Erro: ' + (data.error || 'Falha na exclusão.'), { type: 'error' });
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
                 return;
             }
@@ -510,7 +510,7 @@
             }
         })
         .catch(function() {
-            alert('Erro de rede ao tentar excluir o domínio.');
+            showSiteNotice('Erro de rede ao tentar excluir o domínio.', { type: 'error' });
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
         });
     }

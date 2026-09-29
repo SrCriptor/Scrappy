@@ -48,6 +48,127 @@
         }
         .sys-info-item .sys-label { font-size: .72rem; color: #8b949e; }
         .sys-info-item .sys-value { font-size: .85rem; font-weight: 600; color: #e6edf3; }
+
+        /* ── Version Spinner ──────────────────────────────────────────── */
+        .ver-spinner-wrap {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: .55rem .75rem;
+            width: fit-content;
+        }
+        .ver-seg {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .ver-seg-btn {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: .7rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 1px 5px;
+            border-radius: 3px;
+            transition: color .15s, background .15s;
+        }
+        .ver-seg-btn:hover { color: #58a6ff; background: rgba(88,166,255,.1); }
+        .ver-seg-val {
+            font-family: 'Courier New', monospace;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #e6edf3;
+            min-width: 2ch;
+            text-align: center;
+            line-height: 1;
+        }
+        .ver-dot {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #30363d;
+            margin-bottom: 1px;
+        }
+        .ver-sep {
+            width: 1px;
+            height: 36px;
+            background: #30363d;
+            margin: 0 4px;
+        }
+        /* Channel pills */
+        .channel-pills { display: flex; gap: .35rem; flex-wrap: wrap; }
+        .channel-pill {
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .4px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1.5px solid #30363d;
+            background: transparent;
+            color: #8b949e;
+            cursor: pointer;
+            transition: all .15s;
+        }
+        .channel-pill:hover { border-color: #58a6ff; color: #58a6ff; }
+        .channel-pill.active-stable   { border-color: #3fb950; color: #3fb950; background: rgba(63,185,80,.1); }
+        .channel-pill.active-beta     { border-color: #e3b341; color: #e3b341; background: rgba(227,179,65,.1); }
+        .channel-pill.active-rc       { border-color: #58a6ff; color: #58a6ff; background: rgba(88,166,255,.1); }
+        .channel-pill.active-nightly  { border-color: #a371f7; color: #a371f7; background: rgba(163,113,247,.1); }
+        .channel-pill.active-dev      { border-color: #f0883e; color: #f0883e; background: rgba(240,136,62,.1); }
+        /* Version preview badge */
+        .ver-preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-family: 'Courier New', monospace;
+            font-size: .88rem;
+            font-weight: 700;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: .3rem .7rem;
+        }
+        .ver-preview-badge .ch-tag {
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .4px;
+            border-radius: 10px;
+            padding: 1px 7px;
+        }
+        .ch-tag-stable  { background: rgba(63,185,80,.15);   color: #3fb950; }
+        .ch-tag-beta    { background: rgba(227,179,65,.15);  color: #e3b341; }
+        .ch-tag-rc      { background: rgba(88,166,255,.15);  color: #58a6ff; }
+        .ch-tag-nightly { background: rgba(163,113,247,.15); color: #a371f7; }
+        .ch-tag-dev     { background: rgba(240,136,62,.15);  color: #f0883e; }
+        /* Status alerts */
+        .ver-alert {
+            font-size: .75rem;
+            border-radius: 6px;
+            padding: .4rem .7rem;
+            display: none;
+            align-items: center;
+            gap: .4rem;
+        }
+        .ver-alert.show { display: flex; }
+        .ver-alert-downgrade { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.4); color: #f85149; }
+        .ver-alert-skip      { background: rgba(227,179,65,.12); border: 1px solid rgba(227,179,65,.4); color: #e3b341; }
+        .ver-alert-ok        { background: rgba(63,185,80,.10); border: 1px solid rgba(63,185,80,.3); color: #3fb950; }
+        /* Modal */
+        .ver-modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 2000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .ver-modal-backdrop.show { display: flex; }
+        .ver-modal {
+            background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+            padding: 1.5rem; max-width: 420px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+        }
+        .ver-modal-title { font-size: .95rem; font-weight: 600; margin-bottom: .5rem; }
+        .ver-modal-body  { font-size: .82rem; color: #8b949e; margin-bottom: 1.2rem; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -73,7 +194,7 @@
     </div>
     {% endif %}
 
-    <!-- Estatísticas personalizáveis -->
+    <!-- Estatísticas personalizáveis — botões DENTRO do card -->
     <form method="POST" action="/dashboard/config">
         <div class="cfg-card mb-3">
             <div class="section-title"><i class="fas fa-chart-bar me-1"></i>Estatísticas de Uso</div>
@@ -82,7 +203,7 @@
                 Deixe em branco para mostrar apenas o valor real.
                 Quando quiser remover o bônus, clique em <em>Limpar Extras</em>.
             </p>
-            <div class="row g-3">
+            <div class="row g-3 mb-3">
                 {% set fields = [
                     ('views',     'Visualizações', 'fa-eye',              'a371f7'),
                     ('searches',  'Buscas',         'fa-magnifying-glass', '58a6ff'),
@@ -113,17 +234,149 @@
                 </div>
                 {% endfor %}
             </div>
-        </div>
-
-        <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary btn-sm">
-                <i class="fas fa-save me-1"></i>Salvar
-            </button>
-            <a href="/dashboard/config/reset" class="btn btn-outline-danger btn-sm">
-                <i class="fas fa-rotate-left me-1"></i>Limpar Extras
-            </a>
+            <!-- Botões agora ficam DENTRO do card -->
+            <div class="d-flex gap-2 pt-2 border-top" style="border-color:#21262d !important;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-save me-1"></i>Salvar
+                </button>
+                <a href="/dashboard/config/reset" class="btn btn-outline-danger btn-sm">
+                    <i class="fas fa-rotate-left me-1"></i>Limpar Extras
+                </a>
+            </div>
         </div>
     </form>
+
+    <!-- Versão do sistema — spinner semântico, owner only -->
+    {% if admin.role == 'owner' %}
+    <div class="cfg-card mt-4" id="versionCard">
+        <div class="section-title">
+            <i class="fas fa-code-branch me-1" style="color:#58a6ff;"></i>Versão do Sistema
+        </div>
+        <p class="small text-muted mb-3">
+            Controle a versão exibida em todo o sistema. Salvar no banco torna o arquivo de código desnecessário para este campo.
+            <span class="badge-real ms-1">auto-detectada: {{ app_version_auto }}</span>
+        </p>
+
+        <!-- Hidden form submitted by JS -->
+        <form id="versionForm" method="POST" action="/dashboard/config">
+            <input type="hidden" name="_form_type" value="version" />
+            <input type="hidden" name="version_override" id="versionHidden" value="{{ version_override or '' }}" />
+        </form>
+
+        <!-- Spinner UI -->
+        <div class="mb-3">
+            <div class="small text-muted mb-2" style="font-size:.72rem; text-transform:uppercase; letter-spacing:.4px;">Número de versão</div>
+            <div class="ver-spinner-wrap mb-3">
+                <!-- MAJOR -->
+                <div class="ver-seg">
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('major',1)" title="Aumentar major"><i class="fas fa-chevron-up"></i></button>
+                    <div class="ver-seg-val" id="segMajor">0</div>
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('major',-1)" title="Diminuir major"><i class="fas fa-chevron-down"></i></button>
+                </div>
+                <div class="ver-dot">.</div>
+                <!-- MINOR -->
+                <div class="ver-seg">
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('minor',1)" title="Aumentar minor"><i class="fas fa-chevron-up"></i></button>
+                    <div class="ver-seg-val" id="segMinor">0</div>
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('minor',-1)" title="Diminuir minor"><i class="fas fa-chevron-down"></i></button>
+                </div>
+                <div class="ver-dot">.</div>
+                <!-- PATCH -->
+                <div class="ver-seg">
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('patch',1)" title="Aumentar patch"><i class="fas fa-chevron-up"></i></button>
+                    <div class="ver-seg-val" id="segPatch">0</div>
+                    <button type="button" class="ver-seg-btn" onclick="bumpSeg('patch',-1)" title="Diminuir patch"><i class="fas fa-chevron-down"></i></button>
+                </div>
+                <div class="ver-sep"></div>
+                <!-- Channel -->
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="font-size:.6rem;color:#8b949e;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Canal</div>
+                    <div style="font-size:.82rem;font-weight:600;color:#e6edf3;" id="channelDisplay">Stable</div>
+                    <div style="display:flex;gap:3px;">
+                        <button type="button" class="ver-seg-btn" onclick="bumpChannel(-1)" title="Canal anterior"><i class="fas fa-chevron-up"></i></button>
+                        <button type="button" class="ver-seg-btn" onclick="bumpChannel(1)"  title="Canal seguinte"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channel pills -->
+            <div class="small text-muted mb-2" style="font-size:.72rem; text-transform:uppercase; letter-spacing:.4px;">Canal de lançamento</div>
+            <div class="channel-pills mb-3" id="channelPills">
+                <button type="button" class="channel-pill" data-ch="stable"  onclick="setChannel('stable')">● Stable</button>
+                <button type="button" class="channel-pill" data-ch="beta"    onclick="setChannel('beta')">◐ Beta</button>
+                <button type="button" class="channel-pill" data-ch="rc"      onclick="setChannel('rc')">◈ RC</button>
+                <button type="button" class="channel-pill" data-ch="nightly" onclick="setChannel('nightly')">◉ Nightly</button>
+                <button type="button" class="channel-pill" data-ch="dev"     onclick="setChannel('dev')">◇ Dev</button>
+            </div>
+
+            <!-- Live preview -->
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div>
+                    <div class="small text-muted mb-1" style="font-size:.72rem; text-transform:uppercase; letter-spacing:.4px;">Pré-visualização</div>
+                    <div class="ver-preview-badge">
+                        <span id="previewNum">0.0.0</span>
+                        <span id="previewCh" class="ch-tag ch-tag-stable">STABLE</span>
+                    </div>
+                </div>
+                <div id="verChangeDir" style="font-size:.72rem; color:#8b949e; display:none;">
+                    <i id="verChangeDirIcon" class="fas fa-arrow-up me-1"></i><span id="verChangeDirText"></span>
+                </div>
+            </div>
+
+            <!-- Status alerts -->
+            <div class="ver-alert ver-alert-downgrade mb-2" id="alertDowngrade">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>⚠ <strong>Downgrade detectado!</strong> A versão proposta é inferior à versão ativa. Um modal de confirmação será exibido.</span>
+            </div>
+            <div class="ver-alert ver-alert-skip mb-2" id="alertSkip">
+                <i class="fas fa-forward-fast"></i>
+                <span id="alertSkipText">⚡ Salto de versão detectado. Um modal de confirmação será exibido.</span>
+            </div>
+            <div class="ver-alert ver-alert-ok mb-2" id="alertOk">
+                <i class="fas fa-check-circle"></i>
+                <span id="alertOkText">Atualização normal — nenhuma confirmação necessária.</span>
+            </div>
+
+            <!-- Versão ativa -->
+            {% if version_override %}
+            <div class="d-flex align-items-center gap-2 mb-3" id="activeVersionRow">
+                <i class="fas fa-check-circle" style="color:#3fb950;font-size:.8rem;"></i>
+                <span style="font-size:.78rem;color:#8b949e;">Versão ativa no banco:</span>
+                <strong style="font-family:monospace;font-size:.82rem;" id="activeVersionLabel">{{ version_override }}</strong>
+            </div>
+            {% else %}
+            <div class="d-flex align-items-center gap-2 mb-3" id="activeVersionRow">
+                <i class="fas fa-info-circle" style="color:#8b949e;font-size:.8rem;"></i>
+                <span style="font-size:.78rem;color:#8b949e;">Nenhuma versão customizada — usando detecção automática:</span>
+                <strong style="font-family:monospace;font-size:.82rem;" id="activeVersionLabel">{{ app_version_auto }}</strong>
+            </div>
+            {% endif %}
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-sm" onclick="tryApplyVersion()">
+                    <i class="fas fa-satellite-dish me-1"></i>Aplicar Versão
+                </button>
+                {% if version_override %}
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetVersion()">
+                    <i class="fas fa-rotate-left me-1"></i>Usar Automática
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="ver-modal-backdrop" id="verModal">
+        <div class="ver-modal">
+            <div class="ver-modal-title" id="verModalTitle"></div>
+            <div class="ver-modal-body" id="verModalBody"></div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="closeVerModal()">Cancelar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="verModalConfirmBtn" onclick="confirmApplyVersion()">Confirmar mesmo assim</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Informações do sistema — somente leitura -->
     <div class="cfg-card mt-4">
@@ -182,6 +435,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+    /* ── Stats total preview ─────────────────────────────────────────────── */
     function updateTotal(input) {
         const real  = parseInt(input.dataset.real) || 0;
         const bonus = parseInt(input.value) || 0;
@@ -193,6 +447,200 @@
             el.textContent = 'Total exibido: ' + (real + bonus).toLocaleString('pt-BR');
         }
     }
+
+    /* ── Version Spinner ─────────────────────────────────────────────────── */
+    (function () {
+        const CHANNELS = ['stable', 'beta', 'rc', 'nightly', 'dev'];
+        const CHANNEL_LABELS = {
+            stable: 'Stable', beta: 'Beta', rc: 'RC', nightly: 'Nightly', dev: 'Dev'
+        };
+        const CHANNEL_ABBREV = {
+            stable: 'STABLE', beta: 'BETA', rc: 'RC', nightly: 'NIGHTLY', dev: 'DEV'
+        };
+
+        /* ── Parse the currently-active version from server ── */
+        const RAW_ACTIVE = {{ (version_override or app_version_auto) | tojson }};
+        const AUTO_VER   = {{ app_version_auto | tojson }};
+
+        function parseVer(s) {
+            if (!s) return { major:0, minor:0, patch:0, channel:'stable' };
+            const m = String(s).match(/^(\d+)\.(\d+)\.(\d+)(?:[- ]?(\w+))?/);
+            if (!m) return { major:0, minor:0, patch:0, channel:'stable' };
+            const ch = (m[4] || 'stable').toLowerCase();
+            return { major:+m[1], minor:+m[2], patch:+m[3], channel: CHANNELS.includes(ch) ? ch : 'stable' };
+        }
+
+        function verToString(v) {
+            const base = `${v.major}.${v.minor}.${v.patch}`;
+            return v.channel === 'stable' ? base : `${base}-${v.channel}`;
+        }
+
+        function cmpVer(a, b) {
+            if (a.major !== b.major) return a.major > b.major ? 1 : -1;
+            if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
+            if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
+            return 0;
+        }
+
+        /* ── State ── */
+        const active = parseVer(RAW_ACTIVE);
+        let cur = { ...active };
+
+        /* ── DOM refs ── */
+        const elMajor   = document.getElementById('segMajor');
+        const elMinor   = document.getElementById('segMinor');
+        const elPatch   = document.getElementById('segPatch');
+        const elChDisp  = document.getElementById('channelDisplay');
+        const elPrevNum = document.getElementById('previewNum');
+        const elPrevCh  = document.getElementById('previewCh');
+        const elHidden  = document.getElementById('versionHidden');
+        const elChangeDir    = document.getElementById('verChangeDir');
+        const elChangeDirIcon= document.getElementById('verChangeDirIcon');
+        const elChangeDirTxt = document.getElementById('verChangeDirText');
+        const elAlertDown= document.getElementById('alertDowngrade');
+        const elAlertSkip= document.getElementById('alertSkip');
+        const elAlertOk  = document.getElementById('alertOk');
+
+        function renderAll() {
+            elMajor.textContent = cur.major;
+            elMinor.textContent = cur.minor;
+            elPatch.textContent = cur.patch;
+            elChDisp.textContent = CHANNEL_LABELS[cur.channel];
+
+            // pills
+            document.querySelectorAll('.channel-pill').forEach(p => {
+                p.className = 'channel-pill';
+                if (p.dataset.ch === cur.channel) p.classList.add('active-' + cur.channel);
+            });
+
+            // preview
+            elPrevNum.textContent = `${cur.major}.${cur.minor}.${cur.patch}`;
+            elPrevCh.textContent  = CHANNEL_ABBREV[cur.channel];
+            elPrevCh.className    = 'ch-tag ch-tag-' + cur.channel;
+
+            // hidden input
+            elHidden.value = verToString(cur);
+
+            // comparison
+            const cmp = cmpVer(cur, active);
+            elAlertDown.classList.remove('show');
+            elAlertSkip.classList.remove('show');
+            elAlertOk.classList.remove('show');
+            elChangeDir.style.display = 'none';
+
+            if (cmp === 0) {
+                // same version — no status shown
+            } else if (cmp < 0) {
+                elAlertDown.classList.add('show');
+                elChangeDir.style.display = '';
+                elChangeDirIcon.className = 'fas fa-arrow-down me-1';
+                elChangeDirIcon.style.color = '#f85149';
+                elChangeDirTxt.textContent = `↓ Downgrade de ${RAW_ACTIVE}`;
+                elChangeDirTxt.style.color = '#f85149';
+            } else {
+                // upgrade — check patch skip (same major+minor, patch diff > 1)
+                const patchSkip = (cur.major === active.major && cur.minor === active.minor &&
+                                   cur.patch - active.patch > 1);
+                if (patchSkip) {
+                    document.getElementById('alertSkipText').textContent =
+                        `⚡ Salto de versão: ${active.major}.${active.minor}.${active.patch} → ${cur.major}.${cur.minor}.${cur.patch} (pulando ${cur.patch - active.patch - 1} versão(ões)). Confirmação necessária.`;
+                    elAlertSkip.classList.add('show');
+                } else {
+                    elAlertOk.textContent = '';
+                    document.getElementById('alertOk').querySelector('span') &&
+                        (document.getElementById('alertOk').children[1].textContent =
+                            `✓ Upgrade normal: ${RAW_ACTIVE} → ${verToString(cur)}`);
+                    elAlertOk.classList.add('show');
+                }
+                elChangeDir.style.display = '';
+                elChangeDirIcon.className = 'fas fa-arrow-up me-1';
+                elChangeDirIcon.style.color = '#3fb950';
+                elChangeDirTxt.textContent = `↑ Upgrade de ${RAW_ACTIVE}`;
+                elChangeDirTxt.style.color = '#3fb950';
+            }
+        }
+
+        window.bumpSeg = function(seg, dir) {
+            if (seg === 'major') { cur.major = Math.max(0, cur.major + dir); if (dir > 0) { cur.minor=0; cur.patch=0; } }
+            if (seg === 'minor') { cur.minor = Math.max(0, cur.minor + dir); if (dir > 0) { cur.patch=0; } }
+            if (seg === 'patch') { cur.patch = Math.max(0, cur.patch + dir); }
+            renderAll();
+        };
+
+        window.bumpChannel = function(dir) {
+            const idx = CHANNELS.indexOf(cur.channel);
+            cur.channel = CHANNELS[(idx + dir + CHANNELS.length) % CHANNELS.length];
+            renderAll();
+        };
+
+        window.setChannel = function(ch) {
+            cur.channel = ch;
+            renderAll();
+        };
+
+        window.tryApplyVersion = function() {
+            const cmp = cmpVer(cur, active);
+            if (cmp === 0) { document.getElementById('versionForm').submit(); return; }
+
+            if (cmp < 0) {
+                openVerModal(
+                    '⚠️ Confirmar Downgrade',
+                    `Você está aplicando uma versão <strong>inferior</strong> à atual.<br><br>
+                     Versão ativa: <code>${RAW_ACTIVE}</code><br>
+                     Nova versão:  <code>${verToString(cur)}</code><br><br>
+                     Isso pode confundir usuários e indicar regressão. Deseja continuar?`,
+                    true
+                );
+                return;
+            }
+
+            const patchSkip = (cur.major === active.major && cur.minor === active.minor &&
+                               cur.patch - active.patch > 1);
+            if (patchSkip) {
+                openVerModal(
+                    '⚡ Confirmar Salto de Versão',
+                    `Você está pulando ${cur.patch - active.patch - 1} versão(ões) intermediária(s).<br><br>
+                     Versão ativa: <code>${RAW_ACTIVE}</code><br>
+                     Nova versão:  <code>${verToString(cur)}</code><br><br>
+                     A sequência recomendada seria <code>${active.major}.${active.minor}.${active.patch + 1}</code>. Deseja aplicar mesmo assim?`,
+                    false
+                );
+                return;
+            }
+
+            document.getElementById('versionForm').submit();
+        };
+
+        window.resetVersion = function() {
+            document.getElementById('versionHidden').value = '';
+            document.getElementById('versionForm').submit();
+        };
+
+        /* ── Modal helpers ── */
+        window.openVerModal = function(title, body, isDanger) {
+            document.getElementById('verModalTitle').innerHTML = title;
+            document.getElementById('verModalBody').innerHTML  = body;
+            const btn = document.getElementById('verModalConfirmBtn');
+            btn.className = isDanger ? 'btn btn-danger btn-sm' : 'btn btn-warning btn-sm';
+            btn.textContent = isDanger ? 'Confirmar Downgrade' : 'Aplicar mesmo assim';
+            document.getElementById('verModal').classList.add('show');
+        };
+        window.closeVerModal = function() {
+            document.getElementById('verModal').classList.remove('show');
+        };
+        window.confirmApplyVersion = function() {
+            closeVerModal();
+            document.getElementById('versionForm').submit();
+        };
+
+        /* Close modal on backdrop click */
+        document.getElementById('verModal').addEventListener('click', function(e) {
+            if (e.target === this) closeVerModal();
+        });
+
+        /* Init */
+        renderAll();
+    })();
 
     /* ── Latency Line Chart ─────────────────────────────────────────────── */
     (function () {
@@ -273,5 +721,7 @@
         setInterval(pollLatency, 7000);
     })();
 </script>
+
+{% include 'admin/_chat_widget.html' %}
 </body>
 </html>

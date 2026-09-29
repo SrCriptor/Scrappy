@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Solicitações de Gateways</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="/static/admin-responsive.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #080c12;
+            --panel: #111923;
+            --panel-soft: #0d141e;
+            --line: rgba(148,163,184,.18);
+            --muted: #8b98aa;
+            --cyan: #22d3ee;
+            --green: #39e58c;
+            --amber: #fbbf24;
+            --red: #fb7185;
+        }
+        body {
+            min-height:100vh;
+            background:
+                radial-gradient(circle at 8% 0%, rgba(14,165,233,.11), transparent 31rem),
+                radial-gradient(circle at 96% 12%, rgba(168,85,247,.09), transparent 27rem),
+                var(--bg);
+            color:#e6edf3;
+        }
+        .shell { max-width:1080px; }
+        .page-kicker {
+            color:var(--cyan); font-size:.68rem; font-weight:800; letter-spacing:.16em;
+            text-transform:uppercase; margin-bottom:.45rem;
+        }
+        .page-title { font-size:1.35rem; font-weight:800; letter-spacing:.01em; }
+        .page-subtitle { color:var(--muted); font-size:.78rem; max-width:650px; }
+        .owner-pill {
+            display:inline-flex; align-items:center; gap:.35rem; border:1px solid rgba(34,211,238,.3);
+            color:#a5f3fc; background:rgba(8,145,178,.12); border-radius:999px;
+            font-size:.68rem; font-weight:700; padding:.35rem .65rem; white-space:nowrap;
+        }
+        .summary-strip {
+            display:flex; align-items:center; gap:.75rem; margin:1.35rem 0 1rem;
+            padding:.8rem 1rem; background:rgba(17,25,35,.82); border:1px solid var(--line);
+            border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.18);
+        }
+        .summary-icon {
+            width:34px; height:34px; display:grid; place-items:center; border-radius:10px;
+            color:var(--amber); background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.25);
+        }
+        .summary-label { color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; }
+        .summary-value { font-size:1.05rem; font-weight:800; color:#f8fafc; line-height:1.15; }
+        .request-list { display:grid; gap:.75rem; }
+        .request-card {
+            position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between;
+            gap:1rem; padding:1.05rem 1.15rem 1.05rem 1.25rem; background:linear-gradient(110deg,rgba(17,25,35,.98),rgba(13,20,30,.96));
+            border:1px solid var(--line); border-radius:14px; transition:border-color .2s, transform .2s, box-shadow .2s;
+        }
+        .request-card::before {
+            content:''; position:absolute; inset:0 auto 0 0; width:3px;
+            background:linear-gradient(180deg,var(--cyan),#8b5cf6); box-shadow:0 0 18px rgba(34,211,238,.45);
+        }
+        .request-card:hover { border-color:rgba(34,211,238,.42); transform:translateY(-1px); box-shadow:0 10px 28px rgba(0,0,0,.25); }
+        .request-main { min-width:0; display:flex; align-items:center; gap:.8rem; }
+        .request-avatar {
+            width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:11px;
+            color:#a5f3fc; background:linear-gradient(145deg,rgba(8,145,178,.28),rgba(30,41,59,.65));
+            border:1px solid rgba(34,211,238,.3); box-shadow:inset 0 0 14px rgba(34,211,238,.08);
+        }
+        .request-meta { color:#f1f5f9; font-size:.82rem; font-weight:600; line-height:1.35; }
+        .request-meta strong { color:#fff; }
+        .request-sub { color:var(--muted); font-size:.7rem; margin-top:.25rem; }
+        .request-scope {
+            display:inline-flex; align-items:center; gap:.3rem; margin-left:.45rem; padding:.18rem .5rem;
+            border-radius:999px; color:#bae6fd; background:rgba(14,165,233,.1); border:1px solid rgba(14,165,233,.22);
+            font-size:.62rem; font-weight:700; vertical-align:middle;
+        }
+        .open-btn {
+            display:inline-flex; align-items:center; gap:.4rem; flex:0 0 auto; border:1px solid rgba(251,191,36,.38);
+            background:rgba(251,191,36,.08); color:#fde68a; border-radius:9px; padding:.48rem .7rem;
+            font-size:.7rem; font-weight:700; cursor:pointer; transition:background .15s, border-color .15s, transform .15s;
+        }
+        .open-btn:hover { background:rgba(251,191,36,.16); border-color:var(--amber); transform:translateY(-1px); }
+        .request-state {
+            display:inline-flex; align-items:center; gap:.3rem; margin-left:.5rem; padding:.18rem .48rem;
+            border-radius:999px; color:#fde68a; background:rgba(251,191,36,.1);
+            border:1px solid rgba(251,191,36,.22); font-size:.6rem; font-weight:800;
+            text-transform:uppercase; letter-spacing:.06em; vertical-align:middle;
+        }
+        .request-action { display:flex; align-items:center; gap:.65rem; flex:0 0 auto; }
+        .request-action-label { color:#64748b; font-size:.63rem; white-space:nowrap; }
+        .empty {
+            color:var(--muted); text-align:center; padding:3.5rem 1rem; background:rgba(17,25,35,.72);
+            border:1px dashed var(--line); border-radius:14px;
+        }
+        .empty i { color:#64748b; }
+        .request-modal-content { background:#0b1119; border:1px solid rgba(34,211,238,.25); border-radius:16px; box-shadow:0 22px 80px rgba(0,0,0,.65); }
+        .request-modal-header { padding:1.15rem 1.25rem; border-bottom:1px solid var(--line); background:linear-gradient(110deg,rgba(14,165,233,.08),transparent 65%); }
+        .modal-kicker { color:var(--cyan); font-size:.62rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+        .request-modal-title { font-size:1rem; font-weight:800; margin:.2rem 0 .3rem; }
+        .request-modal-sub { color:var(--muted); font-size:.7rem; }
+        .modal-close { background:transparent; border:1px solid var(--line); border-radius:8px; padding:.35rem .5rem; }
+        .modal-close:hover { border-color:rgba(34,211,238,.4); }
+        .change-summary {
+            display:flex; align-items:center; flex-wrap:wrap; gap:.4rem; margin-bottom:1rem; padding:.65rem .75rem;
+            background:rgba(14,165,233,.06); border:1px solid rgba(34,211,238,.16); border-radius:10px;
+            color:var(--muted); font-size:.7rem;
+        }
+        .change-summary strong { color:#cbd5e1; margin-right:.15rem; }
+        .change-chip { padding:.2rem .48rem; color:#a5f3fc; background:rgba(8,145,178,.14); border:1px solid rgba(34,211,238,.22); border-radius:999px; font-size:.64rem; font-weight:700; }
+        .compare-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.85rem; }
+        .compare-card { min-width:0; padding:.85rem; background:var(--panel-soft); border:1px solid var(--line); border-radius:12px; }
+        .compare-card.before { border-color:rgba(251,113,133,.35); box-shadow:inset 0 2px 0 rgba(251,113,133,.65); }
+        .compare-card.after { border-color:rgba(57,229,140,.3); box-shadow:inset 0 2px 0 rgba(57,229,140,.65); }
+        .compare-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.55rem; margin-bottom:.75rem; }
+        .compare-title { font-size:.78rem; font-weight:800; margin-top:.2rem; }
+        .before .compare-title { color:#fda4af; }
+        .after .compare-title { color:#86efac; }
+        .compare-caption { color:var(--muted); font-size:.61rem; text-transform:uppercase; letter-spacing:.1em; font-weight:800; }
+        .eye-btn {
+            display:inline-flex; align-items:center; gap:.3rem; flex:0 0 auto; border:1px solid rgba(148,163,184,.25);
+            background:rgba(148,163,184,.08); color:#cbd5e1; border-radius:7px; padding:.32rem .45rem;
+            font-size:.62rem; cursor:pointer; transition:.15s;
+        }
+        .eye-btn:hover, .eye-btn.is-visible { color:#fff; border-color:var(--cyan); background:rgba(34,211,238,.12); }
+        .gw-mini { background:rgba(8,12,18,.72); border:1px solid rgba(148,163,184,.15); border-radius:9px; padding:.65rem; margin-bottom:.55rem; }
+        .gw-mini:last-child { margin-bottom:0; }
+        .gw-mini-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.45rem; }
+        .gw-mini h6 { font-size:.75rem; margin:0; font-weight:800; }
+        .changed-label { color:#fbbf24; font-size:.58rem; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
+        .gw-mini label { color:#718096; font-size:.59rem; text-transform:uppercase; display:block; margin:.35rem 0 .14rem; letter-spacing:.04em; }
+        .gw-mini input { width:100%; background:#111923; color:#dbeafe; border:1px solid rgba(148,163,184,.15); border-radius:6px; padding:.3rem .45rem; font-size:.68rem; }
+        .gw-mini input[data-secret-field] { color:#c4b5fd; }
+        .removed-state { padding:.65rem; color:#fda4af; background:rgba(127,29,29,.14); border:1px dashed rgba(251,113,133,.35); border-radius:8px; font-size:.68rem; }
+        .no-change-side { color:#64748b; font-size:.68rem; padding:.8rem .2rem .2rem; }
+        .decision-bar { display:flex; justify-content:flex-end; gap:.55rem; padding-top:1rem; margin-top:1rem; border-top:1px solid var(--line); }
+        .audit-note {
+            display:flex; align-items:flex-start; gap:.55rem; margin-top:.85rem; padding:.65rem .75rem;
+            color:#94a3b8; background:rgba(139,92,246,.07); border:1px solid rgba(139,92,246,.18);
+            border-radius:10px; font-size:.67rem; line-height:1.45;
+        }
+        .audit-note i { color:#c4b5fd; margin-top:.1rem; }
+        @media (max-width:650px) {
+            .request-card { align-items:flex-start; }
+            .request-card .open-btn { margin-top:.1rem; }
+            .request-action-label { display:none; }
+            .request-scope { display:block; width:max-content; margin:.35rem 0 0; }
+            .compare-grid { grid-template-columns:1fr; }
+            .compare-head { align-items:center; }
+        }
+    </style>
+</head>
+<body>
+<main class="container shell py-4">
+    <header class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+        <div>
+            <div class="page-kicker"><i class="fas fa-wave-square me-1"></i>Central de pagamentos</div>
+            <h1 class="page-title mb-1"><i class="fas fa-code-compare text-info me-2"></i>Solicitações de gateway</h1>
+            <div class="page-subtitle">Revise alterações críticas antes de publicá-las. O comparador mostra somente os itens realmente modificados.</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="owner-pill"><i class="fas fa-crown"></i>Visualização Owner</span>
+            <a href="/payment/admin" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Gateways</a>
+        </div>
+    </header>
+
+    <div class="summary-strip">
+        <div class="summary-icon"><i class="fas fa-inbox"></i></div>
+        <div>
+            <div class="summary-label">Fila de aprovação</div>
+            <div class="summary-value">{{ requests | length }} solicitação{{ '' if requests|length == 1 else 'ões' }} pendente{{ '' if requests|length == 1 else 's' }}</div>
+        </div>
+        <div class="ms-auto text-muted" style="font-size:.68rem;"><i class="fas fa-lock me-1"></i>Dados completos protegidos</div>
+    </div>
+
+    {% if requests %}
+    <section class="request-list" aria-label="Solicitações pendentes">
+        {% for req in requests %}
+        <article class="request-card" id="request-row-{{ req.id }}">
+            <div class="request-main">
+                <div class="request-avatar"><i class="fas fa-user-pen"></i></div>
+                <div style="min-width:0;">
+                     <div class="request-meta"><strong>{{ req.admin_name }}</strong> enviou uma alteração
+                        <span class="request-scope"><i class="fas fa-layer-group"></i>{{ req.scope }}</span>
+                         <span class="request-state"><i class="fas fa-hourglass-half"></i>Pendente</span>
+                    </div>
+                    <div class="request-sub"><i class="far fa-clock me-1"></i>{{ req.created_label }} <span class="mx-1">·</span> Solicitação #{{ req.id }}</div>
+                </div>
+            </div>
+             <div class="request-action">
+                 <span class="request-action-label">Revisar detalhes</span>
+                 <button type="button" class="open-btn" title="Abrir auditoria visual" onclick="openRequest({{ req.id }})">
+                     <i class="fas fa-eye"></i><span>Auditar</span>
+                 </button>
+             </div>
+        </article>
+        {% endfor %}
+    </section>
+    {% else %}
+    <div class="empty"><i class="fas fa-circle-check d-block mb-3" style="font-size:2rem;color:#39e58c;"></i><strong>Nenhuma solicitação pendente</strong><div class="mt-1">A fila está limpa. Novas alterações críticas aparecerão aqui.</div></div>
+    {% endif %}
+</main>
+
+{% for req in requests %}
+{% set old = masked_config(req.before_cfg, false) %}
+{% set new = masked_config(req.proposed_cfg, false) %}
+<div class="modal fade" id="requestModal{{ req.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content request-modal-content">
+            <div class="request-modal-header d-flex align-items-start justify-content-between gap-3">
+                <div>
+                    <div class="modal-kicker"><i class="fas fa-shield-halved me-1"></i>Revisão protegida · Solicitação #{{ req.id }}</div>
+                    <h2 class="request-modal-title"><i class="fas fa-code-compare text-info me-2"></i>Auditoria da alteração</h2>
+                    <div class="request-modal-sub">{{ req.admin_name }} · {{ req.created_label }} · escopo: {{ req.scope }}</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white modal-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body p-3 p-md-4">
+                <div class="change-summary">
+                    <strong><i class="fas fa-filter me-1"></i>Alterações detectadas:</strong>
+                    {% for gid in req.changed_gateway_ids %}
+                    <span class="change-chip">{{ gateway_meta[gid].name }}</span>
+                    {% endfor %}
+                    {% if req.primary_changed %}<span class="change-chip">Gateway padrão</span>{% endif %}
+                    {% for custom in req.changed_custom_gateways %}<span class="change-chip">Personalizado: {{ (custom.after or custom.before).get('name', 'Gateway') }}</span>{% endfor %}
+                </div>
+                 <div class="audit-note"><i class="fas fa-circle-info"></i><span>Apenas os gateways e campos que diferem entre o estado anterior e a proposta aparecem nesta revisão. Use o olhinho em cada coluna para revelar a informação completa ao Owner.</span></div>
+
+                <div class="compare-grid">
+                    {% for side, cfg, title, caption in [('before', old, 'Estado anterior', 'ANTES'), ('after', new, 'Alteração proposta', 'DEPOIS')] %}
+                    <section class="compare-card {{ side }}">
+                        <div class="compare-head">
+                            <div><div class="compare-caption">{{ caption }}</div><div class="compare-title">{{ title }}</div></div>
+                            <button type="button" class="eye-btn" data-request-id="{{ req.id }}" data-side="{{ side }}" onclick="revealRequestData(this)" title="Exibir dados completos exclusivamente para o Owner">
+                                <i class="fas fa-eye"></i><span>Exibir</span>
+                            </button>
+                        </div>
+
+                        {% for gid in req.changed_gateway_ids %}
+                        {% set meta = gateway_meta[gid] %}
+                        {% set gw = cfg.get('gateways', {}).get(gid, {}) %}
+                        <div class="gw-mini">
+                            <div class="gw-mini-head"><h6><i class="fab {{ meta.icon }} me-1" style="color:{{ meta.color }};"></i>{{ meta.name }}</h6><span class="changed-label">alterado</span></div>
+                            <label>Status</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="enabled" data-value-kind="status" data-masked-value="{{ 'Ativo' if gw.get('enabled') else 'Desativado' }}" value="{{ 'Ativo' if gw.get('enabled') else 'Desativado' }}" readonly>
+                            {% if gid == 'manual' %}
+                            <label>Chave PIX</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="pix_key" data-secret-field data-masked-value="{{ gw.get('pix_key','') }}" value="{{ gw.get('pix_key','') }}" readonly>
+                            {% elif gid == 'mercadopago' %}
+                            <label>Access Token</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="access_token" data-secret-field data-masked-value="{{ gw.get('access_token','') }}" value="{{ gw.get('access_token','') }}" readonly>
+                            {% elif gid == '99pay' %}
+                            <label>Client ID</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="client_id" data-secret-field data-masked-value="{{ gw.get('client_id','') }}" value="{{ gw.get('client_id','') }}" readonly>
+                            <label>Client Secret</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="client_secret" data-secret-field data-masked-value="{{ gw.get('client_secret','') }}" value="{{ gw.get('client_secret','') }}" readonly>
+                             {% elif gid == 'stripe' %}
+                            <label>Stripe Key Test</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="stripe_test_secret_key" data-secret-field data-masked-value="{{ gw.get('stripe_test_secret_key', gw.get('api_key','')) }}" value="{{ gw.get('stripe_test_secret_key', gw.get('api_key','')) }}" readonly>
+                             <label>Modo / Pix</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="__stripe_settings" data-value-kind="stripe-settings" data-masked-value="{{ 'Teste' if gw.get('stripe_test_enabled') else 'Produção' }} · {{ 'Pix ativo' if gw.get('stripe_pix_enabled', True) else 'Pix desativado' }}" value="{{ 'Teste' if gw.get('stripe_test_enabled') else 'Produção' }} · {{ 'Pix ativo' if gw.get('stripe_pix_enabled', True) else 'Pix desativado' }}" readonly>
+                            {% elif gid == 'paypal' %}
+                            <label>Client ID</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="client_id" data-secret-field data-masked-value="{{ gw.get('client_id','') }}" value="{{ gw.get('client_id','') }}" readonly>
+                            <label>Client Secret</label><input data-reveal-field data-gateway-id="{{ gid }}" data-config-key="client_secret" data-secret-field data-masked-value="{{ gw.get('client_secret','') }}" value="{{ gw.get('client_secret','') }}" readonly>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+
+                        {% for custom in req.changed_custom_gateways %}
+                        {% set gw = custom.before if side == 'before' else custom.after %}
+                        {% if gw %}
+                        <div class="gw-mini">
+                            <div class="gw-mini-head"><h6><i class="fas {{ gw.get('icon','fa-qrcode') }} me-1" style="color:{{ gw.get('color','#a371f7') }};"></i>{{ gw.get('name','Personalizado') }}</h6><span class="changed-label">alterado</span></div>
+                            <label>Chave PIX</label><input data-reveal-field data-custom-id="{{ custom.id }}" data-config-key="pix_key" data-secret-field data-masked-value="{{ masked_config({'custom_gateways':[gw]}, false).get('custom_gateways',[{}])[0].get('pix_key','') }}" value="{{ masked_config({'custom_gateways':[gw]}, false).get('custom_gateways',[{}])[0].get('pix_key','') }}" readonly>
+                            <label>Status</label><input data-reveal-field data-custom-id="{{ custom.id }}" data-config-key="enabled" data-value-kind="status" data-masked-value="{{ 'Ativo' if gw.get('enabled') else 'Desativado' }}" value="{{ 'Ativo' if gw.get('enabled') else 'Desativado' }}" readonly>
+                        </div>
+                        {% else %}
+                        <div class="removed-state"><i class="fas fa-trash-can me-1"></i>Este gateway personalizado foi removido nesta etapa.</div>
+                        {% endif %}
+                        {% endfor %}
+
+                        {% if req.primary_changed %}
+                        <div class="gw-mini">
+                            <div class="gw-mini-head"><h6><i class="fas fa-star me-1" style="color:#fbbf24;"></i>Gateway padrão</h6><span class="changed-label">alterado</span></div>
+                            <label>Selecionado</label><input value="{{ cfg.get('primary_gateway', 'manual') }}" readonly>
+                        </div>
+                        {% endif %}
+                        {% if not req.changed_gateway_ids and not req.changed_custom_gateways and not req.primary_changed %}
+                        <div class="no-change-side">Nenhuma diferença registrada.</div>
+                        {% endif %}
+                    </section>
+                    {% endfor %}
+                </div>
+
+                <div class="decision-bar">
+                    <button type="button" class="btn btn-sm btn-success" onclick="decideRequest({{ req.id }}, 'approved', this)">
+                        <i class="fas fa-check me-1"></i>Aprovar e publicar
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="decideRequest({{ req.id }}, 'rejected', this)">
+                        <i class="fas fa-xmark me-1"></i>Rejeitar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const requestDetailsCache = {};
+    function openRequest(id) {
+        const modal = document.getElementById('requestModal' + id);
+        if (modal) new bootstrap.Modal(modal).show();
+    }
+    async function revealRequestData(button) {
+        const id = button.dataset.requestId;
+        const side = button.dataset.side;
+        const card = button.closest('.compare-card');
+        const fields = card ? card.querySelectorAll('[data-reveal-field]') : [];
+        const isVisible = button.classList.contains('is-visible');
+        if (isVisible) {
+            fields.forEach(field => { field.value = field.dataset.maskedValue || '—'; });
+            button.classList.remove('is-visible');
+            button.innerHTML = '<i class="fas fa-eye"></i><span>Exibir</span>';
+            return;
+        }
+        button.disabled = true;
+        try {
+            if (!requestDetailsCache[id]) {
+                const response = await fetch('/admin/gateway/requests/' + id + '/details', {cache:'no-store'});
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.error || 'Dados protegidos indisponíveis.');
+                requestDetailsCache[id] = data;
+            }
+            const config = requestDetailsCache[id][side] || {};
+            fields.forEach(field => {
+                let gateway = null;
+                if (field.dataset.customId) {
+                    gateway = (config.custom_gateways || []).find(item => String(item.id) === String(field.dataset.customId)) || {};
+                } else {
+                    gateway = (config.gateways || {})[field.dataset.gatewayId] || {};
+                }
+                const key = field.dataset.configKey;
+                let value;
+                if (field.dataset.valueKind === 'stripe-settings') {
+                    value = (gateway.stripe_test_enabled ? 'Teste' : 'Produção')
+                        + ' · ' + (gateway.stripe_pix_enabled !== false ? 'Pix ativo' : 'Pix desativado');
+                } else {
+                    value = key === 'stripe_test_secret_key'
+                        ? (gateway.stripe_test_secret_key || gateway.api_key || '')
+                        : gateway[key];
+                }
+                if (field.dataset.valueKind === 'status') value = value ? 'Ativo' : 'Desativado';
+                field.value = value === undefined || value === null || value === '' ? '—' : String(value);
+            });
+            button.classList.add('is-visible');
+            button.innerHTML = '<i class="fas fa-eye-slash"></i><span>Ocultar</span>';
+        } catch (error) {
+            showSiteNotice(error.message, { type: 'error' });
+        } finally {
+            button.disabled = false;
+        }
+    }
+    async function decideRequest(id, decision, button) {
+        const action = decision === 'approved' ? 'aprovar e publicar esta alteração' : 'rejeitar e descartar esta alteração';
+        if (!confirm('Confirmar ' + action + '?')) return;
+        button.disabled = true;
+        try {
+            const response = await fetch('/admin/gateway/requests/' + id + '/decision', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({decision})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível concluir.');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('requestModal' + id));
+            if (modal) modal.hide();
+            const row = document.getElementById('request-row-' + id);
+            if (row) row.remove();
+        } catch (error) {
+            showSiteNotice(error.message, { type: 'error' });
+            button.disabled = false;
+        }
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

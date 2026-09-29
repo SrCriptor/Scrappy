@@ -47,6 +47,15 @@
         .profile-bubble .name { font-size:.82rem; font-weight:600; line-height:1; }
         .profile-bubble .role-pill { font-size:.67rem; padding:1px 7px; border-radius:20px; color:#fff; margin-top:3px; display:inline-block; }
         .inactive-row { opacity:.45; }
+        .permission-btn { color:#a78bfa; border-color:#6d28d9; }
+        .permission-btn:hover { background:#2e1065; color:#c4b5fd; border-color:#8b5cf6; }
+        .permission-row { background:#161b22; border:1px solid #30363d; border-radius:9px; padding:.7rem .8rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+        .permission-row + .permission-row { margin-top:.55rem; }
+        .permission-row-title { font-size:.82rem; color:#e6edf3; font-weight:600; margin-bottom:.2rem; }
+        .permission-row-desc { font-size:.72rem; color:#8b949e; line-height:1.35; }
+        .permission-toggle { min-width:106px; font-size:.75rem; border-radius:8px; padding:.3rem .7rem; cursor:pointer; border:1px solid; }
+        .permission-toggle.is-on { background:#0f2d1b; color:#4ade80; border-color:#166534; }
+        .permission-toggle.is-off { background:#1a0a0a; color:#f87171; border-color:#7f1d1d; }
     </style>
 </head>
 <body>
@@ -165,6 +174,15 @@
                                     onclick="openEditModal({{ a.id }}, '{{ a.display_name }}', '{{ a.username }}', '{{ a.role }}', '{{ a.avatar }}', {{ 'true' if a.active else 'false' }})">
                                 <i class="fas fa-pen"></i>
                             </button>
+                             {% if admin.role == 'owner' %}
+                             <button class="btn btn-sm btn-outline-secondary permission-btn"
+                                     title="Painel de Permissões — exclusivo do Owner"
+                                     data-permission-id="{{ a.id }}"
+                                     data-permission-name="{{ a.display_name | e }}"
+                                     data-permissions='{{ a.permissions | tojson }}'>
+                                 <i class="fas fa-cog"></i>
+                             </button>
+                             {% endif %}
                             {% if a.role != 'owner' %}
                             <button class="btn btn-sm btn-outline-danger"
                                     title="Excluir"
@@ -215,6 +233,38 @@
         </div>
     </div>
 
+</div>
+
+<!-- Per-user permissions modal -->
+<div class="modal fade" id="permissionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background:#0d1117;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1">
+                <div>
+                    <h6 class="modal-title"><i class="fas fa-user-shield text-primary me-2"></i>Painel de Permissões</h6>
+                    <small id="permissionAdminName" class="text-muted"></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <div class="permission-row">
+                    <div>
+                        <div class="permission-row-title"><i class="fas fa-code me-1" style="color:#58a6ff;"></i>Acesso ao Modo Developer</div>
+                        <div class="permission-row-desc">Permite que este usuário ative o bônus de links infinitos (mín. 2 • máx. ∞) na página inicial.</div>
+                    </div>
+                    <button type="button" class="permission-toggle" id="permissionDevBtn"></button>
+                </div>
+                <div class="permission-row">
+                    <div>
+                        <div class="permission-row-title"><i class="fas fa-credit-card me-1" style="color:#fbbf24;"></i>Gerenciar Gateways de Pagamento</div>
+                        <div class="permission-row-desc">Permite que este usuário visualize, configure e altere os gateways de pagamento do site.</div>
+                    </div>
+                    <button type="button" class="permission-toggle" id="permissionGatewayBtn"></button>
+                </div>
+                <div id="permissionError" class="text-danger mt-2" style="font-size:.72rem;display:none;"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Create admin modal -->
@@ -448,6 +498,82 @@
         new bootstrap.Modal(document.getElementById('editModal')).show();
     }
 
+    let permissionAdminId = null;
+    let permissionState = {};
+    let permissionSourceButton = null;
+    function renderPermissionButton(button, enabled) {
+        button.classList.toggle('is-on', enabled);
+        button.classList.toggle('is-off', !enabled);
+        button.innerHTML = enabled
+            ? '<i class="fas fa-toggle-on me-1"></i>Ativado'
+            : '<i class="fas fa-toggle-off me-1"></i>Desativado';
+    }
+    function openPermissionModal(id, name, permissions) {
+        permissionAdminId = id;
+        permissionState = Object.assign({}, permissions || {});
+        permissionSourceButton = document.querySelector(
+            '.permission-btn[data-permission-id="' + id + '"]'
+        );
+        document.getElementById('permissionAdminName').textContent = name;
+        document.getElementById('permissionError').style.display = 'none';
+        renderPermissionButton(document.getElementById('permissionDevBtn'), !!permissionState.accessDevMode);
+        renderPermissionButton(document.getElementById('permissionGatewayBtn'), !!permissionState.manageGateways);
+        new bootstrap.Modal(document.getElementById('permissionModal')).show();
+    }
+    async function updatePermission(permission, button) {
+        if (!permissionAdminId || button.disabled) return;
+        const next = !permissionState[permission];
+        const previous = permissionState[permission];
+        button.disabled = true;
+        renderPermissionButton(button, next);
+        try {
+            const response = await fetch('/admin/api/update-permissions/' + permissionAdminId, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({permission, enabled: next})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível salvar.');
+            permissionState = data.permissions;
+            if (permissionSourceButton) {
+                permissionSourceButton.setAttribute(
+                    'data-permissions',
+                    JSON.stringify(permissionState)
+                );
+            }
+            renderPermissionButton(button, !!permissionState[permission]);
+        } catch (error) {
+            permissionState[permission] = previous;
+            renderPermissionButton(button, previous);
+            const errorEl = document.getElementById('permissionError');
+            errorEl.textContent = error.message;
+            errorEl.style.display = 'block';
+        } finally {
+            button.disabled = false;
+        }
+    }
+    document.getElementById('permissionDevBtn').addEventListener('click', function() {
+        updatePermission('accessDevMode', this);
+    });
+    document.getElementById('permissionGatewayBtn').addEventListener('click', function() {
+        updatePermission('manageGateways', this);
+    });
+    document.querySelectorAll('.permission-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+            let permissions = {};
+            try {
+                permissions = JSON.parse(button.getAttribute('data-permissions') || '{}');
+            } catch (error) {
+                console.error('Permissões inválidas no botão:', error);
+            }
+            openPermissionModal(
+                Number(button.getAttribute('data-permission-id')),
+                button.getAttribute('data-permission-name') || '',
+                permissions
+            );
+        });
+    });
+
     function toggleCrown(adminId, btn) {
         const fd = new FormData();
         fd.append('admin_id', adminId);
@@ -456,7 +582,7 @@
             .then(r => r.json())
             .then(d => {
                 btn.disabled = false;
-                if (!d.ok) { alert('Erro: ' + (d.error || '?')); return; }
+                if (!d.ok) { showSiteNotice('Erro: ' + (d.error || '?'), { type: 'error' }); return; }
                 if (d.crowned) {
                     btn.classList.add('crowned');
                     btn.title = 'Remover coroa (Funcionário do Mês)';
@@ -469,7 +595,7 @@
                 }
                 location.reload();
             })
-            .catch(() => { btn.disabled = false; alert('Erro de rede.'); });
+            .catch(() => { btn.disabled = false; showSiteNotice('Erro de rede.', { type: 'error' }); });
     }
 
     function confirmDelete(id, name) {

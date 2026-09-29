@@ -8,6 +8,7 @@
     <link href="/static/admin-responsive.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Caveat:wght@500;700&family=Inter:wght@400;600;700&family=Montserrat:wght@500;600;700&family=Orbitron:wght@500;700;800&family=Press+Start+2P&family=Rajdhani:wght@500;600;700&family=Roboto+Mono:wght@500;700&family=Rubik+Mono+One&family=Space+Grotesk:wght@400;600;700&family=UnifrakturCook:wght@700&display=swap');
         body { background: #0d1117; }
         .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
@@ -53,6 +54,11 @@
             0%,100% { box-shadow: 0 0 6px #00f0ff, 0 0 12px rgba(0,240,255,.3); }
             50%      { box-shadow: 0 0 16px #00f0ff, 0 0 28px rgba(0,240,255,.65); }
         }
+        /* Nova animação de respiração profunda em aura de neon vermelho carmesim para o Rubi */
+        @keyframes rubi-glow {
+            0%,100% { box-shadow: 0 0 5px rgba(255,0,51,0.4); border-color: rgba(255,0,51,0.4); }
+            50%      { box-shadow: 0 0 20px rgba(255,0,51,0.8); border-color: rgba(255,0,51,1); }
+        }
         @keyframes metalShimmer {
             0%   { background-position: -200% center; }
             100% { background-position: 200% center; }
@@ -66,26 +72,105 @@
             50%      { opacity: .6; }
         }
 
-        /* ── VIP tier badges ── */
+        /* ── VIP tier badges (Atualizados para os 7 Tiers Progressivos 0 a 6) ── */
         .vip-badge { font-size: .68rem; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; letter-spacing: .3px; display: inline-block; }
-        /* VIP 0 — Supremo: animated lava fire */
+        
+        /* VIP 0 — Supremo (SUPREME): animated lava fire */
         .vip-0 { background: linear-gradient(90deg,#7f0000,#ff4500,#ffa500,#ffe000,#ff4500,#7f0000); background-size: 300% auto; color: #fff8e1; box-shadow: 0 0 12px #ff4500; border: 1px solid rgba(255,170,0,0.5); animation: lavaFlow 2s linear infinite; }
-        /* VIP 1 — Diamante: cyan-blue neon breathing pulse */
+        
+        /* VIP 1 — Diamante (DIAMANTE): cyan-blue neon breathing pulse */
         .vip-1 { background: linear-gradient(135deg,#0ea5e9,#00f0ff,#6366f1); color: #fff; border: 1px solid #00f0ff; animation: cyanBreathe 2.2s ease-in-out infinite; }
-        /* VIP 2 — Ouro: liquid gold metallic shimmer (OBLITERATED PURPLE) */
-        .vip-2 { background: linear-gradient(90deg,#7c5a00,#ffd700,#ffb300,#ffe57f,#ffd700,#7c5a00); background-size: 300% auto; color: #3b2000; border: 1px solid #ffd700; box-shadow: 0 0 8px rgba(255,215,0,.5); animation: metalShimmer 2.5s linear infinite; }
-        /* VIP 3 — Prata: polished mirror-silver with metallic sheen */
-        .vip-3 { background: linear-gradient(135deg,#94a3b8,#e2e8f0,#64748b); color: #0d1117; border: 1px solid #94a3b8; box-shadow: 0 0 5px rgba(148,163,184,.4); }
-        /* VIP 4 — Bronze: hot cyber-bronze / polished copper (OBLITERATED MUDDY GREY) */
-        .vip-4 { background: linear-gradient(135deg,#e28743,#ff7f50,#c96a2a); color: #fff; border: 1px solid #ff7f50; box-shadow: 0 0 6px rgba(255,127,80,.4); }
-        /* VIP 5 — Estelar: soft pastel star-blue, flat with micro-star border */
-        .vip-5 { background: #64748b; color: #e2e8f0; border: 1px dashed rgba(123,164,199,.5); box-shadow: 0 0 3px rgba(100,116,139,.3); }
+        
+        /* VIP 2 — Rubi (RUBI): transparent background with carmesim text and active glowing aura */
+        .vip-2 { background: transparent; color: #ff0033; border: 1px solid #ff0033; animation: rubi-glow 2s infinite ease-in-out; }
+        
+        /* VIP 3 — Ouro (OURO): liquid gold metallic shimmer */
+        .vip-3 { background: linear-gradient(90deg,#7c5a00,#ffd700,#ffb300,#ffe57f,#ffd700,#7c5a00); background-size: 300% auto; color: #3b2000; border: 1px solid #ffd700; box-shadow: 0 0 8px rgba(255,215,0,.5); animation: metalShimmer 2.5s linear infinite; }
+        
+        /* VIP 4 — Prata (PRATA): polished mirror-silver with neon swipe laser scan animation */
+        .vip-4 { background: linear-gradient(90deg,#94a3b8,#e2e8f0,#ffffff,#e2e8f0,#94a3b8); background-size: 200% auto; color: #0d1117; border: 1px solid #94a3b8; box-shadow: 0 0 5px rgba(148,163,184,.4); animation: neonSwipeLaser 3s linear infinite; }
+        
+        /* VIP 5 — Bronze (BRONZE): hot cyber-bronze / polished copper */
+        .vip-5 { background: linear-gradient(135deg,#e28743,#ff7f50,#c96a2a); color: #fff; border: 1px solid #ff7f50; box-shadow: 0 0 6px rgba(255,127,80,.4); }
+        
+        /* VIP 6 — Estelar (ESTELAR): soft pastel star-blue, flat with micro-star border */
+        .vip-6 { background: #21262d; color: #7ba4c7; border: 1px dashed rgba(123,164,199,.4); }
 
         /* ── Nickname cell ── */
-        .nick-cell { font-size: .9rem; font-weight: 600; color: #e6edf3; }
+        .nick-cell { font-size: .9rem; font-weight: 600; color: #e6edf3; min-width:0; }
+        .nick-content { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; width:100%; }
+        .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 auto; }
+        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+        .supporter-presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
+
+        /* ── User tier name colors — clean, no webkit clip / mask / fade ── */
+        .user-tier-0 { color: #ff6a00 !important; font-weight: 700 !important; }   /* Supreme: Orange */
+        .user-tier-1 { color: #00f0ff !important; font-weight: 700 !important; }   /* Diamante: Cyan */
+        .user-tier-2 { color: #ff0033 !important; font-weight: 700 !important; }   /* Rubi: Red */
+        .user-tier-3 { color: #ffd700 !important; font-weight: 700 !important; }   /* Ouro: Gold */
+        .user-tier-4 { color: #ffffff !important; font-weight: 700 !important; }   /* Prata: White */
+        .user-tier-5 { color: #ffffff !important; font-weight: 700 !important; }   /* Bronze: White */
+        .user-tier-6 { color: #ffffff !important; font-weight: 700 !important; }   /* Estelar: White */
+        /* Guarantee no mask or background-clip leaks through */
+        span[class^="user-tier-"], span[class*=" user-tier-"] {
+            -webkit-background-clip: unset !important;
+            background-clip: unset !important;
+            -webkit-text-fill-color: unset !important;
+            -webkit-mask-image: none !important;
+            mask-image: none !important;
+            overflow: visible !important;
+            display: inline !important;
+        }
+        .donor-font-default { font-family: 'Segoe UI', sans-serif !important; }
+        .donor-font-inter { font-family: 'Inter', sans-serif !important; }
+        .donor-font-orbitron { font-family: 'Orbitron', sans-serif !important; }
+        .donor-font-rajdhani { font-family: 'Rajdhani', sans-serif !important; }
+        .donor-font-space-grotesk { font-family: 'Space Grotesk', sans-serif !important; }
+        .donor-font-press-start { font-family: 'Press Start 2P', monospace !important; font-size:.68rem; }
+        .donor-font-bangers { font-family: 'Bangers', cursive !important; letter-spacing:.04em; }
+        .donor-font-roboto-mono { font-family: 'Roboto Mono', monospace !important; }
+        .donor-font-montserrat { font-family: 'Montserrat', sans-serif !important; }
+        .donor-font-gothic { font-family: 'UnifrakturCook', serif !important; }
+        .donor-font-script { font-family: 'Caveat', cursive !important; font-size:1.05em; }
+        .donor-font-pixel { font-family: 'Rubik Mono One', sans-serif !important; font-size:.78rem; }
+        .donor-effect-gradient {
+            background:linear-gradient(90deg,var(--donor-color),#00f0ff,#a855f7);
+            -webkit-background-clip:text !important; background-clip:text !important;
+            -webkit-text-fill-color:transparent !important;
+        }
+        .donor-effect-neon { text-shadow:0 0 5px var(--donor-color),0 0 13px var(--donor-color),0 0 24px var(--donor-color); }
+        .donor-effect-pop { text-shadow:2px 2px 0 #ff2d95,-1px -1px 0 #00f0ff; letter-spacing:.03em; }
+        .donor-effect-gummy { text-shadow:0 2px 0 #a855f7,0 4px 8px rgba(168,85,247,.55); }
+        .donor-effect-prism {
+            background:linear-gradient(90deg,#00ff88,#00f0ff,#a855f7,#ff2d95,#ffd700);
+            -webkit-background-clip:text !important; background-clip:text !important;
+            -webkit-text-fill-color:transparent !important;
+            text-shadow:0 0 8px rgba(0,240,255,.45);
+        }
 
         /* ── Amount cell ── */
-        .amount-cell { font-size: .88rem; color: #22c55e; font-weight: 600; }
+        .amount-cell { font-size: .88rem; color: #22c55e; font-weight: 600; white-space: nowrap; }
+        .amount-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #00ff88; flex-shrink: 0;
+            position: relative;
+        }
+        .amount-icon:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 5px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1c2128;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            font-size: .65rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 9999;
+        }
 
         /* ── Empty state ── */
         .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
@@ -137,55 +222,98 @@
                 <tbody>
                 {% for r in rows %}
                 {% set pos = loop.index %}
-                <tr id="rank-row-{{ r.id }}">
-                    <!-- Position medal -->
+<tr id="rank-row-{{ r.id }}">
+                    <!-- Position mineral icon (OBLITERATED SELLER MEDALS) -->
                     <td>
-                        <div class="rank-pos {% if pos == 1 %}gold{% elif pos == 2 %}silver{% elif pos == 3 %}bronze{% else %}normal{% endif %}">
-                            {% if pos == 1 %}🥇{% elif pos == 2 %}🥈{% elif pos == 3 %}🥉{% else %}{{ pos }}{% endif %}
+                        <div class="vip-icon-container">
+                            {% set vip = r.vip_level|default(6)|int %}
+                            {% if vip == 0 %}
+                                <span style="font-size: 1.15rem;"><i class="fas fa-fire" style="color: #ff4500; text-shadow: 0 0 10px #ff4500;"></i></span>
+                            {% elif vip == 1 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-gem" style="color: #00f0ff; text-shadow: 0 0 10px #00f0ff;"></i></span>
+                            {% elif vip == 2 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-gem" style="color: #ff0033; text-shadow: 0 0 10px #ff0033;"></i></span>
+                            {% elif vip == 3 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-crown" style="color: #ffd700; text-shadow: 0 0 8px #ffd700;"></i></span>
+                            {% elif vip == 4 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-award" style="color: #e2e8f0; text-shadow: 0 0 8px #e2e8f0;"></i></span>
+                            {% elif vip == 5 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-trophy" style="color: #ff7f50; text-shadow: 0 0 6px #ff7f50;"></i></span>
+                            {% else %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-star" style="color: #7ba4c7; opacity: 0.6;"></i></span>
+                            {% endif %}
                         </div>
                     </td>
 
                     <!-- Vertical avatar + VIP badge -->
                     <td>
                         <div class="profile-block">
+                            {% set vip = r.vip_level|default(6)|int %}
                             <img src="/static/donors/donor_{{ r.avatar_id }}.png"
                                  alt="Avatar {{ r.nickname }}"
                                  onerror="this.src='/static/donors/donor_m_1.png'" />
-                            <span class="vip-badge vip-{{ r.vip_level }}">
-                                {% if r.vip_level == 0 %}🔥 VIP SUPREMO
-                                {% elif r.vip_level == 1 %}<i class="fas fa-gem"></i> VIP 1
-                                {% elif r.vip_level == 2 %}<i class="fas fa-medal"></i> VIP 2
-                                {% elif r.vip_level == 3 %}<i class="fas fa-award"></i> VIP 3
-                                {% elif r.vip_level == 4 %}<i class="fas fa-trophy"></i> VIP 4
-                                {% else %}<i class="fas fa-star"></i> VIP 5{% endif %}
+                            <span class="vip-badge vip-{{ vip }}">
+                                {% if vip == 0 %}🔥 SUPREME
+                                {% elif vip == 1 %}<i class="fas fa-gem"></i> DIAMANTE
+                                {% elif vip == 2 %}<i class="fas fa-gem"></i> RUBI
+                                {% elif vip == 3 %}<i class="fas fa-crown"></i> OURO
+                                {% elif vip == 4 %}<i class="fas fa-award"></i> PRATA
+                                {% elif vip == 5 %}<i class="fas fa-trophy"></i> BRONZE
+                                {% else %}<i class="fas fa-star"></i> ESTELAR{% endif %}
                             </span>
                         </div>
                     </td>
 
-                    <!-- Nickname -->
+                    <!-- Nickname with Tier Styles Alignment -->
                     <td class="nick-cell">
-                        {{ r.nickname }}<span class="text-muted ms-1" style="font-size:.8em;opacity:.6;">#{{ r.discriminator or '????' }}</span>
+                        {% set vip = r.vip_level|default(6)|int %}
+                        <div class="nick-content">
+                            <div class="nick-identity">
+                                <span class="nick-text user-tier-{{ vip }} donor-font-{{ r.font_id|default('default') }} donor-effect-{{ r.text_effect|default('solid') }}" style="--donor-color:{{ r.name_color|default('#f3f4f6') }};color:{{ r.name_color|default('#f3f4f6') }} !important;" title="{{ r.nickname }}">{{ r.nickname }}<span class="text-muted ms-1" style="font-size:.8em;opacity:.6;">#{{ r.discriminator or '????' }}</span></span>
+                                <span class="supporter-presence-dot" title="{{ 'Disponível agora' if r.online else 'Offline' }}" aria-label="{{ 'Online' if r.online else 'Offline' }}" style="background:{{ '#22c55e' if r.online else '#fff' }};box-shadow:0 0 7px {{ '#22c55e' if r.online else '#fff' }};"></span>
+                            </div>
+                        </div>
                     </td>
 
-                    <!-- Total donated -->
+                    <!-- Total donated: SVG icon + smart cents, no R$ text -->
                     <td class="amount-cell">
-                        R$ {{ "%.2f"|format(r.total_donated|float) }}
+                        <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+                            {% set _currency = r.currency|default('BRL')|upper %}
+                            {% set _currency_label = 'Dólar Americano' if _currency == 'USD' else 'Real Brasileiro' %}
+                            <span class="amount-icon" data-tooltip="{{ _currency }} — {{ _currency_label }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </span>
+                            {% set _val = r.total_donated | float %}
+                            {% set _int = _val | int %}
+                            {% set _cents = ((_val - _int) * 100) | round | int %}
+                            {% if _cents == 0 %}
+                                <span>{{ _int }}</span>
+                            {% else %}
+                                <span>{{ _int }}<small style="font-size:.72em;opacity:.85;">.{{ '%02d' % _cents }}</small></span>
+                            {% endif %}
+                        </span>
                     </td>
 
-                    <!-- Tier label -->
+                    <!-- Tier label (Corrected Mineral Map 0-6) -->
                     <td>
-                        {% if r.vip_level == 0 %}
-                            <span class="vip-badge vip-0"><i class="fas fa-fire"></i> VIP SUPREMO</span>
-                        {% elif r.vip_level == 1 %}
-                            <span class="vip-badge vip-1"><i class="fas fa-gem"></i> Diamante</span>
-                        {% elif r.vip_level == 2 %}
-                            <span class="vip-badge vip-2"><i class="fas fa-medal"></i> Ouro</span>
-                        {% elif r.vip_level == 3 %}
-                            <span class="vip-badge vip-3"><i class="fas fa-award"></i> Prata</span>
-                        {% elif r.vip_level == 4 %}
-                            <span class="vip-badge vip-4"><i class="fas fa-trophy"></i> Bronze</span>
+                        {% set vip = r.vip_level|default(6)|int %}
+                        {% if vip == 0 %}
+                            <span class="vip-badge vip-0"><i class="fas fa-fire"></i> VIP SUPREME 🔥</span>
+                        {% elif vip == 1 %}
+                            <span class="vip-badge vip-1"><i class="fas fa-gem"></i> VIP DIAMANTE 💎</span>
+                        {% elif vip == 2 %}
+                            <span class="vip-badge vip-2"><i class="fas fa-gem"></i> VIP RUBI 🩸</span>
+                        {% elif vip == 3 %}
+                            <span class="vip-badge vip-3"><i class="fas fa-crown"></i> VIP OURO 👑</span>
+                        {% elif vip == 4 %}
+                            <span class="vip-badge vip-4"><i class="fas fa-award"></i> VIP PRATA 🥈</span>
+                        {% elif vip == 5 %}
+                            <span class="vip-badge vip-5"><i class="fas fa-trophy"></i> VIP BRONZE 🥉</span>
                         {% else %}
-                            <span class="vip-badge vip-5"><i class="fas fa-star"></i> Estelar</span>
+                            <span class="vip-badge vip-6"><i class="fas fa-star"></i> VIP ESTELAR 🌟</span>
                         {% endif %}
                     </td>
 
@@ -231,7 +359,15 @@
             <li class="list-group-item d-flex align-items-center justify-content-between"
                 style="background:#0d1117;border-color:#30363d;padding:.65rem .5rem;">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="vip-badge vip-{{ tier.tier_id }}">{% if tier.tier_id == 0 %}<i class="fas fa-fire"></i> VIP SUPREMO{% elif tier.tier_id == 1 %}<i class="fas fa-gem"></i> VIP 1{% elif tier.tier_id == 2 %}<i class="fas fa-medal"></i> VIP 2{% elif tier.tier_id == 3 %}<i class="fas fa-award"></i> VIP 3{% elif tier.tier_id == 4 %}<i class="fas fa-trophy"></i> VIP 4{% else %}<i class="fas fa-star"></i> VIP 5{% endif %}</span>
+                    <span class="vip-badge vip-{{ tier.tier_id }}">
+                        {% if tier.tier_id == 0 %}<i class="fas fa-fire"></i> VIP SUPREME
+                        {% elif tier.tier_id == 1 %}<i class="fas fa-gem"></i> VIP DIAMANTE
+                        {% elif tier.tier_id == 2 %}<i class="fas fa-gem"></i> VIP RUBI
+                        {% elif tier.tier_id == 3 %}<i class="fas fa-crown"></i> VIP OURO
+                        {% elif tier.tier_id == 4 %}<i class="fas fa-award"></i> VIP PRATA
+                        {% elif tier.tier_id == 5 %}<i class="fas fa-trophy"></i> VIP BRONZE
+                        {% else %}<i class="fas fa-star"></i> VIP ESTELAR{% endif %}
+                    </span>
                     <small class="text-muted" style="font-size:.75rem;">
                         Mín. R$ {{ '%.0f'|format(tier.min_value) }} &nbsp;·&nbsp; +{{ tier.bonus_urls }} URLs bônus
                     </small>
@@ -306,7 +442,7 @@
         var minValue  = parseFloat(document.getElementById('tierConfigMinValue').value);
         var bonusUrls = parseInt(document.getElementById('tierConfigBonusUrls').value, 10);
         if (isNaN(minValue) || isNaN(bonusUrls) || minValue < 0 || bonusUrls < 0) {
-            alert('Por favor, insira valores numéricos positivos.');
+            showSiteNotice('Por favor, insira valores numéricos positivos.', { type: 'warning' });
             return;
         }
         var btn = this;
@@ -323,10 +459,10 @@
                 /* Refresh the page so the live list-group reflects new values */
                 location.reload();
             } else {
-                alert('Erro: ' + (d.error || 'tente novamente.'));
+                showSiteNotice('Erro: ' + (d.error || 'tente novamente.'), { type: 'error' });
             }
         } catch(err) {
-            alert('Erro de rede. Tente novamente.');
+            showSiteNotice('Erro de rede. Tente novamente.', { type: 'error' });
         }
         btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Salvar Regras';
     });
@@ -694,10 +830,10 @@
                 }
                 _pendingDeleteId = null;
             } else {
-                alert('Erro: ' + (data.error || 'tente novamente.'));
+                showSiteNotice('Erro: ' + (data.error || 'tente novamente.'), { type: 'error' });
             }
         } catch (err) {
-            alert('Erro de rede. Tente novamente.');
+            showSiteNotice('Erro de rede. Tente novamente.', { type: 'error' });
         }
 
         btn.disabled = false;
@@ -757,5 +893,7 @@
     }, 3000);
 })();
 </script>
+
+{% include 'admin/_chat_widget.html' %}
 </body>
 </html>

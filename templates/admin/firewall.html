@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Controle de Firewall — Admin</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="/static/admin-responsive.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        body { background: #0d1117; }
+        .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
+        .log-scroll { max-height: 480px; overflow-y: auto; }
+        .log-scroll::-webkit-scrollbar { width: 5px; }
+        .log-scroll::-webkit-scrollbar-track { background: #21262d; border-radius: 4px; }
+        .log-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        .owner-only-badge {
+            display: inline-flex; align-items: center; gap: .4rem;
+            background: #1a0a0a; border: 1px solid #7f1d1d;
+            border-radius: 8px; padding: .3rem .75rem;
+            font-size: .72rem; color: #f87171; font-weight: 700;
+        }
+        .url-path { font-family: 'Courier New', monospace; font-size: .72rem; color: #f59e0b; word-break: break-all; background: #0d1117; padding: 2px 6px; border-radius: 4px; }
+        .count-badge { background:#451a03; color:#fbbf24; border:1px solid #92400e; font-size:.7rem; padding:1px 7px; border-radius:20px; font-weight:700; }
+        .reason-badge { font-size:.68rem; padding:2px 8px; border-radius:20px; font-weight:600; background:#1a2e1a; color:#86efac; border:1px solid #14532d; }
+        .mode-test-on  { background:#0a1e18; color:#34d399; border:1px solid #065f46; font-size:.68rem; padding:2px 8px; border-radius:20px; font-weight:700; }
+        .mode-test-off { background:#1e1e1e; color:#6b7280; border:1px solid #374151; font-size:.68rem; padding:2px 8px; border-radius:20px; }
+
+        /* Custom reason field toggle */
+        #customReasonWrap { display: none; }
+        #customReasonWrap.show { display: block; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-4" style="max-width:1100px;">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+        <a href="/admin/" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Voltar</a>
+        <div>
+            <h4 class="mb-0"><i class="fas fa-fire-flame-curved text-warning me-2"></i>Controle de Firewall e Listas de Acesso</h4>
+            <small class="text-muted">Gerencie IPs banidos e a lista branca de desenvolvedores/pentesters</small>
+        </div>
+        <div class="ms-auto">
+            <span class="owner-only-badge"><i class="fas fa-shield-halved"></i> OWNER ONLY</span>
+        </div>
+    </div>
+
+    {% if flash_msg %}
+    <div class="alert alert-{{ flash_msg.type }} alert-dismissible fade show mb-3">
+        {{ flash_msg.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- ═══ SINCRONIZAÇÃO AUTOMÁTICA ═══ -->
+    <div class="section-card">
+        <div class="section-title">
+            <i class="fas fa-arrows-rotate text-info me-2"></i>Sincronização Automática de Dossiês
+        </div>
+        <p class="text-muted small mb-3">
+            Varre todos os registros de ataques suspeitos existentes, detecta o motivo automaticamente
+            (Path Traversal, .env leak, scanners, etc.) e importa os IPs maliciosos para a Lista Negra com um único clique.
+        </p>
+        <form method="post" action="/admin/firewall/sync"
+              onsubmit="return confirm('Sincronizar dossiês de ataques anteriores com a Lista Negra?')">
+            <button type="submit" class="btn btn-info">
+                <i class="fas fa-arrows-rotate me-2"></i>Sincronizar Dossiês de Ataques Anteriores
+            </button>
+        </form>
+
+        {% if no_history_ips %}
+        <div class="alert alert-warning mt-3 mb-0">
+            <strong>IPs sem histórico detalhado detectados:</strong>
+            <div class="mt-2" style="font-family:monospace;font-size:.8rem;">
+                {% for ip_nh in no_history_ips %}
+                <span class="badge bg-secondary me-1">{{ ip_nh }}</span>
+                {% endfor %}
+            </div>
+            <small class="text-muted mt-1 d-block">Esses IPs foram importados com o motivo genérico "Atividade suspeita detectada automaticamente". Use o formulário abaixo para banir com motivo específico se necessário.</small>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ BANIR IP MANUAL ═══ -->
+    <div class="section-card">
+        <div class="section-title">
+            <i class="fas fa-ban text-danger me-2"></i>Banir Novo IP — Uso Diário
+        </div>
+        <form method="post" action="/admin/firewall/ban">
+            <!-- Linha 1: IP + Motivo -->
+            <div class="row g-3 align-items-end mb-2">
+                <div class="col-12 col-sm-5 col-md-4">
+                    <label class="form-label small text-muted mb-1">
+                        <i class="fas fa-network-wired me-1 text-info"></i>Endereço IP
+                    </label>
+                    <input type="text" name="ip" class="form-control form-control-sm"
+                           placeholder="Ex: 192.168.1.1"
+                           pattern="^[\d\.:a-fA-F]+" required
+                           style="font-family:monospace;" />
+                </div>
+                <div class="col-12 col-sm-7 col-md-6">
+                    <label class="form-label small text-muted mb-1">
+                        <i class="fas fa-tag me-1 text-warning"></i>Motivo do Banimento
+                    </label>
+                    <select name="reason" class="form-select form-select-sm"
+                            id="reasonSelect" onchange="onReasonChange(this)" required>
+                        <option value="" disabled selected>— Selecione o motivo —</option>
+                        <option value="Tentativa de Invasão / Exploração de Falhas">Tentativa de Invasão / Exploração de Falhas</option>
+                        <option value="Scanner Automatizado de Vulnerabilidades (Bot/Robô)">Scanner Automatizado de Vulnerabilidades (Bot/Robô)</option>
+                        <option value="Ataque de Força Bruta (Brute Force)">Ataque de Força Bruta (Brute Force)</option>
+                        <option value="Ambiente de Testes / Simulação de Ataque">Ambiente de Testes / Simulação de Ataque</option>
+                        <option value="__custom__">Outro (Digitar motivo manualmente…)</option>
+                    </select>
+                </div>
+                <div class="col-12 col-sm-12 col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-danger w-100">
+                        <i class="fas fa-ban me-1"></i>Banir IP
+                    </button>
+                </div>
+            </div>
+            <!-- Linha 2: motivo personalizado (aparece dinamicamente) -->
+            <div class="row g-3" id="customReasonWrap">
+                <div class="col-12 col-md-10">
+                    <label class="form-label small text-muted mb-1">
+                        <i class="fas fa-pencil me-1 text-secondary"></i>Motivo Personalizado
+                    </label>
+                    <input type="text" name="custom_reason" class="form-control form-control-sm"
+                           id="customReasonInput" placeholder="Descreva o motivo do banimento…" />
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ═══ LISTA NEGRA (IPs Banidos) ═══ -->
+    <div class="mb-1" style="color:#4b5563;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">
+        🚫 Lista Negra — IPs Banidos Globalmente
+    </div>
+    <div class="section-card">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+            <div class="section-title mb-0">
+                <i class="fas fa-ban text-danger me-2"></i>
+                IPs Banidos Globalmente
+                <span class="count-badge ms-2">{{ waf_bans | length }} registros</span>
+            </div>
+        </div>
+
+        {% if waf_bans %}
+        <div class="log-scroll">
+            <table class="table table-dark table-sm mb-0" style="font-size:.78rem;">
+                <thead>
+                    <tr style="color:#6b7280;border-bottom:1px solid #30363d;">
+                        <th>IP</th>
+                        <th>Motivo</th>
+                        <th>URL Capturada</th>
+                        <th>Método</th>
+                        <th>Data/Hora</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ban in waf_bans %}
+                    <tr style="border-bottom:1px solid #21262d;">
+                        <td>
+                            <span style="font-family:'Courier New',monospace;color:#f87171;font-weight:700;">
+                                {{ ban.ip }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="reason-badge">{{ ban.reason | truncate(60) }}</span>
+                        </td>
+                        <td>
+                            <span class="url-path">{{ ban.url_path | truncate(50) }}</span>
+                        </td>
+                        <td><span style="color:#94a3b8;">{{ ban.method }}</span></td>
+                        <td><span style="color:#6b7280;">{{ fmt_ts(ban.ts) }}</span></td>
+                        <td>
+                            <form method="post" action="/admin/firewall/unban" style="display:inline;">
+                                <input type="hidden" name="ip" value="{{ ban.ip }}">
+                                <button type="submit" class="btn btn-outline-success btn-sm"
+                                        style="font-size:.68rem;padding:2px 8px;"
+                                        onclick="return confirm('Remover ban para {{ ban.ip }}?')">
+                                    <i class="fas fa-unlock me-1"></i>Desbanir
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-shield-check text-success" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>
+            <p class="text-muted mb-0 small">Nenhum IP banido até o momento.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ LISTA BRANCA (Devs / Pentesters) ═══ -->
+    <div class="mb-1" style="color:#4b5563;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">
+        ✅ Lista Branca — Desenvolvedores &amp; Pentesters
+    </div>
+    <div class="section-card">
+        <div class="section-title">
+            <i class="fas fa-list-check text-success me-2"></i>Cadastrar na Lista Branca
+        </div>
+        <form method="post" action="/admin/firewall/whitelist/add" class="row g-2 align-items-start mb-4">
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted">Nome do Dev / Pentester <span class="text-danger">*</span></label>
+                <input type="text" name="nome_dev" class="form-control form-control-sm" placeholder="Ex: João (Dev Frontend)" required />
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label small text-muted">IP (opcional)</label>
+                <input type="text" name="ip_wl" class="form-control form-control-sm" placeholder="Ex: 200.100.50.1" />
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small text-muted">ID de Dispositivo / Browser Fingerprint (opcional)</label>
+                <input type="text" name="dispositivo_id" class="form-control form-control-sm" placeholder="Canvas fingerprint hash…" />
+            </div>
+            <div class="col-12 col-md-2 d-flex flex-column justify-content-between">
+                <label class="form-label small text-muted">Modo Teste</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="modo_teste_ativo" id="modoTesteCheck" value="1" />
+                    <label class="form-check-label small" for="modoTesteCheck" style="color:#34d399;">Ativar Modo Teste</label>
+                </div>
+            </div>
+            <div class="col-12 col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-success btn-sm w-100">
+                    <i class="fas fa-plus me-1"></i>Adicionar
+                </button>
+            </div>
+        </form>
+
+        {% if whitelist %}
+        <div class="log-scroll">
+            <table class="table table-dark table-sm mb-0" style="font-size:.78rem;">
+                <thead>
+                    <tr style="color:#6b7280;border-bottom:1px solid #30363d;">
+                        <th>Nome</th>
+                        <th>IP</th>
+                        <th>Fingerprint</th>
+                        <th>Modo Teste</th>
+                        <th>Cadastrado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wl in whitelist %}
+                    <tr style="border-bottom:1px solid #21262d;">
+                        <td>
+                            <span style="color:#e6edf3;font-weight:600;">{{ wl.nome_dev }}</span>
+                        </td>
+                        <td>
+                            <span style="font-family:'Courier New',monospace;color:#60a5fa;font-size:.72rem;">
+                                {{ wl.ip or '—' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if wl.dispositivo_id %}
+                            <span style="font-family:'Courier New',monospace;color:#a78bfa;font-size:.68rem;">
+                                {{ wl.dispositivo_id[:20] }}{% if wl.dispositivo_id | length > 20 %}…{% endif %}
+                            </span>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.72rem;">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if wl.modo_teste_ativo %}
+                            <span class="mode-test-on"><i class="fas fa-flask me-1"></i>ATIVO</span>
+                            {% else %}
+                            <span class="mode-test-off">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td><span style="color:#6b7280;">{{ fmt_ts(wl.criado_em) }}</span></td>
+                        <td>
+                            <form method="post" action="/admin/firewall/whitelist/remove" style="display:inline;">
+                                <input type="hidden" name="entry_id" value="{{ wl.id }}">
+                                <input type="hidden" name="nome_dev" value="{{ wl.nome_dev | e }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm"
+                                        style="font-size:.68rem;padding:2px 8px;"
+                                        onclick="return confirm('Revogar acesso de {{ wl.nome_dev | e }}? O dispositivo voltará a ser monitorado normalmente.')">
+                                    <i class="fas fa-user-slash me-1"></i>Revogar
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-user-check text-muted" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>
+            <p class="text-muted mb-0 small">Nenhum dev/pentester cadastrado na lista branca.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/confirm-modal.js"></script>
+<script>
+    function onReasonChange(sel) {
+        var wrap = document.getElementById('customReasonWrap');
+        var inp  = document.getElementById('customReasonInput');
+        if (sel.value === '__custom__') {
+            wrap.classList.add('show');
+            inp.required = true;
+        } else {
+            wrap.classList.remove('show');
+            inp.required = false;
+        }
+    }
+</script>
+{% include 'admin/_chat_widget.html' %}
+</body>
+</html>

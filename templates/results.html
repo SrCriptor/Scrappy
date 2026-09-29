@@ -35,6 +35,58 @@
        *  Não é necessário alterar nenhum código — apenas substitua os arquivos!
        * ═══════════════════════════════════════════════════════════
        */
+      /* ══════════════════════════════════════════════════════════
+         CUSTOM TOOLTIP SYSTEM — dark-theme, CSS-only, [data-tip]
+      ══════════════════════════════════════════════════════════ */
+      @keyframes tipFadeIn {
+        from { opacity:0; transform:translateX(-50%) translateY(6px); }
+        to   { opacity:1; transform:translateX(-50%) translateY(0);   }
+      }
+      [data-tip] { position: relative; }
+      [data-tip]::before {
+        content: attr(data-tip);
+        position: absolute;
+        bottom: calc(100% + 9px);
+        left: 50%;
+        transform: translateX(-50%) translateY(5px);
+        background: #0d1117;
+        color: #e2e8f0;
+        font-size: 0.7rem;
+        font-weight: 500;
+        white-space: nowrap;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,.08);
+        box-shadow: 0 4px 14px rgba(0,0,0,.7);
+        line-height: 1.4;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .18s ease, transform .18s ease;
+        z-index: 9999;
+      }
+      [data-tip]::after {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%) translateY(5px);
+        border: 5px solid transparent;
+        border-top-color: #0d1117;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .18s ease, transform .18s ease;
+        z-index: 9999;
+      }
+      [data-tip]:hover::before { opacity:1; transform:translateX(-50%) translateY(0); animation:tipFadeIn .18s ease forwards; }
+      [data-tip]:hover::after  { opacity:1; transform:translateX(-50%) translateY(0); }
+      /* Color variants */
+      [data-tip-color="primary"]::before   { border-color:rgba(99,179,237,.3);  box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 10px rgba(99,179,237,.15); }
+      [data-tip-color="success"]::before   { border-color:rgba(34,197,94,.3);   box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 10px rgba(34,197,94,.15);  }
+      [data-tip-color="info"]::before      { border-color:rgba(6,182,212,.3);   box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 10px rgba(6,182,212,.15);  }
+      [data-tip-color="secondary"]::before { border-color:rgba(148,163,184,.2); }
+      [data-tip-color="danger"]::before    { border-color:rgba(248,113,113,.3); box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 10px rgba(248,113,113,.15); }
+      /* ═════════════════════════════════════════════════════════ */
+
       .video-card-wrap { position: relative; }
       .video-error-overlay {
         display: none;
@@ -156,6 +208,10 @@
       .toast-container {
         z-index: 1100;
       }
+      @keyframes downloadProgressRingGlow {
+        from { filter: drop-shadow(0 0 2px rgba(0,255,136,.25)); }
+        to   { filter: drop-shadow(0 0 6px rgba(0,255,136,.65)); }
+      }
       /* Full-width content column — mirrors #mainColWrap.batch-wide from
          index.html, so this page renders at the exact same scale as the
          Múltiplas URLs results view. */
@@ -252,7 +308,7 @@
             <h6 class="card-title mb-1">
               <i class="fas fa-download me-2"></i>Download em Massa
             </h6>
-            <p class="text-muted mb-0">Baixe todos os arquivos encontrados</p>
+            <p class="text-muted mb-0" id="singleDlDesc">Baixe todos os arquivos encontrados</p>
           </div>
           <div
             class="btn-group flex-wrap"
@@ -264,9 +320,8 @@
               id="btnDownloadImages"
               class="btn btn-primary"
               onclick="downloadAllImages()"
-              data-bs-toggle="tooltip"
-              data-bs-placement="top"
-              title="Baixar todas as imagens"
+              data-tip="Baixar todas as imagens"
+              data-tip-color="primary"
             >
               <i class="fas fa-images"></i>
             </button>
@@ -275,9 +330,8 @@
               id="btnDownloadVideos"
               class="btn btn-success"
               onclick="downloadAllVideos()"
-              data-bs-toggle="tooltip"
-              data-bs-placement="top"
-              title="Baixar todos os vídeos"
+              data-tip="Baixar todos os vídeos"
+              data-tip-color="success"
             >
               <i class="fas fa-video"></i>
             </button>
@@ -286,9 +340,8 @@
               id="btnDownloadAll"
               class="btn btn-info"
               onclick="downloadAllMedia()"
-              data-bs-toggle="tooltip"
-              data-bs-placement="top"
-              title="Baixar tudo"
+              data-tip="Baixar tudo"
+              data-tip-color="info"
             >
               <i class="fas fa-download"></i>
             </button>
@@ -334,7 +387,8 @@
           <button
             id="toggleSelectionModeBtn"
             class="btn btn-sm btn-outline-secondary"
-            title="Ativar seleção de mídias"
+            data-tip="Ativar seleção de mídias"
+            data-tip-color="secondary"
             onclick="toggleSelectionMode()"
             style="font-size:0.78rem; padding:4px 10px; line-height:1.2;"
           >
@@ -343,7 +397,8 @@
           <button
             id="toggleErrorsBtn"
             class="btn btn-sm btn-outline-secondary"
-            title="Ocultar mídias não encontradas / bloqueadas"
+            data-tip="Ocultar mídias não encontradas / bloqueadas"
+            data-tip-color="secondary"
             onclick="toggleErrorCards()"
             style="font-size:0.78rem; padding:4px 10px; line-height:1.2;"
           >
@@ -380,7 +435,8 @@
                   >
                     <button
                       class="btn btn-sm btn-outline-primary"
-                      title="Ampliar imagem"
+                      data-tip="Ampliar imagem"
+                      data-tip-color="primary"
                       onclick="openImageModal('{{ image_url }}')"
                     >
                       <i class="fas fa-search-plus"></i>
@@ -388,7 +444,8 @@
                     <button
                       onclick="baixarImagem('{{ image_url }}', this)"
                       class="btn btn-sm btn-outline-success"
-                      title="Baixar imagem"
+                      data-tip="Baixar imagem"
+                      data-tip-color="success"
                     >
                       <i class="fas fa-download"></i>
                     </button>
@@ -406,19 +463,18 @@
                           return; // bloqueia o download
                         }
                         // ── Download normal ──
-                        const finalUrl =
-                          "/force-download?url=" + encodeURIComponent(imageUrl);
-                        const link = document.createElement("a");
-                        link.href = finalUrl;
-                        link.download = ""; // Vai tentar forçar o download
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
+                        if (window.MediaDownloadManager) {
+                          showDownloadProgressCard(1);
+                          window.MediaDownloadManager.downloadOne(imageUrl).then(function(state) {
+                            if (state === 'indisponivel') shakeAndBlock(card);
+                          });
+                        }
                       }
                     </script>
                     <button
                       class="btn btn-sm btn-outline-secondary"
-                      title="Copiar URL"
+                      data-tip="Copiar URL"
+                      data-tip-color="secondary"
                       onclick="copyToClipboard('{{ image_url }}')"
                     >
                       <i class="fas fa-copy"></i>
@@ -469,7 +525,8 @@
                         target="_blank"
                         rel="noopener"
                         class="btn btn-outline-primary"
-                        title="Abrir vídeo"
+                        data-tip="Abrir vídeo"
+                        data-tip-color="primary"
                       >
                         <i class="fas fa-external-link-alt"></i>
                       </a>
@@ -477,7 +534,8 @@
                         href="{{ video_url }}"
                         onclick="event.preventDefault(); baixarVideo('{{ video_url }}')"
                         class="btn btn-outline-success"
-                        title="Baixar vídeo"
+                        data-tip="Baixar vídeo"
+                        data-tip-color="success"
                       >
                         <i class="fas fa-download"></i>
                       </a>
@@ -500,20 +558,20 @@
                             return; // bloqueia o download
                           }
                           // ── Download normal ──
-                          const finalUrl =
-                            "/force-download?url=" +
-                            encodeURIComponent(videoUrl);
-                          const link = document.createElement("a");
-                          link.href = finalUrl;
-                          link.download = ""; // força download se o servidor der o header certo - Baixar video
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
+                          if (window.MediaDownloadManager) {
+                            showDownloadProgressCard(1);
+                            window.MediaDownloadManager.downloadOne(videoUrl).then(function(state) {
+                              if (state === 'indisponivel') shakeAndBlock(
+                                overlayEncontrado ? (overlayEncontrado.closest('.card') || overlayEncontrado.parentElement) : null
+                              );
+                            });
+                          }
                         }
                       </script>
                       <button
                         class="btn btn-outline-secondary"
-                        title="Copiar URL"
+                        data-tip="Copiar URL"
+                        data-tip-color="secondary"
                         onclick="copyToClipboard('{{ video_url }}')"
                       >
                         <i class="fas fa-copy"></i>
@@ -619,6 +677,8 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='download-resilience.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/site-notice.js') }}"></script>
     <script>
       var tooltipTriggerList = [].slice.call(
         document.querySelectorAll('[data-bs-toggle="tooltip"]')
@@ -680,33 +740,185 @@
     var isSelectionMode = false;
     var selectedMedia   = { images: new Set(), videos: new Set() };
 
-    // ── Sequential download engine ────────────────────────────────────────
-    // Downloads each URL one at a time via /force-download, 300 ms apart.
-    // Zero server RAM: the browser pipeline handles each file natively.
+    // ── Compact download progress card — same layout as batchProgressToast ──
+    function showDownloadProgressCard(total) {
+      var oldCard = document.getElementById('downloadProgressToast');
+      if (oldCard) oldCard.remove();
+
+      var card = document.createElement('div');
+      card.id = 'downloadProgressToast';
+      card.setAttribute('role', 'status');
+      card.setAttribute('aria-live', 'polite');
+      card.style.cssText = 'display:block;position:fixed;bottom:20px;right:20px;z-index:9999;' +
+        'background:#0d1117;border:1px solid #30363d;border-radius:8px;' +
+        'padding:12px 16px;min-width:260px;max-width:340px;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,.75);';
+      card.innerHTML =
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<svg id="downloadProgressRing" width="22" height="22" viewBox="0 0 24 24" ' +
+              'role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" ' +
+              'style="width:22px;height:22px;flex-shrink:0;transform:rotate(-90deg);' +
+                     'animation:downloadProgressRingGlow 1.5s ease-in-out infinite alternate;">' +
+            '<circle cx="12" cy="12" r="9" fill="none" stroke="#21262d" stroke-width="2.5"></circle>' +
+            '<circle id="downloadProgressRingValue" cx="12" cy="12" r="9" fill="none" ' +
+                    'stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" ' +
+                    'stroke-dasharray="56.55" stroke-dashoffset="56.55" ' +
+                    'style="transition:stroke-dashoffset .3s ease;"></circle>' +
+          '</svg>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div id="downloadProgressLabel" style="font-size:.82rem;font-weight:600;color:#e6edf3;' +
+                'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Processando Arquivos...</div>' +
+            '<div id="downloadProgressFile" style="font-size:.68rem;color:#a5b4fc;margin-top:2px;' +
+                'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Preparando o próximo arquivo…</div>' +
+            '<div id="downloadProgressCount" style="font-size:.72rem;color:#8b949e;margin-top:2px;">0/' + total + '</div>' +
+          '</div>' +
+          '<button id="downloadProgressPauseBtn" type="button" aria-label="Pausar download" ' +
+              'title="Pausar download" style="width:30px;height:30px;display:grid;place-items:center;' +
+              'flex-shrink:0;padding:0;border:1px solid #334155;border-radius:7px;background:#111827;' +
+              'color:#67e8f9;cursor:pointer;"><i class="fas fa-pause" aria-hidden="true"></i></button>' +
+        '</div>' +
+        '<div style="margin-top:10px;background:#1c2128;border-radius:4px;height:4px;overflow:hidden;">' +
+          '<div id="downloadProgressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" ' +
+              'style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);' +
+                     'border-radius:4px;transition:width .3s ease;"></div>' +
+        '</div>';
+      document.body.appendChild(card);
+      document.getElementById('downloadProgressPauseBtn').addEventListener('click', function() {
+        var manager = window.MediaDownloadManager;
+        if (!manager) return;
+        var nextPaused = manager.isPaused() ? manager.resume() : manager.pause();
+        setDownloadPauseButton(nextPaused);
+        var label = document.getElementById('downloadProgressLabel');
+        if (label) label.textContent = nextPaused ? 'Download pausado' : 'Retomando download…';
+      });
+      updateDownloadProgressCard({
+        phase: 'file-start',
+        completed: 0,
+        total: total,
+        index: 0,
+        fileName: 'Preparando o próximo arquivo…',
+        filePercent: null,
+        paused: false
+      });
+    }
+
+    function setDownloadPauseButton(isPaused) {
+      var button = document.getElementById('downloadProgressPauseBtn');
+      if (!button) return;
+      button.innerHTML = isPaused
+        ? '<i class="fas fa-play" aria-hidden="true"></i>'
+        : '<i class="fas fa-pause" aria-hidden="true"></i>';
+      button.setAttribute('aria-label', isPaused ? 'Continuar download' : 'Pausar download');
+      button.title = isPaused ? 'Continuar download' : 'Pausar download';
+      button.style.color = isPaused ? '#fbbf24' : '#67e8f9';
+    }
+
+    function updateDownloadProgressCard(progress) {
+      if (!progress || typeof progress !== 'object') return;
+      var total = Number(progress.total) || 0;
+      var completed = Math.max(0, Number(progress.completed) || 0);
+      var index = Math.max(0, Number(progress.index) || 0);
+      var filePercent = progress.filePercent === null || progress.filePercent === undefined
+        ? null : Math.max(0, Math.min(100, Number(progress.filePercent) || 0));
+      var isQueueProgress = progress.phase === 'queue-progress';
+      var percentage = total > 0
+        ? (isQueueProgress ? completed : completed + (filePercent || 0) / 100) / total * 100
+        : 0;
+      percentage = Math.max(0, Math.min(100, Math.round(percentage)));
+      var currentNumber = isQueueProgress ? completed : Math.min(total, index + 1);
+      var count = document.getElementById('downloadProgressCount');
+      var label = document.getElementById('downloadProgressLabel');
+      var file = document.getElementById('downloadProgressFile');
+      var bar = document.getElementById('downloadProgressBar');
+      var ring = document.getElementById('downloadProgressRingValue');
+      var ringContainer = document.getElementById('downloadProgressRing');
+
+      if (count) count.textContent = currentNumber + ' / ' + total + ' · ' + percentage + '% geral';
+      if (label) {
+        label.textContent = progress.paused
+          ? 'Download pausado'
+          : (isQueueProgress
+              ? (completed >= total ? 'Download concluído!' : 'Preparando próximo arquivo…')
+              : 'Baixando arquivo ' + currentNumber + ' de ' + total);
+      }
+      if (file) {
+        var fileName = progress.fileName || 'arquivo atual';
+        var fileStatus = filePercent === null ? 'recebendo dados…' : filePercent + '%';
+        file.textContent = isQueueProgress
+          ? fileName + ' · concluído'
+          : fileName + ' · ' + fileStatus;
+      }
+      setDownloadPauseButton(progress.paused === true);
+      if (bar) {
+        bar.style.width = percentage + '%';
+        bar.setAttribute('aria-valuenow', String(percentage));
+      }
+      if (ring) ring.style.strokeDashoffset = (56.55 * (1 - percentage / 100)).toFixed(2);
+      if (ringContainer) ringContainer.setAttribute('aria-valuenow', String(percentage));
+    }
+
+    function hideDownloadProgressCard() {
+      var card = document.getElementById('downloadProgressToast');
+      if (!card) return;
+      card.style.opacity = '0';
+      card.style.transition = 'opacity .2s ease';
+      setTimeout(function() { card.remove(); }, 220);
+    }
+
+    // ── Download engine with individual status + single recovery modal ──
     async function downloadMediaSequentially(urlsArray) {
       if (!urlsArray || urlsArray.length === 0) {
-        Swal.fire({ toast: true, position: 'bottom-end', icon: 'warning',
-          title: 'Nenhuma mídia selecionada para baixar.',
-          showConfirmButton: false, timer: 2800 });
+        showSiteNotice('Nenhuma mídia selecionada para baixar.', {
+          type: 'warning',
+          title: 'Nada para baixar'
+        });
         return;
       }
-      Swal.fire({ toast: true, position: 'bottom-end', icon: 'info',
-        title: 'Iniciando download de ' + urlsArray.length + ' arquivo(s)…',
-        showConfirmButton: false, timer: 3200, timerProgressBar: true });
+      var total = urlsArray.length;
 
-      for (var i = 0; i < urlsArray.length; i++) {
-        var link = document.createElement('a');
-        link.href = '/force-download?url=' + encodeURIComponent(urlsArray[i]);
-        link.download = '';
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        if (i < urlsArray.length - 1) {
-          await new Promise(function(r) { setTimeout(r, 300); });
+      showDownloadProgressCard(total);
+
+      var result = await window.MediaDownloadManager.downloadMany(urlsArray, {
+        showRecovery: true,
+        onProgress: updateDownloadProgressCard
+      });
+      var failed = result.failed.length + result.unavailable.length;
+      updateDownloadProgressCard({
+        phase: 'queue-progress',
+        completed: total,
+        total: total,
+        index: Math.max(0, total - 1),
+        fileName: 'Todos os arquivos',
+        filePercent: 100,
+        paused: false
+      });
+      hideDownloadProgressCard();
+      showSiteNotice(
+        failed
+          ? result.success.length + ' baixado(s); ' + failed + ' não concluído(s).'
+          : result.success.length + ' arquivo(s) baixado(s) com sucesso!',
+        {
+          type: failed ? 'warning' : 'success',
+          title: failed ? 'Download incompleto' : 'Download concluído'
         }
-      }
+      );
     }
+
+    // Individual card downloads use the same visible progress/pause control
+    // as the multi-file flow. The resilience manager broadcasts progress so
+    // callers do not need to duplicate stream-reading logic.
+    window.addEventListener('media-download-progress', function(event) {
+      var progress = event && event.detail;
+      if (!progress || !document.getElementById('downloadProgressToast')) return;
+      updateDownloadProgressCard(progress);
+      if (progress.phase === 'file-complete' && progress.total === 1) {
+        window.setTimeout(function() {
+          if (document.getElementById('downloadProgressToast')) {
+            hideDownloadProgressCard();
+          }
+        }, 850);
+      }
+    });
 
     // ── Active-tab helper ─────────────────────────────────────────────────
     function _activeTab() {
@@ -751,6 +963,15 @@
         el.title = newTitle;
         el.setAttribute('data-bs-original-title', newTitle);
       });
+
+      /* ── Sync the descriptive counter below the Download em Massa heading ── */
+      var desc = document.getElementById('singleDlDesc');
+      if (desc) {
+        var tot = selectedMedia.images.size + selectedMedia.videos.size;
+        desc.textContent = (isSelectionMode && tot > 0)
+          ? tot + ' arquivo(s) selecionado(s)'
+          : 'Baixe todos os arquivos encontrados';
+      }
     }
 
     // ── Selection button label ────────────────────────────────────────────
@@ -840,6 +1061,14 @@
           _toggleCardSelection(col);
         }, true /* capture */);
       });
+      document.querySelectorAll('#images img').forEach(function(image) {
+        image.addEventListener('error', function() {
+          var col = image.closest('[data-media-url]');
+          if (col && window.MediaDownloadManager) {
+            window.MediaDownloadManager.mark(col.getAttribute('data-media-url'), 'indisponivel');
+          }
+        });
+      });
 
       // Tab switch: update button label + restore selection visuals
       var tabsEl = document.getElementById('mediaTabs');
@@ -847,8 +1076,14 @@
         tabsEl.addEventListener('shown.bs.tab', function() {
           _updateSelectionBtnText();
           _reapplySelectionUI();
+          updateEyeButtonVisibility();
+        });
+        tabsEl.addEventListener('show.bs.tab', function(event) {
+          var target = event.target.getAttribute('data-bs-target');
+          updateEyeButtonVisibility(target === '#videos' ? 'video' : 'image');
         });
       }
+      updateEyeButtonVisibility();
     });
     </script>
 
@@ -884,18 +1119,11 @@
           if (_shakingElements) _shakingElements.delete(target);
         }, 300);
 
-        // Alerta via SweetAlert2 (já carregado nesta página)
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            toast: true,
-            position: 'bottom-end',
-            icon: 'error',
-            title: 'Download indisponível: Esta mídia foi removida ou está bloqueada no site de origem.',
-            showConfirmButton: false,
-            timer: 4000,
-            timerProgressBar: true,
-          });
-        }
+        showSiteNotice('Esta mídia foi removida ou está bloqueada no site de origem.', {
+          type: 'error',
+          title: 'Download indisponível',
+          duration: 4000
+        });
       }
     </script>
 
@@ -904,92 +1132,108 @@
          Debounce de 250ms evita trepidação visual em cliques rápidos.
     ─────────────────────────────────────────────────────────────────────────── -->
     <script>
-      // Estado atual do toggle: true = exibindo erros, false = ocultando
+      // Estado global do toggle: true = exibindo erros, false = ocultando
       var _eyeShowingErrors = true;
+      var _eyeHasBeenUsed = false;
       // Anti-spam: impede cliques durante a transição
       var _isTogglingEye = false;
 
+      var _eyeErrorKeywords = ['404', '403', 'Bloqueado', 'Não Encontrado', 'Indisponível', 'Removido', 'Copyright'];
+
+      function _eyeMediaCols(type) {
+        var paneId = type === 'image' ? 'images' : 'videos';
+        return document.querySelectorAll('#' + paneId + ' .row > [class*="col-"]');
+      }
+
+      function _eyeCardHasError(col) {
+        if (col.querySelector('.video-error-overlay.active, .placeholder-image')) {
+          return true;
+        }
+
+        // Usa texto visível como fallback sem classificar o texto padrão de
+        // overlays de vídeo que ainda não foram ativados como erro.
+        var visibleText = col.innerText || '';
+        return _eyeErrorKeywords.some(function(keyword) {
+          return visibleText.indexOf(keyword) !== -1;
+        });
+      }
+
+      function _eyeHasErrors(type) {
+        return Array.prototype.some.call(_eyeMediaCols(type), _eyeCardHasError);
+      }
+
+      function _eyeActiveType(tabOverride) {
+        if (tabOverride) return tabOverride;
+        return _activeTab() === 'images' ? 'image' : 'video';
+      }
+
       /**
-       * Varre TODOS os col-wrappers do grid de mídia e oculta/exibe os que
-       * possuem qualquer sinal de erro — por overlay ativo, imagem quebrada
-       * ou texto de erro visível.
-       *
-       * Estratégia top-down: parte dos cols (não dos elementos de erro),
-       * eliminando dependência de closest() e corridas com handleVideoError.
-       *
-       * Condições de erro (basta uma):
-       *   1. Contém .video-error-overlay.active  — overlay confirmado pelo handler
-       *   2. Contém .placeholder-image           — imagem que falhou ao carregar
-       *   3. Texto visível contém palavra-chave de erro (catch-all para qualquer
-       *      variação de mensagem exibida na tela)
+       * O botão fica global quando as duas abas têm erros. Se apenas uma
+       * contém erros, sua visibilidade acompanha a aba atualmente selecionada.
+       */
+      function updateEyeButtonVisibility(tabOverride) {
+        var btn = document.getElementById('toggleErrorsBtn');
+        if (!btn) return;
+
+        var imageHasErrors = _eyeHasErrors('image');
+        var videoHasErrors = _eyeHasErrors('video');
+        var activeType = _eyeActiveType(tabOverride);
+        var activeHasErrors = activeType === 'image' ? imageHasErrors : videoHasErrors;
+        var shouldShow = (imageHasErrors && videoHasErrors) || activeHasErrors;
+
+        btn.style.display = shouldShow ? 'inline-flex' : 'none';
+        if (shouldShow && !_eyeHasBeenUsed) {
+          btn.classList.add('olhinho-alerta');
+        } else {
+          btn.classList.remove('olhinho-alerta');
+        }
+      }
+
+      /**
+       * Varre os dois grids. O estado é único: ocultar na aba atual também
+       * oculta os erros da outra aba, inclusive antes de ela ser visualizada.
        */
       function toggleErrorCards() {
         if (_isTogglingEye) return;
         _isTogglingEye = true;
-
         _eyeShowingErrors = !_eyeShowingErrors;
+        _eyeHasBeenUsed = true;
 
         var btn  = document.getElementById('toggleErrorsBtn');
         var icon = document.getElementById('toggleErrorsIcon');
 
-        // Ao clicar, o alerta piscante para permanentemente.
         if (btn) btn.classList.remove('olhinho-alerta');
 
-        // Palavras-chave que identificam erro em qualquer texto dentro do card
-        var ERROR_KEYWORDS = ['404', '403', 'Bloqueado', 'Não Encontrado', 'Indisponível', 'Removido', 'Copyright'];
-
-        // Seleciona APENAS filhos diretos de .row dentro das abas —
-        // evita false-positives em colunas de layout fora do grid de mídia
-        var allMediaCols = document.querySelectorAll(
-          '#images .row > [class*="col-"], #videos .row > [class*="col-"]'
-        );
+        var allMediaCols = Array.prototype.slice.call(_eyeMediaCols('image'))
+          .concat(Array.prototype.slice.call(_eyeMediaCols('video')));
 
         allMediaCols.forEach(function(col) {
-          var isError = false;
-
-          // Condição 1 — overlay de vídeo ativo (definido por handleVideoError)
-          if (!isError && col.querySelector('.video-error-overlay.active')) {
-            isError = true;
-          }
-
-          // Condição 2 — imagem quebrada (onerror substituiu <img> por .placeholder-image)
-          if (!isError && col.querySelector('.placeholder-image')) {
-            isError = true;
-          }
-
-          // Condição 3 — qualquer texto de erro visível (catch-all: 404, 403, etc.)
-          // Usa .innerText (respeita display:none) para não disparar em overlays ocultos
-          if (!isError) {
-            var visibleText = col.innerText || '';
-            for (var k = 0; k < ERROR_KEYWORDS.length; k++) {
-              if (visibleText.indexOf(ERROR_KEYWORDS[k]) !== -1) {
-                isError = true;
-                break;
-              }
-            }
-          }
-
+          var isError = _eyeCardHasError(col);
           if (_eyeShowingErrors) {
-            // Direção "mostrar": restaura TODOS os cols incondicionalmente.
-            // Garante que cols previamente escondidos mas cujo estado de erro
-            // foi resolvido pela corrida assíncrona também apareçam de volta.
+            // Restaura todos os cards, inclusive os que estavam na outra aba.
             col.style.display = '';
-          } else {
-            // Direção "ocultar": esconde apenas os cols que possuem erro.
-            if (isError) col.style.display = 'none';
+          } else if (isError) {
+            col.style.display = 'none';
           }
         });
 
-        // Atualiza ícone e tooltip do botão
-        if (_eyeShowingErrors) {
-          icon.className = 'fas fa-eye';
-          btn.title = 'Ocultar mídias não encontradas / bloqueadas';
-        } else {
-          icon.className = 'fas fa-eye-slash';
-          btn.title = 'Mostrar mídias não encontradas / bloqueadas';
+        if (icon) {
+          if (_eyeShowingErrors) {
+            icon.className = 'fas fa-eye';
+            if (btn) {
+              btn.setAttribute('data-tip', 'Ocultar mídias não encontradas / bloqueadas');
+              btn.title = 'Ocultar mídias não encontradas / bloqueadas';
+            }
+          } else {
+            icon.className = 'fas fa-eye-slash';
+            if (btn) {
+              btn.setAttribute('data-tip', 'Mostrar mídias não encontradas / bloqueadas');
+              btn.title = 'Mostrar mídias não encontradas / bloqueadas';
+            }
+          }
         }
 
-        // Libera debounce após 250ms (tempo da transição visual do grid)
+        updateEyeButtonVisibility();
         setTimeout(function() { _isTogglingEye = false; }, 250);
       }
     </script>
@@ -1050,6 +1294,13 @@
           // Endpoint inacessível — continua com 'generico'
           errType = 'generico';
         }
+        if (window.MediaDownloadManager) {
+          window.MediaDownloadManager.mark(
+            srcUrl,
+            ['copyright', '403', '404'].indexOf(errType) !== -1
+              ? 'indisponivel' : 'falha_conexao'
+          );
+        }
 
         // Atualiza imagem do chibi
         const chibiImg = overlay.querySelector('img.chibi-img');
@@ -1092,21 +1343,6 @@
         updateEyeButtonVisibility();
       }
 
-      /* ── Exibição inteligente do botão olhinho ──────────────────────────
-         Só aparece (com o glow laranja piscando) quando houver ao menos uma
-         mídia com erro na página. Fica oculto por padrão. ── */
-      function updateEyeButtonVisibility() {
-        var btn = document.getElementById('toggleErrorsBtn');
-        if (!btn) return;
-        var errorCount = document.querySelectorAll('.video-error-overlay.active, .placeholder-image').length;
-        if (errorCount > 0) {
-          btn.style.display = 'inline-flex';
-          btn.classList.add('olhinho-alerta');
-        } else {
-          btn.style.display = 'none';
-          btn.classList.remove('olhinho-alerta');
-        }
-      }
     </script>
 
     <!-- Scripts Testes -->

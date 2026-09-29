@@ -353,7 +353,9 @@
                 serverTsAtFetch = d.server_ts || (Date.now() / 1000);
                 uptimeBase      = d.uptime     || 0;
                 lastScrapeTsServer = d.last_scrape_ts || null;
-                nextPingTsServer   = d.next_ping_ts   || null;
+                /* Só sobrescreve se vier um valor válido — nunca apaga um countdown em curso
+                   com null (ocorre no ~1s entre o ping disparar e o loop gravar o próximo ts). */
+                if (d.next_ping_ts) nextPingTsServer = d.next_ping_ts;
 
                 document.getElementById('statDownloads').textContent = fmtNumber(d.downloads);
                 document.getElementById('statViews').textContent     = fmtNumber(d.views);
@@ -398,39 +400,36 @@
             lastScrapeEl.textContent = '—';
         }
 
-        /* Próximo Ping — client-side countdown seeded from /api/ping */
+        /* Próximo Ping — calculado a partir do timestamp absoluto do servidor.
+           Não usa decremento local: o valor é sempre `next_ping_ts - agora`,
+           então F5 jamais reseta o contador — ele simplesmente recalcula. */
         const pingEl = document.getElementById('statNextPing');
-        if (pingCountdown !== null) {
-            pingEl.textContent = pingCountdown > 0 ? fmtCountdown(pingCountdown) : '⏳ Em breve…';
-            if (pingCountdown > 0) {
-                pingCountdown--;
+        if (nextPingTsServer) {
+            const nowClient  = Date.now() / 1000;                          // tempo local em segundos
+            const elapsed    = (Date.now() - localFetchAt) / 1000;         // tempo desde o último fetch
+            const serverNow  = serverTsAtFetch + elapsed;                   // estimativa do tempo no servidor
+            const secsLeft   = Math.floor(nextPingTsServer - serverNow);
+            if (secsLeft > 0) {
+                pingEl.textContent = fmtCountdown(secsLeft);
             } else {
-                pingCountdown = null;
-                fetchPing(); // re-seed silently when countdown expires
+                pingEl.textContent = '⏳ Pingando…';
             }
-        } else if (nextPingTsServer) {
-            // legacy fallback — used until first /api/ping response arrives
-            const nowServer  = serverTsAtFetch + elapsedSecs;
-            const secsLeft   = Math.floor(nextPingTsServer - nowServer);
-            pingEl.textContent = secsLeft > 0 ? fmtCountdown(secsLeft) : '⏳ Em breve…';
         } else {
             pingEl.textContent = '—';
         }
     }
 
-    /* ── Dedicated /api/ping fetch — seeds client-side MM:SS countdown ── */
+    /* ── Dedicated /api/ping fetch — atualiza o timestamp absoluto do servidor ── */
     function fetchPing() {
         fetch('/api/ping', { cache: 'no-store' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                if (d.remaining_seconds != null) {
-                    pingCountdown = d.remaining_seconds > 0 ? d.remaining_seconds : 420;
-                } else if (d.next_ping_ts) {
-                    // legacy: server didn't return remaining_seconds, fall back to ts diff
-                    nextPingTsServer = d.next_ping_ts;
-                    localFetchAt    = Date.now();
-                    serverTsAtFetch = Date.now() / 1000;
-                }
+                /* Só atualiza o timestamp absoluto se vier válido.
+                   NÃO toca localFetchAt/serverTsAtFetch — esses são gerenciados
+                   exclusivamente pelo fetchStats() que tem o server_ts real.
+                   Sobreescrever aqui com Date.now()/1000 (relógio local) corromperia
+                   a sincronização do relógio do servidor e quebraria uptime + last-scrape. */
+                if (d.next_ping_ts) nextPingTsServer = d.next_ping_ts;
                 tick();
             })
             .catch(function() {});
@@ -440,7 +439,7 @@
     fetchPing();
     setInterval(tick, 1000);
     setInterval(fetchStats, 8000);
-    setInterval(fetchPing, 10000);
+    setInterval(fetchPing, 15000);
 </script>
 </body>
 </html>

@@ -296,13 +296,13 @@
                         <label class="form-label small text-muted">URL do webhook Discord <span class="text-danger">*</span></label>
                         <div class="d-flex gap-2">
                             <input type="url" name="url" id="addUrl" class="form-control" required maxlength="500"
-                                   placeholder="https://discord.com/api/webhooks/..." />
+                                   placeholder="https://discordapp.com/api/webhooks/..." />
                             <button type="button" class="test-btn text-nowrap" onclick="testUrl('addUrl', this)">
                                 <i class="fas fa-paper-plane me-1"></i>Testar
                             </button>
                         </div>
                         <div class="mt-1" style="font-size:.7rem;color:#8b949e;">
-                            Copie a URL do webhook no Discord: canal → Editar → Integrações → Webhooks
+                            URLs iniciadas em <code>https://discord.com</code> são convertidas automaticamente para <code>https://discordapp.com</code>.
                         </div>
                     </div>
                     <div class="mb-0">
@@ -544,10 +544,10 @@
                     const card = document.getElementById('whCard' + id);
                     if (card) { card.style.transition = 'opacity .3s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 300); }
                 } else {
-                    alert('Erro ao excluir webhook.');
+                    showSiteNotice('Erro ao excluir webhook.', { type: 'error' });
                 }
             })
-            .catch(() => alert('Erro de rede.'));
+            .catch(() => showSiteNotice('Erro de rede.', { type: 'error' }));
     }
 
     function testWebhook(id, url) {
@@ -557,7 +557,7 @@
 
     function testUrl(inputId, btn) {
         const url = document.getElementById(inputId).value.trim();
-        if (!url) { alert('Informe a URL primeiro.'); return; }
+        if (!url) { showSiteNotice('Informe a URL primeiro.', { type: 'warning' }); return; }
         _doTest(url, btn);
     }
 

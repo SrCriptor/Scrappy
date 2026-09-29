@@ -47,6 +47,15 @@
         .badge-unknown   { background:#1e1e1e; color:#94a3b8; border:1px solid #374151; }
         .url-path { font-family: 'Courier New', monospace; font-size: .72rem; color: #f59e0b; word-break: break-all; background: #0d1117; padding: 2px 6px; border-radius: 4px; }
         .count-badge { background:#451a03; color:#fbbf24; border:1px solid #92400e; font-size:.7rem; padding:1px 7px; border-radius:20px; font-weight:700; }
+        /* ── Attacker accordion block ── */
+        .attacker-block {
+            background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+            margin-bottom: .45rem; transition: border-color .15s;
+        }
+        .attacker-block:hover { border-color: #30363d; }
+        .attacker-block.open  { border-color: #f59e0b44; }
+        .attacker-header { padding: .6rem .75rem; border-radius: 8px; }
+        .attacker-block.open .attacker-chevron { transform: rotate(90deg) !important; }
         /* Incident card */
         .incident-card {
             background: #0d1117; border: 1px solid #3a0a0a; border-left: 3px solid #ef4444;
@@ -98,8 +107,9 @@
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-4">
             <div class="stat-card">
-                <div class="stat-num text-danger">{{ requests_list | length }}</div>
+                <div class="stat-num text-danger">{{ requests_total }}</div>
                 <div class="text-muted small">Ataques suspeitos</div>
+                <div style="font-size:.7rem;color:#6b7280;margin-top:.2rem;">{{ grouped_requests | length }} invasores únicos</div>
             </div>
         </div>
         <div class="col-6 col-md-4">
@@ -142,71 +152,194 @@
     <!-- Sub-tabs -->
     <div class="sec-tabs">
         <div class="sec-tab active" id="secTabAttacks" onclick="switchSecTab('attacks')">
-            <i class="fas fa-bug me-1"></i>Ataques Suspeitos ({{ requests_list | length }})
+            <i class="fas fa-bug me-1"></i>Ataques Suspeitos ({{ grouped_requests | length }} atacantes)
         </div>
         <div class="sec-tab" id="secTabForensics" onclick="switchSecTab('forensics')">
             <i class="fas fa-fingerprint me-1"></i>Força Bruta &amp; Forense ({{ incidents | length }})
         </div>
     </div>
 
-    <!-- ═══ ATAQUES SUSPEITOS ═══ -->
+    <!-- ═══ ATAQUES SUSPEITOS (accordion por ID de hardware / IP) ═══ -->
     <div id="secPaneAttacks" class="section-card">
         <div class="section-title d-flex align-items-center justify-content-between">
-            <span><i class="fas fa-triangle-exclamation text-warning me-2"></i>Registros de Ataques na URL</span>
+            <span><i class="fas fa-triangle-exclamation text-warning me-2"></i>Registros de Ataques na URL
+                <span style="font-size:.72rem;color:#6b7280;font-weight:400;margin-left:.4rem;">— agrupado por invasor</span>
+            </span>
             <div class="d-flex gap-2 align-items-center">
-                <span class="badge bg-danger">{{ requests_list | length }}</span>
-                {% if requests_list %}
+                <!-- Eye privacy toggle -->
+                <button id="secAttacksEyeBtn" type="button"
+                        class="btn btn-sm btn-outline-secondary py-0 px-2"
+                        style="font-size:.72rem;line-height:1.8;"
+                        onclick="secToggleAttacks()"
+                        title="Mostrar / ocultar lista de ataques">
+                    <i id="secAttacksEyeIcon" class="fas fa-eye"></i>
+                </button>
+                <span class="badge bg-danger sec-attacks-toggle">{{ requests_total }}</span>
+                {% if grouped_requests %}
                 <form method="post" action="/admin/suspicious/clear"
+                      class="sec-attacks-toggle"
                       onsubmit="return confirmFormSubmit(this, 'Apagar todos os registros de ataques suspeitos? Irreversível.')">
-                    <button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Limpar</button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>Limpar tudo</button>
                 </form>
                 {% endif %}
             </div>
         </div>
+        <div id="secAttacksBody">
 
-        {% if requests_list %}
+        {% if grouped_requests %}
         <div class="log-scroll">
-        {% for r in requests_list %}
-        {% set atype = r.attack_type | lower | replace(' ', '') %}
-        <div class="attack-row" data-ip="{{ r.ip }}" onclick="toggleAttackDetail(this)">
-            <i class="fas fa-chevron-right attack-chevron"></i>
-            <div class="attack-icon type-{{ 'xss' if 'xss' in atype else ('sql' if 'sql' in atype else ('traversal' if 'traversal' in atype else 'unknown')) }}">
-                <i class="fas {{ 'fa-code' if 'xss' in atype else ('fa-database' if 'sql' in atype else 'fa-folder-open') }}"></i>
-            </div>
-            <div class="flex-grow-1 min-w-0">
-                <!-- Summary row (always visible) -->
-                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                    <span class="attack-badge badge-{{ 'xss' if 'xss' in atype else ('sql' if 'sql' in atype else ('traversal' if 'traversal' in atype else 'unknown')) }}">
-                        {{ r.attack_type }}
-                    </span>
-                    <span class="text-muted" style="font-size:.72rem;"><i class="fas fa-clock me-1"></i>{{ fmt_ts(r.ts) }}</span>
-                    {% if r.count > 1 %}
-                    <span class="count-badge"><i class="fas fa-repeat me-1"></i>{{ r.count }}×</span>
-                    {% endif %}
-                    <span class="badge bg-secondary" style="font-size:.62rem;">{{ r.method }}</span>
+        {% for group in grouped_requests %}
+        {% set first_req = group.requests[0] %}
+        {% set dominant_type = group.attack_types[0] | lower | replace(' ', '') %}
+        {% set aclass = 'xss' if 'xss' in dominant_type else ('sql' if 'sql' in dominant_type else ('traversal' if 'traversal' in dominant_type else 'unknown')) %}
+        <!-- ── Attacker block: one card per unique IP ── -->
+        <div class="attacker-block" data-ip="{{ group.ip | e }}" id="ablock-{{ loop.index }}">
+            <!-- ── HEADER: always visible ── -->
+            <div class="attacker-header d-flex align-items-center gap-2"
+                 onclick="toggleAttackerBlock('ablock-{{ loop.index }}')" style="cursor:pointer;">
+                <i class="fas fa-chevron-right attacker-chevron" style="font-size:.65rem;color:#6b7280;flex-shrink:0;transition:transform .15s;"></i>
+                <!-- Type icon -->
+                <div class="attack-icon type-{{ aclass }}" style="flex-shrink:0;">
+                    <i class="fas {{ 'fa-code' if aclass == 'xss' else ('fa-database' if aclass == 'sql' else 'fa-folder-open') }}"></i>
                 </div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span style="font-size:.75rem;"><i class="fas fa-network-wired text-info me-1"></i><code style="color:#60a5fa;">{{ r.ip }}</code></span>
+                <!-- Summary -->
+                <div class="flex-grow-1 min-w-0">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <code class="ip-hover-trigger"
+                              style="color:#60a5fa;font-size:.82rem;font-weight:700;cursor:default;"
+                              data-ip="{{ group.ip | e }}"
+                              data-attack="{{ group.attack_types | join(', ') | e }}"
+                              data-browser="{{ group.browser_name | e }}"
+                              data-os="{{ group.operating_system | e }}"
+                              data-count="{{ group.total_count }}">{{ group.ip }}</code>
+                        {% if group.linked_ips %}
+                        <span style="font-size:.65rem;font-weight:700;background:#451a03;color:#fdba74;border:1px solid #92400e;border-radius:20px;padding:1px 8px;">
+                            <i class="fas fa-user-secret me-1"></i>VPN / EVASÃO DETECTADA
+                        </span>
+                        {% endif %}
+                        <span class="count-badge"><i class="fas fa-repeat me-1"></i>{{ group.total_count }} req.</span>
+                        <span class="text-muted" style="font-size:.7rem;"><i class="fas fa-clock me-1"></i>{{ fmt_ts(group.latest_ts) }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                        {% for atype in group.attack_types %}
+                        {% set ac = atype | lower | replace(' ', '') %}
+                        <span class="attack-badge badge-{{ 'xss' if 'xss' in ac else ('sql' if 'sql' in ac else ('traversal' if 'traversal' in ac else 'unknown')) }}">{{ atype }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <!-- Dossier export + Single global delete -->
+                <div class="d-flex align-items-center gap-1 flex-shrink-0" onclick="event.stopPropagation()">
                     <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1"
-                            style="font-size:.62rem;line-height:1.4;"
-                            onclick="event.stopPropagation(); exportDossier(this.closest('.attack-row').dataset.ip)"
-                            title="Exportar Dossiê Mestre para IP {{ r.ip }}">
-                        <i class="fas fa-file-export me-1"></i>Dossiê
+                            style="font-size:.62rem;line-height:1.6;"
+                            onclick="exportDossierHtml('{{ group.ip | e }}')">
+                        <i class="fas fa-file-code me-1"></i>HTML
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
+                            style="font-size:.62rem;line-height:1.6;"
+                            onclick="exportDossier('{{ group.ip | e }}')">
+                        <i class="fas fa-file-csv me-1"></i>CSV
+                    </button>
+                    <!-- ÚNICA LIXEIRA GLOBAL — apaga todos os registros deste invasor -->
+                    <button type="button"
+                            style="font-size:.72rem;line-height:1.6;color:#6b7280;border:1px solid #374151;background:transparent;border-radius:6px;padding:2px 8px;transition:color .15s,border-color .15s;"
+                            onmouseenter="this.style.color='#f87171';this.style.borderColor='#7f1d1d';"
+                            onmouseleave="this.style.color='#6b7280';this.style.borderColor='#374151';"
+                            onclick="openDeleteByIpModal('{{ group.ip | e }}', {{ group.total_count }})">
+                        <i class="fas fa-trash-can"></i>
                     </button>
                 </div>
-                <!-- Truncated preview always shown -->
-                <div class="mt-1">
-                    <span class="url-path" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;">{{ r.url_path }}</span>
-                </div>
-                <!-- Expandable detail — payload rendered safely inside <pre><code>, never injected into JS -->
-                <div class="attack-detail">
-                    <div style="font-size:.62rem;color:#6b7280;margin-bottom:.3rem;">
-                        <i class="fas fa-bug me-1"></i>PAYLOAD COMPLETO (não truncado)
-                    </div>
-                    <pre style="margin:0;background:#0a0a0a;border:1px solid #3a0a0a;border-radius:6px;padding:.5rem .75rem;"><code class="text-danger" style="white-space:pre-wrap;word-break:break-all;font-size:.72rem;">{{ r.url_path }}</code></pre>
-                </div>
             </div>
-        </div>
+
+            <!-- ── ACCORDION BODY: expandable ── -->
+            <div class="attacker-body" style="display:none;margin-top:.6rem;padding:.75rem;background:#0a0d13;border-radius:8px;border:1px solid #21262d;">
+
+                <!-- VPN evasion alert -->
+                {% if group.linked_ips %}
+                <div style="background:#3d1a00;border:1px solid #92400e;border-radius:8px;padding:.6rem .85rem;margin-bottom:.75rem;font-size:.78rem;color:#fdba74;">
+                    <i class="fas fa-triangle-exclamation me-2"></i>
+                    <strong>🚨 ALERTA: Tentativa de evasão com troca de IP (IP original da infração: {{ group.ip }})</strong>
+                    <div style="margin-top:.3rem;font-size:.72rem;color:#fca5a5;">
+                        O mesmo dispositivo físico foi detectado usando múltiplos IPs externos (rotação de VPN).
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- SUB-PASTA 1: Histórico de IPs -->
+                <div class="attacker-subfolder mb-2">
+                    <div class="subfolder-header d-flex align-items-center gap-2"
+                         onclick="toggleSubfolder(this)" style="cursor:pointer;padding:.4rem .5rem;border-radius:6px;background:#161b22;border:1px solid #30363d;user-select:none;">
+                        <i class="fas fa-chevron-right subfolder-chevron" style="font-size:.6rem;color:#6b7280;transition:transform .15s;"></i>
+                        <i class="fas fa-network-wired text-info" style="font-size:.75rem;"></i>
+                        <span style="font-size:.78rem;font-weight:600;color:#c9d1d9;">Histórico de IPs</span>
+                        <span class="badge bg-secondary ms-1" style="font-size:.62rem;">{{ 1 + (group.linked_ips | length) }}</span>
+                    </div>
+                    <div class="subfolder-body" style="display:none;padding:.5rem .6rem 0;">
+                        <!-- Primary IP -->
+                        <div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #21262d;">
+                            <span style="font-size:.65rem;color:#22c55e;font-weight:700;min-width:56px;">PRIMÁRIO</span>
+                            <code style="color:#60a5fa;font-size:.78rem;">{{ group.ip }}</code>
+                            {% if group.browser_name and group.browser_name != '—' %}
+                            <span style="font-size:.65rem;color:#6b7280;">· {{ group.operating_system }} · {{ group.browser_name }}</span>
+                            {% endif %}
+                        </div>
+                        <!-- Linked IPs (VPN evasion) -->
+                        {% for lip in group.linked_ips %}
+                        <div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #21262d;">
+                            <span style="font-size:.65rem;color:#f87171;font-weight:700;min-width:56px;">VPN #{{ loop.index }}</span>
+                            <code style="color:#f59e0b;font-size:.78rem;">{{ lip }}</code>
+                            <span style="font-size:.65rem;color:#f87171;">🚨 Mesmo hardware, IP diferente</span>
+                        </div>
+                        {% endfor %}
+                        {% if not group.linked_ips %}
+                        <div style="font-size:.72rem;color:#6b7280;padding:.3rem 0;">
+                            <i class="fas fa-check-circle text-success me-1"></i>Nenhum IP alternativo detectado para este dispositivo.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- SUB-PASTA 2: Lista de Requisições -->
+                <div class="attacker-subfolder">
+                    <div class="subfolder-header d-flex align-items-center gap-2"
+                         onclick="toggleSubfolder(this)" style="cursor:pointer;padding:.4rem .5rem;border-radius:6px;background:#161b22;border:1px solid #30363d;user-select:none;">
+                        <i class="fas fa-chevron-right subfolder-chevron" style="font-size:.6rem;color:#6b7280;transition:transform .15s;"></i>
+                        <i class="fas fa-list text-warning" style="font-size:.75rem;"></i>
+                        <span style="font-size:.78rem;font-weight:600;color:#c9d1d9;">Lista de Requisições</span>
+                        <span class="badge bg-secondary ms-1" style="font-size:.62rem;">{{ group.requests | length }}</span>
+                    </div>
+                    <div class="subfolder-body" style="display:none;padding:.5rem 0 0;">
+                        <table style="width:100%;border-collapse:collapse;font-size:.72rem;">
+                            <thead>
+                                <tr style="color:#6b7280;border-bottom:1px solid #30363d;">
+                                    <th style="padding:.3rem .5rem;text-align:left;">Caminho</th>
+                                    <th style="padding:.3rem .5rem;text-align:left;white-space:nowrap;">Data / Hora</th>
+                                    <th style="padding:.3rem .5rem;text-align:left;">Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for req in group.requests %}
+                            <tr style="border-bottom:1px solid #1c2128;">
+                                <td style="padding:.3rem .5rem;word-break:break-all;max-width:340px;">
+                                    <span class="url-path">{{ req.url_path }}</span>
+                                    {% if req.count > 1 %}
+                                    <span class="count-badge ms-1">{{ req.count }}×</span>
+                                    {% endif %}
+                                </td>
+                                <td style="padding:.3rem .5rem;color:#6b7280;white-space:nowrap;">{{ fmt_ts(req.ts) }}</td>
+                                <td style="padding:.3rem .5rem;">
+                                    {% set ac = req.attack_type | lower | replace(' ', '') %}
+                                    <span class="attack-badge badge-{{ 'xss' if 'xss' in ac else ('sql' if 'sql' in ac else ('traversal' if 'traversal' in ac else 'unknown')) }}">{{ req.attack_type }}</span>
+                                    <span class="badge bg-secondary ms-1" style="font-size:.6rem;">{{ req.method }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>{# /attacker-body #}
+        </div>{# /attacker-block #}
         {% endfor %}
         </div>
         {% else %}
@@ -216,6 +349,7 @@
             <small class="text-muted">Ataques à URL como path traversal, XSS e SQL injection aparecerão aqui.</small>
         </div>
         {% endif %}
+        </div>{# /secAttacksBody #}
     </div>
 
     <!-- ═══ FORÇA BRUTA / FORENSE ═══ -->
@@ -346,11 +480,19 @@
 
                 <!-- Dossier export action -->
                 <div class="section-divider" style="margin-top:.85rem;padding-top:.6rem;">
-                    <button type="button" class="btn btn-outline-danger btn-sm"
-                            onclick="event.stopPropagation(); exportDossier(this.closest('.incident-card').dataset.ip)">
-                        <i class="fas fa-file-export me-1"></i>📥 Exportar Dossiê Policial
-                    </button>
-                    <span style="font-size:.62rem;color:#4b5563;margin-left:.6rem;">Exporta CSV forense completo para autoridades — IP: <code style="color:#f87171;">{{ inc.ip }}</code></span>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                onclick="event.stopPropagation(); exportDossierHtml(this.closest('.incident-card').dataset.ip)"
+                                title="Relatório HTML profissional — recomendado para apresentação">
+                            <i class="fas fa-file-code me-1"></i>Dossiê HTML
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                onclick="event.stopPropagation(); exportDossier(this.closest('.incident-card').dataset.ip)"
+                                title="Planilha CSV — compatível com Excel e sistemas policiais legados">
+                            <i class="fas fa-file-csv me-1"></i>CSV Policial
+                        </button>
+                        <span style="font-size:.6rem;color:#4b5563;">IP: <code style="color:#f87171;">{{ inc.ip }}</code></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -365,7 +507,194 @@
         {% endif %}
     </div>
 
+    <!-- ═══ WAF: IPs Banidos Automaticamente ══════════════════════════════ -->
+    <div class="mb-1 mt-4" style="color:#4b5563;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">
+        🚫 WAF — IPs Banidos Automaticamente
+    </div>
+    <div class="section-card">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+            <div class="section-title mb-0">
+                <i class="fas fa-ban text-danger me-2"></i>
+                Lista de Banimentos WAF
+                <span class="count-badge ms-2">{{ waf_bans | length }} registros</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/debug-security-screen" target="_blank"
+                   class="btn btn-outline-secondary btn-sm" style="font-size:.72rem;">
+                    <i class="fas fa-eye me-1"></i>Prévia da tela de bloqueio
+                </a>
+            </div>
+        </div>
+
+        {% if waf_bans %}
+        <div class="log-scroll">
+            <table class="table table-dark table-sm mb-0" style="font-size:.78rem;">
+                <thead>
+                    <tr style="color:#6b7280;border-bottom:1px solid #30363d;">
+                        <th>IP</th>
+                        <th>Motivo</th>
+                        <th>URL Capturada</th>
+                        <th>Método</th>
+                        <th>Data/Hora</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ban in waf_bans %}
+                    <tr style="border-bottom:1px solid #21262d;">
+                        <td>
+                            <span style="font-family:'Courier New',monospace;color:#f87171;font-weight:700;">
+                                {{ ban.ip }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge-traversal attack-badge">
+                                {{ ban.reason }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="url-path">{{ ban.url_path | truncate(60) }}</span>
+                        </td>
+                        <td><span style="color:#94a3b8;">{{ ban.method }}</span></td>
+                        <td><span style="color:#6b7280;">{{ fmt_ts(ban.ts) }}</span></td>
+                        <td>
+                            <form method="post" action="/admin/waf/unban" style="display:inline;">
+                                <input type="hidden" name="ip" value="{{ ban.ip }}">
+                                <button type="submit" class="btn btn-outline-success btn-sm"
+                                        style="font-size:.68rem;padding:2px 8px;"
+                                        onclick="return confirm('Remover ban para {{ ban.ip }}?')">
+                                    <i class="fas fa-unlock me-1"></i>Desbanir
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-shield-check text-success" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>
+            <p class="text-muted mb-0 small">Nenhum IP banido pelo WAF até o momento.</p>
+        </div>
+        {% endif %}
+    </div>
+
 </div>
+
+<!-- ── IP Hover Tooltip ───────────────────────────────────────────────────── -->
+<style>
+#ip-tooltip {
+    position: fixed;
+    z-index: 99999;
+    pointer-events: none;
+    width: 296px;
+    background: #151b27;
+    border: 1px solid #2a3347;
+    border-radius: 11px;
+    padding: 0;
+    box-shadow:
+        0 12px 40px rgba(0,0,0,.75),
+        0 0 0 1px rgba(96,165,250,.07),
+        inset 0 1px 0 rgba(255,255,255,.03);
+    opacity: 0;
+    transform: translateY(5px) scale(.98);
+    transition: opacity .16s ease, transform .16s ease;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+}
+#ip-tooltip.ipt-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+.ipt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .6rem .85rem .55rem;
+    background: #0d1117;
+    border-bottom: 1px solid #21262d;
+}
+.ipt-ip-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .8rem;
+    color: #60a5fa;
+    font-weight: 700;
+    letter-spacing: .04em;
+    min-width: 0;
+    word-break: break-all;
+}
+.ipt-threat-badge {
+    flex-shrink: 0;
+    font-size: .57rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.ipt-threat-badge.threat-critical { background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.45); color: #f87171; }
+.ipt-threat-badge.threat-high     { background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4);  color: #fbbf24; }
+.ipt-threat-badge.threat-medium   { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.4);  color: #a5b4fc; }
+.ipt-section { padding: .55rem .85rem; }
+.ipt-section-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .59rem;
+    color: #4b5563;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: .32rem;
+}
+.ipt-section-label i { font-size: .6rem; width: 11px; text-align: center; }
+.ipt-val       { font-size: .76rem; color: #e2e8f0; line-height: 1.5; }
+.ipt-val.ipt-sub  { color: #6b7280; font-size: .69rem; margin-top: 2px; }
+.ipt-val.ipt-mono { font-family: 'Share Tech Mono', monospace; color: #f59e0b; font-size: .71rem; letter-spacing: .04em; word-break: break-all; }
+.ipt-val.ipt-muted { color: #4b5563; font-style: italic; font-size: .71rem; }
+.ipt-val .ipt-proxy-tag {
+    display: inline-block;
+    margin-left: 5px;
+    font-size: .57rem;
+    padding: 1px 6px;
+    background: rgba(239,68,68,.12);
+    border: 1px solid rgba(239,68,68,.35);
+    color: #fca5a5;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+.ipt-hr { border: none; border-top: 1px solid #1e2633; margin: 0; }
+</style>
+
+<div id="ip-tooltip" role="tooltip" aria-hidden="true">
+    <div class="ipt-header">
+        <span id="ipt-ip"     class="ipt-ip-text"></span>
+        <span id="ipt-threat" class="ipt-threat-badge threat-medium"></span>
+    </div>
+    <hr class="ipt-hr">
+    <div class="ipt-section">
+        <div class="ipt-section-label"><i class="fas fa-globe"></i> Geolocalização Estimada</div>
+        <div id="ipt-geo" class="ipt-val ipt-muted">Consultando…</div>
+        <div id="ipt-isp" class="ipt-val ipt-sub"></div>
+    </div>
+    <hr class="ipt-hr">
+    <div class="ipt-section">
+        <div class="ipt-section-label"><i class="fas fa-desktop"></i> Assinatura do Dispositivo</div>
+        <div id="ipt-os"      class="ipt-val"></div>
+        <div id="ipt-browser" class="ipt-val ipt-sub"></div>
+    </div>
+    <hr class="ipt-hr">
+    <div class="ipt-section">
+        <div class="ipt-section-label"><i class="fas fa-fingerprint"></i> ID de Hardware (Fingerprint)</div>
+        <div id="ipt-fp" class="ipt-val ipt-mono"></div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/confirm-modal.js"></script>
 <script>
@@ -377,11 +706,25 @@
         document.getElementById('secPaneForensics').style.display = attacksActive ? 'none' : 'block';
     }
 
-    /* ── Attack-row safe expand/collapse ────────────────────────────────────
-       Payload content is rendered by Jinja2 inside <pre><code> (server-side
-       HTML-escaped), so no user input ever touches a JS string literal.      */
-    function toggleAttackDetail(row) {
-        row.classList.toggle('open');
+    /* ── Attacker accordion block expand/collapse ────────────────────────── */
+    function toggleAttackerBlock(blockId) {
+        var block = typeof blockId === 'string' ? document.getElementById(blockId) : blockId;
+        if (!block) return;
+        var body    = block.querySelector('.attacker-body');
+        var chevron = block.querySelector('.attacker-chevron');
+        var open    = block.classList.toggle('open');
+        if (body)    body.style.display    = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
+    }
+
+    /* ── Sub-folder expand/collapse ─────────────────────────────────────── */
+    function toggleSubfolder(headerEl) {
+        var body    = headerEl.nextElementSibling;
+        var chevron = headerEl.querySelector('.subfolder-chevron');
+        if (!body) return;
+        var open = body.style.display === 'none' || body.style.display === '';
+        body.style.display = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
     }
 
     /* ── Dossier export ─────────────────────────────────────────────────────
@@ -391,6 +734,284 @@
     function exportDossier(ip) {
         if (!ip) return;
         window.location.href = '/admin/forensics/export-dossier/' + encodeURIComponent(ip);
+    }
+    function exportDossierHtml(ip) {
+        if (!ip) return;
+        window.location.href = '/admin/forensics/export-dossier-html/' + encodeURIComponent(ip);
+    }
+
+    /* ─── IP Hover Tooltip ───────────────────────────────────────────────────
+       Uses event delegation on document so it works for every .ip-hover-trigger
+       element added now or in the future — no per-element wiring needed.       */
+    (function () {
+        'use strict';
+        var TIP = document.getElementById('ip-tooltip');
+        if (!TIP) return;
+
+        var _el = {
+            ip:      document.getElementById('ipt-ip'),
+            threat:  document.getElementById('ipt-threat'),
+            geo:     document.getElementById('ipt-geo'),
+            isp:     document.getElementById('ipt-isp'),
+            os:      document.getElementById('ipt-os'),
+            browser: document.getElementById('ipt-browser'),
+            fp:      document.getElementById('ipt-fp'),
+        };
+
+        var _geoCache  = {};   // ip → geo object
+        var _hideTimer = null;
+
+        /* Deterministic pseudo-fingerprint derived from the IP string */
+        function _fp(ip) {
+            var h = 0x811c9dc5 >>> 0;
+            for (var i = 0; i < ip.length; i++) {
+                h ^= ip.charCodeAt(i);
+                h  = Math.imul(h, 0x01000193) >>> 0;
+            }
+            var b = (h ^ 0xdeadbeef) >>> 0;
+            var c = (h ^ 0x1337cafe) >>> 0;
+            return h.toString(16).padStart(8,'0') +
+                   b.toString(16).padStart(8,'0') + '-' +
+                   c.toString(16).padStart(4,'0').slice(0,4);
+        }
+
+        /* Map attack type → threat level badge */
+        function _threat(attack) {
+            var t = (attack || '').toLowerCase();
+            if (/waf.ban|sql|rce|exfil|credential|execu[çc]|remota|injeção|injection/.test(t))
+                return { label: 'Crítico — Banido', cls: 'threat-critical' };
+            if (/traversal|xss|lfi|system.file|sondagem|varredura|path/.test(t))
+                return { label: 'Alto Risco', cls: 'threat-high' };
+            return { label: 'Médio', cls: 'threat-medium' };
+        }
+
+        /* Keep tooltip inside the viewport */
+        function _reposition(cx, cy) {
+            var W = 296, H = TIP.offsetHeight || 210, PAD = 16;
+            var x = cx + PAD;
+            var y = cy + PAD;
+            if (x + W > window.innerWidth  - 8) x = cx - W - PAD;
+            if (y + H > window.innerHeight - 8) y = cy - H - PAD;
+            TIP.style.left = x + 'px';
+            TIP.style.top  = y + 'px';
+        }
+
+        /* Render WAF status badge (overrides attack-type threat if status is known) */
+        function _applyWafStatus(d) {
+            var status = d.waf_status || 'clean';
+            var count  = d.waf_count  || 0;
+            if (status === 'banned') {
+                _el.threat.textContent = '🛑 Bloqueado Permanente';
+                _el.threat.className   = 'ipt-threat-badge threat-critical';
+            } else if (status === 'warning') {
+                _el.threat.textContent = '⚠️ Alerta: ' + count + '/2 Tentativas';
+                _el.threat.className   = 'ipt-threat-badge threat-high';
+            }
+            /* 'clean' → keep the attack-type badge already set */
+        }
+
+        function _renderGeo(d) {
+            var parts = [d.flag, d.city, d.region, d.country].filter(function(v){return v && v !== '?';});
+            _el.geo.textContent = parts.join(' · ') || '—';
+            _el.geo.className   = 'ipt-val';
+
+            var tags = [];
+            if (d.is_proxy)   tags.push('VPN / Proxy');
+            if (d.is_hosting) tags.push('Datacenter');
+
+            var ispText = d.isp && d.isp !== '—' ? d.isp : '';
+            _el.isp.innerHTML = '';
+            if (ispText) {
+                _el.isp.appendChild(document.createTextNode(ispText));
+            }
+            if (tags.length) {
+                var tag = document.createElement('span');
+                tag.className   = 'ipt-proxy-tag';
+                tag.textContent = tags.join(' · ');
+                _el.isp.appendChild(tag);
+            }
+            _el.isp.className = 'ipt-val ipt-sub';
+
+            /* Update the threat badge with authoritative WAF status from the DB */
+            _applyWafStatus(d);
+        }
+
+        function _show(el, cx, cy) {
+            clearTimeout(_hideTimer);
+
+            var ip      = el.dataset.ip      || '';
+            var attack  = el.dataset.attack  || '';
+            var browser = el.dataset.browser || '—';
+            var os      = el.dataset.os      || '—';
+            var th      = _threat(attack);
+
+            _el.ip.textContent      = ip;
+            /* Temporary badge from attack type — overwritten once geo API responds */
+            _el.threat.textContent  = th.label;
+            _el.threat.className    = 'ipt-threat-badge ' + th.cls;
+            _el.os.textContent      = os !== '—' ? os : 'Não identificado';
+            _el.browser.textContent = browser !== '—' ? browser : '';
+            _el.fp.textContent      = _fp(ip);
+
+            if (_geoCache[ip]) {
+                _renderGeo(_geoCache[ip]);
+            } else {
+                _el.geo.textContent = 'Consultando…';
+                _el.geo.className   = 'ipt-val ipt-muted';
+                _el.isp.textContent = '';
+                fetch('/admin/api/ip-tooltip/' + encodeURIComponent(ip))
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(d){
+                        if (!d || d.error) return;
+                        _geoCache[ip] = d;
+                        _renderGeo(d);   /* also calls _applyWafStatus internally */
+                    })
+                    .catch(function(){
+                        _el.geo.textContent = '—';
+                        _el.geo.className   = 'ipt-val';
+                    });
+            }
+
+            _reposition(cx, cy);
+            TIP.setAttribute('aria-hidden', 'false');
+            TIP.classList.add('ipt-visible');
+        }
+
+        function _hide() {
+            _hideTimer = setTimeout(function() {
+                TIP.classList.remove('ipt-visible');
+                TIP.setAttribute('aria-hidden', 'true');
+            }, 90);
+        }
+
+        /* Event delegation — handles every .ip-hover-trigger, present or future */
+        document.addEventListener('mouseover', function(e) {
+            var el = e.target.closest ? e.target.closest('.ip-hover-trigger') : null;
+            if (el) _show(el, e.clientX, e.clientY);
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!TIP.classList.contains('ipt-visible')) return;
+            if (e.target.closest && e.target.closest('.ip-hover-trigger'))
+                _reposition(e.clientX, e.clientY);
+        });
+        document.addEventListener('mouseout', function(e) {
+            if (e.target.closest && e.target.closest('.ip-hover-trigger')) _hide();
+        });
+    })();
+</script>
+
+<!-- ── ADD05: Eye toggle + Delete-by-IP modal ──────────────────────────── -->
+<!-- Delete-by-IP Confirmation Modal -->
+<div id="deleteByIpModal"
+     style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.6);
+            align-items:center;justify-content:center;"
+     onclick="if(event.target===this) closeDeleteModal()">
+    <div style="background:#161b22;border:1px solid #3a0a0a;border-radius:12px;
+                padding:1.5rem;width:min(480px,94vw);z-index:99999;
+                box-shadow:0 8px 40px rgba(0,0,0,.8);">
+        <h5 style="color:#f87171;margin-bottom:.75rem;">
+            <i class="fas fa-trash-can me-2"></i>Remover ocorrências por IP
+        </h5>
+        <p id="deleteByIpMsg" style="color:#e6edf3;font-size:.88rem;margin-bottom:1.25rem;"></p>
+        <div class="d-flex gap-2 justify-content-end">
+            <button class="btn btn-outline-secondary btn-sm" onclick="closeDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger btn-sm" id="deleteByIpConfirmBtn" onclick="confirmDeleteByIp()">
+                <i class="fas fa-trash-can me-1"></i>Confirmar remoção
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ── Eye toggle for Attacks panel ───────────────────────────────────────── */
+    (function() {
+        var STORAGE_KEY = 'secAttacksHidden';
+        var body  = document.getElementById('secAttacksBody');
+        var icon  = document.getElementById('secAttacksEyeIcon');
+        var tgls  = document.querySelectorAll('.sec-attacks-toggle');
+        if (!body) return;
+
+        function setHidden(hidden) {
+            if (hidden) {
+                body.style.transition = 'opacity .2s ease';
+                body.style.opacity = '0';
+                setTimeout(function(){ body.style.display = 'none'; }, 200);
+            } else {
+                body.style.display = '';
+                requestAnimationFrame(function(){
+                    body.style.transition = 'opacity .2s ease';
+                    body.style.opacity = '1';
+                });
+            }
+            tgls.forEach(function(el){ el.style.display = hidden ? 'none' : ''; });
+            if (icon) icon.className = hidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+            sessionStorage.setItem(STORAGE_KEY, hidden ? '1' : '0');
+        }
+
+        /* Restore state on load */
+        if (sessionStorage.getItem(STORAGE_KEY) === '1') {
+            body.style.display = 'none';
+            body.style.opacity = '0';
+            tgls.forEach(function(el){ el.style.display = 'none'; });
+            if (icon) icon.className = 'fas fa-eye-slash';
+        }
+
+        window.secToggleAttacks = function() {
+            setHidden(body.style.display !== 'none' ? true : false);
+        };
+    })();
+
+    /* ── Delete-by-IP Modal ─────────────────────────────────────────────────── */
+    var _deleteIpTarget = null;
+
+    function openDeleteByIpModal(ip, count) {
+        _deleteIpTarget = ip;
+        var msg = document.getElementById('deleteByIpMsg');
+        if (msg) {
+            msg.innerHTML =
+                'Deseja remover todas as <strong style="color:#fbbf24;">' + count +
+                ' ocorrência(s)</strong> registradas para o IP <code style="color:#f87171;background:#1a0505;padding:1px 6px;border-radius:4px;">' +
+                ip + '</code> do sistema?<br><small style="color:#6b7280;margin-top:.4rem;display:block;">Esta ação irá apagar todos os registros de ataques deste IP de uma vez.</small>';
+        }
+        var modal = document.getElementById('deleteByIpModal');
+        if (modal) { modal.style.display = 'flex'; }
+    }
+
+    function closeDeleteModal() {
+        var modal = document.getElementById('deleteByIpModal');
+        if (modal) { modal.style.display = 'none'; }
+        _deleteIpTarget = null;
+    }
+
+    function confirmDeleteByIp() {
+        if (!_deleteIpTarget) return;
+        var btn = document.getElementById('deleteByIpConfirmBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Removendo…'; }
+
+        fetch('/admin/suspicious/delete-by-ip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip: _deleteIpTarget })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            closeDeleteModal();
+            if (d.ok) {
+                /* Remove the attacker block for this IP from the DOM instantly */
+                var blocks = document.querySelectorAll('.attacker-block[data-ip="' + _deleteIpTarget + '"]');
+                blocks.forEach(function(block){
+                    block.style.transition = 'opacity .3s ease';
+                    block.style.opacity = '0';
+                    setTimeout(function(){ block.remove(); }, 300);
+                });
+            } else {
+                showSiteNotice('Erro ao remover: ' + (d.error || 'desconhecido'), { type: 'error' });
+            }
+        })
+        .catch(function(err) {
+            closeDeleteModal();
+            showSiteNotice('Erro de rede: ' + err, { type: 'error' });
+        });
     }
 </script>
 {% include 'admin/_chat_widget.html' %}

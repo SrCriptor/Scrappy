@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <!-- confirm-modal helper (idempotent if already loaded) -->
+<script src="/static/js/site-notice.js"></script>
 <script src="/static/js/confirm-modal.js"></script>
 <!-- ═══ FLOATING CHAT BALL ═══════════════════════════════════════════════ -->
 <style>
@@ -213,19 +214,34 @@
         flex:1;overflow:hidden;flex-direction:column;display:none;position:relative;
     }
     #privListView {
-        flex:1;overflow:hidden;display:flex !important;flex-direction:column !important;
-        justify-content:flex-start !important;align-items:stretch !important;
+        flex:1;overflow:hidden;display:flex;flex-direction:column;
+        justify-content:flex-start;align-items:stretch;
     }
     #privRoomsList {
-        flex:1;padding:0 .4rem .4rem;margin:0 !important;
         display:flex !important;flex-direction:column !important;
         justify-content:flex-start !important;align-content:flex-start !important;
-        /* Premium hidden scrollbar — keep wheel/touch scroll fully functional */
-        overflow-y:scroll !important;
-        scrollbar-width:none !important;
-        -ms-overflow-style:none !important;
+        margin:0 !important;padding:0 !important;
+        overflow:visible !important;
     }
-    #privRoomsList::-webkit-scrollbar { display:none !important; width:0 !important; height:0 !important; }
+    /* ── Scroll container that fills available flex space and clips with scrollbar ── */
+    .chat-private-list-container {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding: 0 4px 0 0 !important;
+    }
+    /* Cyberpunk minimalist scrollbar */
+    .chat-private-list-container::-webkit-scrollbar {
+        width: 4px !important;
+    }
+    .chat-private-list-container::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.01) !important;
+    }
+    .chat-private-list-container::-webkit-scrollbar-thumb {
+        background: rgba(56, 189, 248, 0.3) !important;
+        border-radius: 10px !important;
+    }
     .priv-footer {
         padding:.45rem .6rem;border-top:1px solid #21262d;background:#161b22;flex-shrink:0;
     }
@@ -476,7 +492,9 @@
     <div id="chatPrivadoPane">
         <!-- Room list view -->
         <div id="privListView">
-            <div id="privRoomsList"></div>
+            <div class="chat-private-list-container">
+                <div id="privRoomsList"></div>
+            </div>
             {% if admin.role != 'owner' %}
             <div class="priv-footer">
                 <button class="priv-new-btn" onclick="openNewRoomOverlay()">
@@ -631,23 +649,22 @@
         const activeTab = document.getElementById(tabMap[ch]);
         if (activeTab) activeTab.classList.add('active');
 
-        const msgs     = document.getElementById('chatMessages');
-        const inputRow = document.getElementById('chatInputRow');
-        const privPane = document.getElementById('chatPrivadoPane');
-        const intBar   = document.getElementById('internalAccessBar');
-        const teamBar  = document.getElementById('teamAccessBar');
+        const msgs      = document.getElementById('chatMessages');
+        const inputRow  = document.getElementById('chatInputRow');
+        const privPane  = document.getElementById('chatPrivadoPane');
+        const bodyFlex  = document.getElementById('chatBodyFlex');
+        const intBar    = document.getElementById('internalAccessBar');
+        const teamBar   = document.getElementById('teamAccessBar');
 
         if (ch === 'privado') {
-            msgs.style.display    = 'none';
-            inputRow.style.display = 'none';
+            if (bodyFlex)  bodyFlex.style.display  = 'none';
             privPane.style.display = 'flex';
             if (intBar)  intBar.style.display  = 'none';
             if (teamBar) teamBar.style.display  = 'none';
             showPrivListView();
             startPrivListPoll();
         } else {
-            msgs.style.display    = 'flex';
-            inputRow.style.display = 'flex';
+            if (bodyFlex)  bodyFlex.style.display  = 'flex';
             privPane.style.display = 'none';
             // Access bars stay CLOSED by default — only open on gear click
             if (intBar)  intBar.style.display  = 'none';
@@ -1006,6 +1023,19 @@
                         const typingEl = document.getElementById('privTypingIndicator');
                         if (typingEl) typingEl.textContent = '';
                         if (_privRoomsMap[_privRoomId]) _privRoomsMap[_privRoomId].closed = true;
+                        // Auto-return to list after a short delay with fade-out animation
+                        const roomView = document.getElementById('privRoomView');
+                        if (roomView) {
+                            setTimeout(() => {
+                                roomView.style.transition = 'opacity 0.4s ease';
+                                roomView.style.opacity = '0';
+                                setTimeout(() => {
+                                    roomView.style.opacity = '';
+                                    roomView.style.transition = '';
+                                    privBackToList();
+                                }, 420);
+                            }, 2200);
+                        }
                     }
                 } catch {}
             }
@@ -1556,6 +1586,66 @@
         const toggleBtn = document.getElementById('chatDrawerToggleBtn');
         if (drawer.contains(e.target) || (toggleBtn && toggleBtn.contains(e.target))) return;
         drawer.classList.remove('open');
+    });
+})();
+
+/* ── Staff device registration ───────────────────────────────────────────
+   Runs once per browser session after the authenticated admin shell loads.
+   Raw hardware values are sent only to the protected endpoint; the server
+   persists a keyed digest, never the raw fingerprint. */
+(function registerStaffDevice() {
+    'use strict';
+    if (window.__staffDeviceRegistrationStarted) return;
+    window.__staffDeviceRegistrationStarted = true;
+
+    let canvasFp = '';
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 60;
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(128, 2, 90, 22);
+        ctx.font = '15px Arial';
+        ctx.fillStyle = '#069';
+        ctx.fillText('staff-device-probe', 2, 15);
+        ctx.fillStyle = 'rgba(102,204,0,.75)';
+        ctx.font = '12px Times New Roman';
+        ctx.fillText('hardware\u2665', 4, 34);
+        ctx.strokeStyle = 'rgba(255,80,80,.5)';
+        ctx.arc(200, 30, 18, 0, Math.PI * 2);
+        ctx.stroke();
+        const encoded = canvas.toDataURL();
+        let hash = 0;
+        for (let i = 0; i < encoded.length; i += 1) {
+            hash = Math.imul(31, hash) + encoded.charCodeAt(i) | 0;
+        }
+        canvasFp = 'cnv_' + (hash >>> 0).toString(16).padStart(8, '0');
+    } catch (_) {}
+
+    if (!canvasFp) return;
+    const payload = {
+        canvas_fp: canvasFp,
+        cores: navigator.hardwareConcurrency || '?',
+        memory: navigator.deviceMemory ? navigator.deviceMemory + 'GB' : '?',
+        platform: navigator.platform || '?',
+        screen: screen.width + 'x' + screen.height,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '?',
+        languages: (navigator.languages || [navigator.language]).join(',')
+    };
+    fetch('/admin/api/staff-device', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Canvas-FP': canvasFp
+        },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+    }).then(function(response) {
+        if (!response.ok) window.__staffDeviceRegistrationStarted = false;
+    }).catch(function() {
+        window.__staffDeviceRegistrationStarted = false;
     });
 })();
 </script>

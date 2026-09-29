@@ -51,7 +51,7 @@
             gap: 10px;
             margin-bottom: 12px;
         }
-        @media (min-width: 600px) {
+        @media (min-width: 768px) {
             .card-header-area {
                 flex-direction: row;
                 justify-content: space-between;
@@ -68,10 +68,12 @@
             display: flex;
             gap: 8px;
             width: 100%;
+            flex-wrap: wrap;
         }
-        @media (min-width: 600px) {
+        @media (min-width: 768px) {
             .btn-group {
                 width: auto;
+                flex-wrap: nowrap;
             }
         }
         .btn-copy {
@@ -91,7 +93,7 @@
             transition: all 0.2s ease;
             white-space: nowrap;
         }
-        @media (min-width: 600px) {
+        @media (min-width: 768px) {
             .btn-copy {
                 flex: none;
             }
@@ -102,6 +104,16 @@
         }
         .btn-copy:active {
             transform: scale(0.98);
+        }
+        .btn-rodando {
+            border-color: #00ff88 !important;
+            color: #00ff88 !important;
+            cursor: pointer;
+        }
+        .btn-rodando:hover {
+            background-color: #da3637 !important;
+            border-color: #ff6b6b !important;
+            color: #ffffff !important;
         }
         .terminal-box {
             background: #000000;
@@ -145,6 +157,10 @@
         <div class="card-header-area">
             <div class="card-title">🤖 Automação de Instâncias ARM (Sempre Grátis)</div>
             <div class="btn-group">
+                <!-- BOTÃO ADAPTATIVO -->
+                <button class="btn-copy" id="btn-main" onclick="acaoBotaoPrincipal()" style="border-color: #238636; color: #39ff14;">
+                    <span id="main-icon">🟩</span> <span id="main-text">Iniciar Bot</span>
+                </button>
                 <!-- BOTÃO DE REINICIAR -->
                 <button class="btn-copy" id="btn-reboot" onclick="reiniciarBot()" style="border-color: #bc7c14; color: #ffcc00;">
                     <span id="reboot-icon">🔄</span> <span id="reboot-text">Reiniciar</span>
@@ -162,11 +178,16 @@
     </div>
     
     <div class="footer-info">
-        Acesso restrito. Requisições em segundo plano protegidas contra sleep de 48h.
+        Acesso restrito. Estado persistido localmente contra reciclagem do container.
     </div>
 </div>
 
 <script>
+
+    // CORRIGIDO: Variáveis sem espaços e com nomes curtos/profissionais!
+    let botEstaRodandoAtualmente = false;
+    let emHover = false;
+
     function colorirLinha(texto) {
         let classe = 'log-info';
         if (texto.includes('SUCESSO') || texto.includes('🎉') || texto.includes('SUCCEEDED') || texto.includes('✅')) {
@@ -179,6 +200,56 @@
         return `<p class="log-line ${classe}">${texto}</p>`;
     }
 
+    function gerenciarVisualBot(estaRodando) {
+        const btn = document.getElementById('btn-main');
+        const icon = document.getElementById('main-icon');
+        const text = document.getElementById('main-text');
+        botEstaRodandoAtualmente = estaRodando;
+        
+        if (estaRodando) {
+            btn.classList.add('btn-rodando');
+            
+            // Gerencia os estados de Hover de forma isolada
+            btn.onmouseenter = () => {
+                emHover = true;
+                icon.textContent = "🛑";
+                text.textContent = "Parar Bot";
+            };
+            btn.onmouseleave = () => {
+                emHover = false;
+                icon.textContent = "🟢";
+                text.textContent = "Rodando";
+            };
+
+            // TRAVA INTELIGENTE: Se o terminal atualizar a cada 4s mas você estiver com o mouse em cima,
+            // pula a redefinição de texto para o botão não ficar piscando!
+            if (!emHover) {
+                icon.textContent = "🟢";
+                text.textContent = "Rodando";
+            }
+        } else {
+            // Se o bot foi desligado, limpa os hovers e restaura o botão original para o padrão verde
+            btn.classList.remove('btn-rodando');
+            btn.onmouseenter = null;
+            btn.onmouseleave = null;
+            emHover = false;
+            
+            icon.textContent = "🟩";
+            text.textContent = "Iniciar Bot";
+            btn.style.opacity = "1";
+            btn.style.borderColor = "#238636";
+            btn.style.color = "#39ff14";
+        }
+    }
+
+    function acaoBotaoPrincipal() {
+        if (botEstaRodandoAtualmente) {
+            pararBot();
+        } else {
+            iniciarBot();
+        }
+    }
+
     function atualizarTerminal() {
         fetch('/admin/oracle-logs-api')
             .then(response => {
@@ -189,17 +260,103 @@
                 const terminal = document.getElementById('terminal');
                 const linhas = data.logs.split('\n');
                 let htmlResultado = '';
+                let botAtivoNosLogs = false;
                 
                 linhas.forEach(linha => {
                     if(linha.trim() !== '') {
                         htmlResultado += colorirLinha(linha);
+                        if(linha.includes('Tentativa #') || linha.includes('⏱️') || linha.includes('[SISTEMA 🟢]')) {
+                            botAtivoNosLogs = true;
+                        }
+                        if(linha.includes('🛑 [PARADO]') || linha.includes('🛑 [SISTEMA]') || linha.includes('🎉 SUCESSO!')) {
+                            botAtivoNosLogs = false;
+                        }
                     }
                 });
                 
                 terminal.innerHTML = htmlResultado;
                 terminal.scrollTop = terminal.scrollHeight;
+                
+                gerenciarVisualBot(botAtivoNosLogs);
             })
             .catch(err => console.error("Falha ao atualizar painel:", err));
+    }
+
+    function iniciarBot() {
+        const btn = document.getElementById('btn-main');
+        const icon = document.getElementById('main-icon');
+        const text = document.getElementById('main-text');
+
+        if (!confirm("Deseja iniciar o loop de automação da Oracle agora?")) return;
+
+        text.textContent = "Iniciando...";
+        icon.textContent = "⏳";
+        btn.style.opacity = "0.6";
+
+        fetch('/admin/oracle-start', { method: 'POST' })
+            .then(response => {
+                if (!response.ok) throw new Error('Não autorizado');
+                return response.json();
+            })
+            .then(data => {
+                gerenciarVisualBot(true);
+            })
+            .catch(err => {
+                if (typeof showSiteNotice === 'function') {
+                    showSiteNotice("Erro ao iniciar o bot. Verifique sua sessão.", { type: 'error' });
+                } else {
+                    alert("Erro ao iniciar o bot. Verifique sua sessão.");
+                }
+                gerenciarVisualBot(false);
+            });
+    }
+
+    function pararBot() {
+        if (!confirm("Deseja parar a automação da Oracle agora?")) return;
+
+        fetch('/admin/oracle-stop', { method: 'POST' })
+            .then(response => {
+                if (!response.ok) throw new Error('Não autorizado');
+                return response.json();
+            })
+            .then(data => {
+                gerenciarVisualBot(false);
+            })
+            .catch(err => {
+                alert("Erro ao parar o bot. Verifique sua sessão.");
+            });
+    }
+
+    function reiniciarBot() {
+        const btn = document.getElementById('btn-reboot');
+        const txt = document.getElementById('reboot-text');
+        
+        if(!confirm("Deseja limpar os logs e recarregar os Secrets do ambiente?")) return;
+        
+        txt.textContent = "Reiniciando...";
+        btn.style.opacity = "0.6";
+        
+        fetch('/admin/oracle-reboot', { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) window.location.reload();
+                return response.json();
+            })
+            .then(data => {
+                setTimeout(() => {
+                    txt.textContent = "Reiniciar";
+                    btn.style.opacity = "1";
+                    document.getElementById('terminal').innerHTML = '<p class="log-line log-info">[🔄] Sinais de reboot enviados. Atualizando processos...</p>';
+                    gerenciarVisualBot(true);
+                }, 1500);
+            })
+            .catch(err => {
+                console.error("Erro no reboot:", err);
+                if (typeof showSiteNotice === 'function') {
+                    showSiteNotice("Erro ao enviar comando.", { type: 'error' });
+                }
+                txt.textContent = "Reiniciar";
+                btn.style.opacity = "1";
+            });
     }
 
     function copiarLogs() {
@@ -229,40 +386,15 @@
                 botao.style.color = "#c9d1d9";
             }, 2500);
         } catch (err) {
-            alert('Erro ao copiar.');
+            console.error('Erro ao copiar');
         }
         document.body.removeChild(elementoFantasma);
-    }
-
-    function reiniciarBot() {
-        const btn = document.getElementById('btn-reboot');
-        const txt = document.getElementById('reboot-text');
-        const ico = document.getElementById('reboot-icon');
-        
-        if(!confirm("Deseja limpar os logs e recarregar os Secrets do ambiente?")) return;
-        
-        txt.textContent = "Reiniciando...";
-        btn.style.opacity = "0.6";
-        
-        fetch('/admin/oracle-reboot', { method: 'POST' })
-            .then(response => response.json())
-            .then(data => {
-                setTimeout(() => {
-                    txt.textContent = "Reiniciar";
-                    btn.style.opacity = "1";
-                    document.getElementById('terminal').innerHTML = '<p class="log-line log-info">[🔄] Sinais de reboot enviados. Atualizando processos...</p>';
-                }, 1500);
-            })
-            .catch(err => {
-                alert("Erro ao enviar comando.");
-                txt.textContent = "Reiniciar";
-                btn.style.opacity = "1";
-            });
     }
 
     setInterval(atualizarTerminal, 4000);
     atualizarTerminal();
 </script>
+<script src="/static/js/site-notice.js"></script>
 
 </body>
 </html>

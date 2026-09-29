@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Relatório Forense — {{ ip }}</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0b0b0f;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 0 0 80px;
+    min-height: 100vh;
+  }
+
+  /* ── Cover / Hero ─────────────────────────────────────────────────── */
+  .cover {
+    background: linear-gradient(135deg, #0d1117 0%, #0f1923 50%, #100d1a 100%);
+    border-bottom: 1px solid #21262d;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Ambient glow blobs */
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: -80px;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(239,68,68,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; right: 5%;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(139,92,246,.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Top bar */
+  .cover-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 40px;
+    border-bottom: 1px solid #21262d;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .cover-site-name {
+    font-size: .75rem;
+    font-weight: 700;
+    color: #8b949e;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .cover-site-name span { color: #f87171; }
+  .cover-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cover-stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(239,68,68,.10);
+    border: 1px solid rgba(239,68,68,.35);
+    color: #f87171;
+    font-size: .62rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+  .cover-stamp-sys {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(99,102,241,.10);
+    border: 1px solid rgba(99,102,241,.3);
+    color: #a5b4fc;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  /* Main cover area */
+  .cover-main {
+    padding: 40px 40px 36px;
+    position: relative;
+    z-index: 1;
+  }
+  .cover-report-label {
+    font-size: .65rem;
+    font-weight: 700;
+    color: #6b7280;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .cover-title {
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    color: #e6edf3;
+    line-height: 1.25;
+    margin-bottom: 6px;
+  }
+  .cover-title .accent { color: #f87171; }
+  .cover-subtitle {
+    font-size: .85rem;
+    color: #6b7280;
+    margin-bottom: 32px;
+  }
+
+  /* Meta cards grid */
+  .cover-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .cover-meta-card {
+    background: rgba(22,27,34,.85);
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 14px 16px;
+    backdrop-filter: blur(4px);
+  }
+  .cover-meta-label {
+    font-size: .6rem;
+    color: #4b5563;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .cover-meta-value {
+    font-size: .88rem;
+    font-weight: 700;
+    color: #e6edf3;
+    word-break: break-all;
+  }
+  .cover-meta-value.ip-value {
+    font-family: 'Courier New', monospace;
+    font-size: 1.05rem;
+    color: #60a5fa;
+    letter-spacing: .06em;
+  }
+  .cover-meta-value.danger { color: #f87171; }
+  .cover-meta-value.success { color: #34d399; }
+  .cover-meta-value.warn { color: #fbbf24; }
+
+  /* ── Content Wrapper ───────────────────────────────────────────────── */
+  .content { max-width: 1060px; margin: 0 auto; padding: 36px 20px 0; }
+
+  /* ── Section Card ─────────────────────────────────────────────────── */
+  .section { margin-bottom: 28px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 18px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #8b949e;
+  }
+  .section-header .s-icon {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem;
+    flex-shrink: 0;
+  }
+  .s-icon-red    { background: rgba(239,68,68,.15);  color: #f87171; }
+  .s-icon-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+  .s-icon-amber  { background: rgba(245,158,11,.15); color: #fbbf24; }
+  .s-icon-purple { background: rgba(139,92,246,.15); color: #a78bfa; }
+  .s-icon-green  { background: rgba(52,211,153,.15); color: #34d399; }
+  .s-icon-teal   { background: rgba(20,184,166,.15); color: #2dd4bf; }
+  .section-body {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+  }
+  .empty-state {
+    padding: 32px;
+    text-align: center;
+    color: #4b5563;
+    font-size: .82rem;
+    font-style: italic;
+  }
+
+  /* ── Stats Grid ───────────────────────────────────────────────────── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  .stat-cell {
+    padding: 22px 14px;
+    text-align: center;
+    border-right: 1px solid #21262d;
+    border-bottom: 1px solid #21262d;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-num {
+    font-size: 2.1rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 5px;
+  }
+  .stat-label { font-size: .62rem; color: #4b5563; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .c-red    { color: #f87171; }
+  .c-blue   { color: #60a5fa; }
+  .c-amber  { color: #fbbf24; }
+  .c-purple { color: #a78bfa; }
+  .c-green  { color: #34d399; }
+  .c-slate  { color: #6b7280; }
+  .c-teal   { color: #2dd4bf; }
+
+  /* ── Tables ───────────────────────────────────────────────────────── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  thead tr { background: #161b22; }
+  thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #6b7280;
+    white-space: nowrap;
+    border-bottom: 1px solid #30363d;
+  }
+  tbody tr { border-bottom: 1px solid #21262d; transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.025); }
+  tbody td { padding: 10px 14px; vertical-align: top; word-break: break-word; color: #c9d1d9; }
+  .mono { font-family: 'Courier New', monospace; font-size: .78rem; }
+
+  /* ── Pills / Badges ───────────────────────────────────────────────── */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: .65rem;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: .03em;
+  }
+  /* Risk badges — scarlet/red for attack types */
+  .pill-risk-xss        { background: #3d1a1a; color: #f87171; border: 1px solid #7f1d1d; }
+  .pill-risk-sql        { background: #1a1a3d; color: #818cf8; border: 1px solid #312e81; }
+  .pill-risk-traversal  { background: #1a1f0d; color: #86efac; border: 1px solid #14532d; }
+  .pill-risk-waf        { background: #2d0e0e; color: #fca5a5; border: 1px solid #991b1b; }
+  .pill-risk-credential { background: #3d1a00; color: #fdba74; border: 1px solid #92400e; }
+  .pill-risk-brute      { background: #3d0000; color: #f87171; border: 1px solid #b91c1c; }
+  .pill-risk-generic    { background: #1e1e28; color: #94a3b8; border: 1px solid #374151; }
+  /* Status badges */
+  .pill-vpn    { background: #451a03; color: #fdba74; border: 1px solid #92400e; }
+  .pill-dc     { background: #1a1a3d; color: #818cf8; border: 1px solid #312e81; }
+  .pill-ok     { background: #0a1f12; color: #34d399; border: 1px solid #065f46; }
+  .pill-method { background: #1c2128; color: #8b949e; border: 1px solid #30363d; }
+
+  /* ── URL payload box ──────────────────────────────────────────────── */
+  .url-payload {
+    font-family: 'Courier New', monospace;
+    font-size: .68rem;
+    color: #f87171;
+    background: #1a0505;
+    border: 1px solid #3a0a0a;
+    padding: 5px 9px;
+    border-radius: 5px;
+    word-break: break-all;
+    max-width: 380px;
+    line-height: 1.5;
+  }
+
+  /* ── Incident Card ────────────────────────────────────────────────── */
+  .inc-card {
+    border-bottom: 1px solid #21262d;
+    padding: 20px 22px;
+  }
+  .inc-card:last-child { border-bottom: none; }
+  .inc-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #21262d;
+  }
+  .case-num {
+    font-size: .6rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #4b5563;
+    background: #161b22;
+    border: 1px solid #30363d;
+    padding: 3px 9px;
+    border-radius: 4px;
+  }
+  .inc-ip {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    color: #f87171;
+    font-size: .92rem;
+    letter-spacing: .04em;
+  }
+  .inc-ts { font-size: .72rem; color: #4b5563; }
+  .inc-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .inc-block {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 13px 15px;
+  }
+  .inc-block-title {
+    font-size: .58rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #4b5563;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+  .kv-k { font-size: .7rem; color: #4b5563; white-space: nowrap; }
+  .kv-v { font-size: .7rem; color: #c9d1d9; word-break: break-all; font-weight: 500; }
+  .fp-chip {
+    font-family: 'Courier New', monospace;
+    font-size: .68rem;
+    color: #a78bfa;
+    background: #1a0f2e;
+    border: 1px solid #3b2a6e;
+    padding: 4px 9px;
+    border-radius: 6px;
+    word-break: break-all;
+    display: block;
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+  .rtc-chip {
+    font-family: 'Courier New', monospace;
+    font-size: .7rem;
+    color: #34d399;
+    background: #0a1f17;
+    border: 1px solid #065f46;
+    padding: 4px 9px;
+    border-radius: 6px;
+    word-break: break-all;
+    display: block;
+    margin-top: 4px;
+  }
+  .ua-box {
+    font-family: 'Courier New', monospace;
+    font-size: .65rem;
+    color: #6b7280;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    padding: 7px 11px;
+    border-radius: 6px;
+    word-break: break-all;
+    margin-top: 12px;
+    line-height: 1.55;
+  }
+  .ua-box strong { color: #8b949e; font-family: inherit; }
+
+  /* ── Linked IPs alert ────────────────────────────────────────────── */
+  .link-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: #1a0f00;
+    border: 1px solid #92400e;
+    border-left: 4px solid #f59e0b;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 16px 22px;
+    font-size: .8rem;
+    color: #fdba74;
+    line-height: 1.6;
+  }
+  .link-alert-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 2px; }
+  .link-alert strong { color: #fcd34d; }
+
+  /* ── Divider ─────────────────────────────────────────────────────── */
+  .section-divider {
+    height: 1px;
+    background: #21262d;
+    margin: 0;
+  }
+
+  /* ── Footer ──────────────────────────────────────────────────────── */
+  .doc-footer {
+    max-width: 1060px;
+    margin: 52px auto 0;
+    padding: 28px 20px;
+    border-top: 1px solid #21262d;
+    position: relative;
+  }
+  .doc-footer-inner {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px 28px;
+  }
+  .footer-seal {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .footer-seal-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(239,68,68,.12);
+    border: 1px solid rgba(239,68,68,.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .footer-seal-title {
+    font-size: .78rem;
+    font-weight: 700;
+    color: #e6edf3;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .footer-seal-sub {
+    font-size: .65rem;
+    color: #4b5563;
+    margin-top: 1px;
+  }
+  .footer-body {
+    font-size: .75rem;
+    color: #6b7280;
+    line-height: 1.7;
+    margin-bottom: 16px;
+    padding-left: 46px;
+  }
+  .footer-body .highlight { color: #94a3b8; font-weight: 600; }
+  .footer-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 46px;
+    font-size: .68rem;
+  }
+  .footer-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #6b7280;
+  }
+  .footer-meta-chip span { color: #8b949e; font-weight: 600; }
+
+  /* ── Print ───────────────────────────────────────────────────────── */
+  @media print {
+    body  { background: #0b0b0f !important; }
+    .cover, .inc-block, .section-body, .doc-footer-inner {
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+  }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .cover-main    { padding: 28px 20px; }
+    .cover-topbar  { padding: 12px 20px; }
+    .cover-title   { font-size: 1.25rem; }
+    .inc-body      { grid-template-columns: 1fr; }
+    .cover-meta-grid { grid-template-columns: 1fr 1fr; }
+    .stats-grid    { grid-template-columns: repeat(2, 1fr); }
+    .content       { padding: 20px 12px 0; }
+    .footer-body, .footer-meta { padding-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     COVER
+════════════════════════════════════════════════════════════════════ -->
+<div class="cover">
+
+  <!-- Top bar -->
+  <div class="cover-topbar">
+    <div class="cover-site-name">
+      &#x1F6E1; <span>Scraper de Mídia Web</span> &nbsp;·&nbsp; Sistema de Segurança &amp; Firewall
+    </div>
+    <div class="cover-topbar-right">
+      <span class="cover-stamp-sys">&#x1F510; Gerado pelo Sistema</span>
+      <span class="cover-stamp">&#x26A0; CONFIDENCIAL</span>
+    </div>
+  </div>
+
+  <!-- Main hero -->
+  <div class="cover-main">
+    <div class="cover-report-label">&#x1F4CB; Documento de Inteligência Cibernética</div>
+    <div class="cover-title">
+      Relatório de Inteligência<br>
+      <span class="accent">Forense &amp; Auditoria de Segurança</span>
+    </div>
+    <div class="cover-subtitle">
+      Consolidado automático de evidências — Infraestrutura Protegida &nbsp;|&nbsp; Uso exclusivo para autoridades competentes
+    </div>
+
+    <div class="cover-meta-grid">
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F4CC; IP Investigado</div>
+        <div class="cover-meta-value ip-value">{{ ip }}</div>
+      </div>
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F4C5; Gerado em (UTC)</div>
+        <div class="cover-meta-value">{{ now_str }}</div>
+      </div>
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F4CA; Total de Eventos</div>
+        <div class="cover-meta-value {% if total_events > 0 %}danger{% else %}success{% endif %}">{{ total_events }} registro(s)</div>
+      </div>
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F464; Gerado por</div>
+        <div class="cover-meta-value">{{ generated_by }}</div>
+      </div>
+      {% if primary.get('geo_country') %}
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F30D; Geolocalização</div>
+        <div class="cover-meta-value">
+          {{ primary.get('geo_city','—') }}, {{ primary.get('geo_region','—') }}<br>
+          <span style="color:#6b7280;font-size:.8em;">{{ primary.get('geo_country','—') }}</span>
+        </div>
+      </div>
+      {% endif %}
+      {% if primary.get('geo_isp') %}
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F4E1; Provedor / ISP</div>
+        <div class="cover-meta-value" style="color:#8b949e;">{{ primary.get('geo_isp','—') }}</div>
+      </div>
+      {% endif %}
+      {% if primary.get('geo_is_proxy') %}
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x1F575; Infraestrutura</div>
+        <div class="cover-meta-value danger">VPN / Proxy Detectado</div>
+      </div>
+      {% endif %}
+      {% if data.get('linked_ips') %}
+      <div class="cover-meta-card">
+        <div class="cover-meta-label">&#x26A0; IPs Alternativos (HW)</div>
+        <div class="cover-meta-value warn">{{ data['linked_ips']|length }} IP(s) vinculado(s)</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     CONTENT
+════════════════════════════════════════════════════════════════════ -->
+<div class="content">
+
+  <!-- ─── 0. Resumo Estatístico ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="s-icon s-icon-blue">&#x1F4CA;</span>
+      Resumo Estatístico do Caso
+    </div>
+    <div class="section-body">
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-num c-red">{{ data['brute_force']|length }}</div>
+          <div class="stat-label">Força Bruta</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num c-amber">{{ data['suspicious']|length }}</div>
+          <div class="stat-label">Ataques na URL</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num c-slate">{{ data['audit']|length }}</div>
+          <div class="stat-label">Auditoria</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num c-purple">{{ data.get('linked_ips',[])|length }}</div>
+          <div class="stat-label">IPs Vinculados</div>
+        </div>
+        <div class="stat-cell">
+          {% set total_fails = namespace(v=0) %}
+          {% for inc in data['brute_force'] %}{% set total_fails.v = total_fails.v + (inc.failures or 0) %}{% endfor %}
+          <div class="stat-num c-red">{{ total_fails.v }}</div>
+          <div class="stat-label">Tentativas de Acesso</div>
+        </div>
+        <div class="stat-cell">
+          {% set proxy_count = data['brute_force'] | selectattr('geo_is_proxy') | list | length %}
+          <div class="stat-num c-amber">{{ proxy_count }}</div>
+          <div class="stat-label">Incidentes via VPN</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 1. IPs Vinculados (mesmo hardware) ──────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="s-icon s-icon-amber">&#x26A0;</span>
+      Seção 1 — IPs Alternativos Detectados (Mesmo Dispositivo Físico)
+    </div>
+    <div class="section-body">
+      {% if data.get('linked_ips') %}
+      <div class="link-alert">
+        <span class="link-alert-icon">&#x1F50D;</span>
+        <div>
+          <strong>Alerta de evasão por troca de IP:</strong>
+          O sistema detectou que o mesmo dispositivo físico (identificado pelo fingerprint de Canvas/GPU)
+          operou a partir de <strong>{{ data['linked_ips']|length + 1 }} endereço(s) IP diferentes</strong>.
+          Forte indicativo de rotação de VPN, proxy encadeado ou mudança de provedor pelo mesmo agressor.
+          Todos os IPs abaixo devem ser incluídos no mandado judicial.
+        </div>
+      </div>
+      <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>IP Alternativo</th>
+            <th>País / Cidade</th>
+            <th>ISP / Provedor</th>
+            <th>VPN / Proxy</th>
+            <th>S.O.</th>
+            <th>Navegador</th>
+            <th>Primeira Ocorrência</th>
+            <th>Última Ocorrência</th>
+            <th>Canvas Fingerprint</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in data['linked_ips'] %}
+          <tr>
+            <td class="c-slate" style="font-weight:700;">{{ loop.index }}</td>
+            <td><span class="mono c-red" style="font-weight:700;">{{ r.ip }}</span></td>
+            <td>{{ r.get('geo_country','—') }}{% if r.get('geo_city') %}<br><span style="font-size:.7rem;color:#6b7280;">{{ r.geo_city }}</span>{% endif %}</td>
+            <td style="font-size:.72rem;">{{ r.get('geo_isp','—') }}</td>
+            <td>
+              {% if r.get('geo_is_proxy') %}
+              <span class="pill pill-vpn">&#x1F575; VPN / Proxy</span>
+              {% else %}
+              <span class="pill pill-ok">&#x2714; Não detectado</span>
+              {% endif %}
+            </td>
+            <td style="font-size:.72rem;">{{ r.get('operating_system','—') }}</td>
+            <td style="font-size:.72rem;">{{ r.get('browser_name','—') }}</td>
+            <td class="mono" style="font-size:.68rem;color:#6b7280;">{{ r.get('first_seen','—') }}</td>
+            <td class="mono" style="font-size:.68rem;color:#6b7280;">{{ r.get('last_seen','—') }}</td>
+            <td>
+              {% if r.get('canvas_fp') %}
+              <span class="fp-chip" style="font-size:.62rem;">{{ r.canvas_fp[:24] }}{% if r.canvas_fp|length > 24 %}…{% endif %}</span>
+              {% else %}<span style="color:#4b5563;font-size:.7rem;">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state">&#x2705; Nenhum IP alternativo detectado para o mesmo hardware.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── 2. Ataques Suspeitos na URL ─────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="s-icon s-icon-amber">&#x1F6A8;</span>
+      Seção 2 — Ataques Suspeitos na URL (WAF / IDS)
+    </div>
+    <div class="section-body">
+      {% if data['suspicious'] %}
+      <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>Tipo de Ataque</th>
+            <th>Método</th>
+            <th>S.O.</th>
+            <th>Navegador</th>
+            <th style="text-align:center;">Ocorr.</th>
+            <th>Payload / URL Maliciosa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in data['suspicious'] %}
+          {% set atype = (r.attack_type or '')|lower %}
+          <tr>
+            <td class="c-slate" style="font-weight:700;">{{ loop.index }}</td>
+            <td class="mono" style="font-size:.7rem;white-space:nowrap;color:#6b7280;">{{ r.ts }}</td>
+            <td>
+              {% if 'xss' in atype %}
+              <span class="pill pill-risk-xss">&#x26A1; XSS</span>
+              {% elif 'sql' in atype %}
+              <span class="pill pill-risk-sql">&#x1F4C0; SQLi</span>
+              {% elif 'traversal' in atype or 'path' in atype %}
+              <span class="pill pill-risk-traversal">&#x1F4C1; Path Traversal</span>
+              {% elif 'waf' in atype %}
+              <span class="pill pill-risk-waf">&#x1F6AB; WAF-WARN</span>
+              {% elif 'credential' in atype or 'exfil' in atype %}
+              <span class="pill pill-risk-credential">&#x1F511; Credential Exfiltration</span>
+              {% elif 'brute' in atype %}
+              <span class="pill pill-risk-brute">&#x1F534; Força Bruta</span>
+              {% else %}
+              <span class="pill pill-risk-generic">{{ r.attack_type }}</span>
+              {% endif %}
+            </td>
+            <td><span class="pill pill-method">{{ r.method or 'GET' }}</span></td>
+            <td style="font-size:.7rem;color:#8b949e;">{{ r.get('operating_system') or no_ua }}</td>
+            <td style="font-size:.7rem;color:#8b949e;">{{ r.get('browser_name') or no_ua }}</td>
+            <td style="text-align:center;font-weight:700;color:#fbbf24;">{{ r.count }}</td>
+            <td><div class="url-payload">{{ r.url_path }}</div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state">&#x2705; Nenhum ataque suspeito na URL registrado para este IP.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── 3. Incidentes de Força Bruta ────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="s-icon s-icon-red">&#x1F6A8;</span>
+      Seção 3 — Incidentes de Força Bruta / Tentativas de Invasão
+    </div>
+    <div class="section-body">
+      {% if data['brute_force'] %}
+        {% for inc in data['brute_force'] %}
+        <div class="inc-card">
+          <div class="inc-header">
+            <span class="case-num">CASO #{{ '%04d'|format(inc.id) }}</span>
+            <span class="inc-ip">{{ ip }}</span>
+            {% if inc.username_tried %}
+            <span class="pill pill-risk-brute">&#x1F464; "{{ inc.username_tried }}"</span>
+            {% endif %}
+            <span class="pill pill-risk-brute">{{ inc.failures }} falha(s)</span>
+            {% if inc.geo_is_proxy %}
+            <span class="pill pill-vpn">&#x1F575; VPN / Proxy</span>
+            {% endif %}
+            {% if inc.geo_is_hosting %}
+            <span class="pill pill-dc">&#x1F5A5; Datacenter</span>
+            {% endif %}
+            <span class="inc-ts">&#x1F550; {{ inc.ts }}</span>
+          </div>
+
+          <div class="inc-body">
+            <!-- Geolocalização -->
+            <div class="inc-block">
+              <div class="inc-block-title">&#x1F4CD; Geolocalização do IP</div>
+              <div class="kv">
+                <span class="kv-k">País:</span>
+                <span class="kv-v">{{ inc.get('geo_country') or '—' }}</span>
+                <span class="kv-k">Estado:</span>
+                <span class="kv-v">{{ inc.get('geo_region') or '—' }}</span>
+                <span class="kv-k">Cidade:</span>
+                <span class="kv-v">{{ inc.get('geo_city') or '—' }}</span>
+                {% if inc.get('geo_lat') and inc.get('geo_lon') %}
+                <span class="kv-k">Coords:</span>
+                <span class="kv-v">
+                  <a href="https://maps.google.com/?q={{ inc.geo_lat }},{{ inc.geo_lon }}"
+                     target="_blank" rel="noopener"
+                     style="color:#60a5fa;font-family:'Courier New',monospace;font-size:.68rem;">
+                    {{ inc.geo_lat }}, {{ inc.geo_lon }} &#x2197;
+                  </a>
+                </span>
+                {% endif %}
+                <span class="kv-k">ISP:</span>
+                <span class="kv-v">{{ inc.get('geo_isp') or '—' }}</span>
+                <span class="kv-k">ASN:</span>
+                <span class="kv-v mono" style="font-size:.68rem;color:#8b949e;">{{ inc.get('geo_asn') or '—' }}</span>
+              </div>
+            </div>
+
+            <!-- Hardware / Dispositivo -->
+            <div class="inc-block">
+              <div class="inc-block-title">&#x1F4BB; Hardware / Dispositivo</div>
+              <div class="kv">
+                <span class="kv-k">S.O.:</span>
+                <span class="kv-v">{{ inc.get('operating_system') or no_ua }}</span>
+                <span class="kv-k">Navegador:</span>
+                <span class="kv-v">{{ inc.get('browser_name') or no_ua }}</span>
+                <span class="kv-k">GPU:</span>
+                <span class="kv-v">{{ inc.get('hardware_gpu') or '—' }}</span>
+                <span class="kv-k">RAM:</span>
+                <span class="kv-v">{{ inc.get('hardware_ram') or '—' }}</span>
+                <span class="kv-k">Núcleos:</span>
+                <span class="kv-v">{{ inc.get('hardware_cores') or '—' }}</span>
+                <span class="kv-k">Resolução:</span>
+                <span class="kv-v">{{ inc.get('screen_resolution') or '—' }}</span>
+              </div>
+            </div>
+
+            <!-- Assinatura Forense -->
+            <div class="inc-block">
+              <div class="inc-block-title">&#x1F4A0; Assinatura Forense Única</div>
+              {% if inc.get('canvas_fp') %}
+              <div class="kv-k" style="margin-bottom:3px;">Canvas Fingerprint (GPU Hash):</div>
+              <span class="fp-chip">{{ inc.canvas_fp }}</span>
+              {% endif %}
+              {% if inc.get('webrtc_ip') %}
+              <div class="kv-k" style="margin-top:10px;margin-bottom:3px;">IP Interno (WebRTC Leak):</div>
+              <span class="rtc-chip">{{ inc.webrtc_ip }}</span>
+              {% endif %}
+              {% if not inc.get('canvas_fp') and not inc.get('webrtc_ip') %}
+              <div style="font-size:.7rem;color:#4b5563;font-style:italic;">Fingerprint não capturado neste incidente.</div>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if inc.get('ua') %}
+          <div class="ua-box"><strong>User-Agent:</strong> {{ inc.ua }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="empty-state">&#x2705; Nenhum incidente de força bruta registrado para este IP.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── 4. Log de Auditoria ─────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="s-icon s-icon-green">&#x1F4CB;</span>
+      Seção 4 — Log de Auditoria do Sistema
+    </div>
+    <div class="section-body">
+      {% if data['audit'] %}
+      <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>Ação</th>
+            <th>Administrador</th>
+            <th>Cargo</th>
+            <th>Detalhes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in data['audit'] %}
+          <tr>
+            <td class="c-slate" style="font-weight:700;">{{ loop.index }}</td>
+            <td class="mono" style="font-size:.68rem;white-space:nowrap;color:#6b7280;">{{ r.ts }}</td>
+            <td>
+              {% if r.action == 'hardware_link_detected' %}
+              <span class="pill pill-vpn">&#x26A0; Vinculação HW</span>
+              {% elif 'export' in (r.action or '') %}
+              <span class="pill pill-method">&#x1F4E4; {{ r.action }}</span>
+              {% else %}
+              <span class="pill pill-risk-generic">{{ r.action }}</span>
+              {% endif %}
+            </td>
+            <td style="font-size:.74rem;color:#c9d1d9;">{{ r.get('admin_name','—') }}</td>
+            <td style="font-size:.7rem;color:#6b7280;">{{ r.get('role','—') }}</td>
+            <td style="font-size:.71rem;color:#8b949e;">{{ r.get('detail','—') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state">&#x2705; Nenhuma entrada de auditoria encontrada para este IP.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     FOOTER — AUTENTICIDADE
+════════════════════════════════════════════════════════════════════ -->
+<div class="doc-footer">
+  <div class="doc-footer-inner">
+    <div class="footer-seal">
+      <div class="footer-seal-icon">&#x1F512;</div>
+      <div>
+        <div class="footer-seal-title">Certificado de Autenticidade do Documento</div>
+        <div class="footer-seal-sub">Relatório de Inteligência Forense — Scraper de Mídia Web</div>
+      </div>
+    </div>
+
+    <div class="footer-body">
+      Este documento foi <span class="highlight">gerado e consolidado automaticamente</span> pelo sistema de segurança
+      e firewall do servidor. Logs criptografados e sincronizados na nuvem do Supabase.
+      Todas as informações aqui contidas são evidências digitais coletadas em tempo real pelos módulos de
+      detecção de intrusão (IDS), análise de força bruta e fingerprinting forense de hardware.
+      A reprodução não autorizada deste documento é proibida.
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-meta-chip">
+        &#x1F4CC; IP: <span>{{ ip }}</span>
+      </div>
+      <div class="footer-meta-chip">
+        &#x1F4C5; Gerado em: <span>{{ now_str }}</span>
+      </div>
+      <div class="footer-meta-chip">
+        &#x1F464; Por: <span>{{ generated_by }}</span>
+      </div>
+      <div class="footer-meta-chip">
+        &#x1F4CA; Eventos: <span>{{ total_events }}</span>
+      </div>
+      <div class="footer-meta-chip" style="color:#f87171;border-color:#7f1d1d;background:#1a0505;">
+        &#x26A0; <span style="color:#f87171;">CONFIDENCIAL</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

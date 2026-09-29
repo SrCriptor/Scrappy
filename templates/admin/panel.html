@@ -17,6 +17,13 @@
         .stat-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1.2rem; text-align:center; }
         .stat-num  { font-size:1.9rem; font-weight:700; }
         .session-row { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:.8rem 1rem; margin-bottom:.5rem; }
+        @keyframes ip-glow-pulse {
+            0%, 100% { color: #60a5fa; text-shadow: 0 0 6px rgba(96,165,250,.9), 0 0 12px rgba(96,165,250,.5); opacity:1; }
+            50%       { color: #93c5fd; text-shadow: 0 0 2px rgba(96,165,250,.3); opacity:.6; }
+        }
+        .session-geo-ip {
+            animation: ip-glow-pulse 2.2s ease-in-out infinite;
+        }
         .log-row { border-bottom:1px solid #21262d; padding:.5rem .2rem; font-size:.8rem; }
         .log-row:last-child { border-bottom:none; }
         .log-row.hidden-entry { opacity:.45; background: repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,200,0,.02) 4px,rgba(255,200,0,.02) 8px); }
@@ -177,7 +184,7 @@
     {% endif %}
 
     <!-- Payments disabled banner -->
-    {% if payments_disabled and has_perm(admin.role, 'gateway') %}
+    {% if payments_disabled and has_gateway_access %}
     <div class="maint-banner" style="background:#1a0a2e;border-color:#7c3aed66;color:#c4b5fd;">
         <i class="fas fa-ban"></i>
         <span><strong>Meios de Pagamento DESATIVADOS</strong> — nenhum gateway de pagamento está ativo no momento.</span>
@@ -252,7 +259,7 @@
                     <br><small>URLs com falha</small>
                 </a>
             </div>
-            {% if has_perm(admin.role, 'gateway') %}
+            {% if has_gateway_access %}
             <div class="col-6 col-md-3">
                 <a href="/payment/admin" class="quick-btn">
                     <i class="fas fa-credit-card text-success"></i>
@@ -342,6 +349,15 @@
                     {% endif %}
                 </a>
             </div>
+            {% if admin.role == 'owner' %}
+            <div class="col-6 col-md-3">
+                <a href="/admin/firewall" class="quick-btn">
+                    <i class="fas fa-fire-flame-curved" style="color:#f59e0b;font-size:1.4rem;margin-bottom:.4rem;display:block;"></i>
+                    Firewall &amp; Listas
+                    <br><small>IPs banidos · Lista branca</small>
+                </a>
+            </div>
+            {% endif %}
             <div class="col-6 col-md-3">
                 <a href="/admin/settings" class="quick-btn">
                     <i class="fas fa-sliders {% if maintenance and maintenance.enabled %}text-warning{% else %}text-secondary{% endif %}"></i>
@@ -404,10 +420,9 @@
                           style="font-family:monospace;font-size:.72rem;cursor:help;"
                           title="Carregando localização…">{{ s.ip }}</span>
                     {% else %}—{% endif %}
-                    · Último acesso: {{ s.last_seen | fmt_ts_short }}
                 </div>
             </div>
-            <div class="text-muted" style="font-size:.72rem; white-space:nowrap;">desde {{ s.created_at | fmt_ts_short }}</div>
+            <div class="text-muted" style="font-size:.72rem; white-space:nowrap;">Último acesso: {{ s.last_seen | fmt_ts_short }}</div>
             {% if can_terminate(admin.role, s.role) and s.token != current_token %}
             <button class="btn btn-outline-danger btn-sm py-1 px-2" style="font-size:.72rem;"
                     title="Encerrar sessão de {{ s.display_name }}"
@@ -429,15 +444,24 @@
     <div class="section-card">
         <div class="section-title d-flex align-items-center justify-content-between">
             <span><i class="fas fa-triangle-exclamation text-danger me-2"></i>Ataques Suspeitos Recentes</span>
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center" id="panelAttacksBadgeBar">
+                <!-- Eye toggle — ADD05 -->
+                <button id="panelAttacksEyeBtn" type="button"
+                        class="btn btn-sm btn-outline-secondary py-0 px-2"
+                        style="font-size:.72rem;line-height:1.8;"
+                        onclick="panelToggleAttacks()"
+                        title="Mostrar / ocultar conteúdo">
+                    <i id="panelAttacksEyeIcon" class="fas fa-eye"></i>
+                </button>
                 {% if suspicious_today > 0 %}
-                <span class="badge bg-danger" style="font-size:.7rem;">{{ suspicious_today }} hoje</span>
+                <span class="badge bg-danger panel-attacks-toggle" style="font-size:.7rem;">{{ suspicious_today }} hoje</span>
                 {% endif %}
-                <a href="/admin/security" class="btn btn-outline-danger btn-sm" style="font-size:.72rem;">
-                    <i class="fas fa-eye me-1"></i>Ver todos
+                <a href="/admin/security" class="btn btn-outline-danger btn-sm panel-attacks-toggle" style="font-size:.72rem;">
+                    <i class="fas fa-external-link-alt me-1"></i>Ver todos
                 </a>
             </div>
         </div>
+        <div id="panelAttacksBody">
         <div style="max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#30363d #0d1117;">
         {% for r in suspicious_requests[:10] %}
         {% set atype = r.attack_type | lower | replace(' ', '') %}
@@ -448,7 +472,14 @@
             <div style="flex:1;min-width:0;">
                 <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:2px;">
                     <span style="font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:20px;background:{% if 'xss' in atype %}#3d1a1a{% elif 'sql' in atype %}#1a1a3d{% else %}#1a2e1a{% endif %};color:{% if 'xss' in atype %}#f87171{% elif 'sql' in atype %}#818cf8{% else %}#86efac{% endif %};">{{ r.attack_type }}</span>
-                    <code style="font-size:.7rem;color:#60a5fa;">{{ r.ip }}</code>
+                    <code
+                        class="ip-hover-trigger"
+                        style="font-size:.7rem;color:#60a5fa;cursor:default;"
+                        data-ip="{{ r.ip | e }}"
+                        data-attack="{{ r.attack_type | e }}"
+                        data-browser="{{ r.browser_name | default('—') | e }}"
+                        data-os="{{ r.operating_system | default('—') | e }}"
+                        data-count="{{ r.count }}">{{ r.ip }}</code>
                     <span style="font-size:.65rem;color:#8b949e;">{{ r.ts | fmt_ts }}</span>
                     {% if r.count > 1 %}<span style="font-size:.62rem;background:#451a03;color:#fbbf24;padding:1px 5px;border-radius:10px;">{{ r.count }}×</span>{% endif %}
                 </div>
@@ -458,12 +489,47 @@
         {% endfor %}
         </div>
         {% if suspicious_requests | length > 10 %}
-        <div class="text-center mt-2" style="font-size:.75rem;color:#8b949e;">
+        <div class="text-center mt-2" style="font-size:.75rem;color:#8b949e;" id="panelAttacksMore">
             + {{ suspicious_requests|length - 10 }} mais — <a href="/admin/security" style="color:#6ea8fe;">ver todos</a>
         </div>
         {% endif %}
+        </div>{# /panelAttacksBody #}
     </div>
     {% endif %}
+
+    <script>
+    (function() {
+        var STORAGE_KEY = 'panelAttacksHidden';
+        var body  = document.getElementById('panelAttacksBody');
+        var icon  = document.getElementById('panelAttacksEyeIcon');
+        var tgls  = document.querySelectorAll('.panel-attacks-toggle');
+        if (!body) return;
+
+        function setHidden(hidden) {
+            body.style.transition = 'opacity .25s ease';
+            body.style.opacity = hidden ? '0' : '1';
+            setTimeout(function(){ body.style.display = hidden ? 'none' : ''; }, hidden ? 250 : 0);
+            if (!hidden) { body.style.opacity = '1'; }
+            tgls.forEach(function(el){ el.style.display = hidden ? 'none' : ''; });
+            if (icon) {
+                icon.className = hidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+            }
+            sessionStorage.setItem(STORAGE_KEY, hidden ? '1' : '0');
+        }
+
+        // Restore state on load
+        if (sessionStorage.getItem(STORAGE_KEY) === '1') {
+            body.style.display = 'none';
+            tgls.forEach(function(el){ el.style.display = 'none'; });
+            if (icon) icon.className = 'fas fa-eye-slash';
+        }
+
+        window.panelToggleAttacks = function() {
+            var hidden = body.style.display === 'none';
+            setHidden(!hidden);
+        };
+    })();
+    </script>
 
     <!-- Activity log (items 5, 7) -->
     <div class="section-card">
@@ -880,7 +946,7 @@
     }
     function submitTerminate() {
         const reason = document.getElementById('terminateReason').value.trim();
-        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        if (!reason) { showSiteNotice('Motivo é obrigatório.', { type: 'warning' }); return; }
         document.getElementById('terminateReasonHidden').value = reason;
         document.getElementById('terminateForm').submit();
     }
@@ -900,7 +966,7 @@
     }
     function submitHideLog() {
         const reason = document.getElementById('hideLogReason').value.trim();
-        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        if (!reason) { showSiteNotice('Motivo é obrigatório.', { type: 'warning' }); return; }
         document.getElementById('hideLogReasonHidden').value = reason;
         document.getElementById('hideLogForm').submit();
     }
@@ -913,7 +979,7 @@
             return;
         }
         const reason = document.getElementById('clearLogsReason').value.trim();
-        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        if (!reason) { showSiteNotice('Motivo é obrigatório.', { type: 'warning' }); return; }
         document.getElementById('clearLogsReasonHidden').value = reason;
         document.getElementById('clearLogsForm').submit();
     }
@@ -938,7 +1004,7 @@
     }
     function submitReasonModal() {
         const reason = document.getElementById('reasonModalInput').value.trim();
-        if (!reason) { alert('Motivo é obrigatório.'); return; }
+        if (!reason) { showSiteNotice('Motivo é obrigatório.', { type: 'warning' }); return; }
         const form = document.getElementById(_reasonFormId);
         let inp = form.querySelector('[name="reason"]');
         if (!inp) { inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'reason'; form.appendChild(inp); }

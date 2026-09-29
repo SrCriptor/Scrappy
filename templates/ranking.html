@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
     <title>Ranking de Doadores</title>
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Caveat:wght@500;700&family=Inter:wght@400;600;700&family=Montserrat:wght@500;600;700&family=Orbitron:wght@500;700;800&family=Press+Start+2P&family=Rajdhani:wght@500;600;700&family=Roboto+Mono:wght@500;700&family=Rubik+Mono+One&family=Space+Grotesk:wght@400;600;700&family=UnifrakturCook:wght@700&display=swap');
+
         body { background: #0d1117; color: #e6edf3; }
-        .page-wrap { max-width: 760px; margin: 0 auto; padding: 2.5rem 1rem; }
+        .page-wrap { max-width: 760px; margin: 0 auto; padding: 2.5rem 1rem; position: relative; }
 
         .rank-header { text-align: center; margin-bottom: 2rem; }
         .rank-header h1 { font-size: 1.6rem; font-weight: 700; }
@@ -22,7 +26,12 @@
         .rank-table tr:last-child td { border-bottom: none; }
         .rank-table tr:hover td { background: rgba(255,255,255,.03); }
 
-        .rank-pos { font-size: 1rem; font-weight: 700; width: 36px; text-align: center; }
+        /* Força largura estável impedindo quebras e deslocamentos de layout */
+        .vip-icon-container {
+            width: 24px !important;
+            text-align: center !important;
+            display: inline-block !important;
+        }
 
         .profile-block {
             display: flex !important;
@@ -40,30 +49,238 @@
             border: 2px solid #30363d;
         }
 
-        .vip-badge { font-size: .68rem; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; letter-spacing: .3px; display: inline-block; }
-        .vip-1 { background: linear-gradient(135deg,#6366f1,#0ea5e9); color:#fff; box-shadow: 0 0 8px rgba(99,102,241,.5); border: 1px solid #818cf8; }
-        .vip-2 { background: linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border: 1px solid #c084fc; }
-        .vip-3 { background: linear-gradient(135deg,#b45309,#f59e0b); color:#fff; border: 1px solid #fbbf24; box-shadow: 0 0 6px rgba(245,158,11,.4); }
-        .vip-4 { background: linear-gradient(135deg,#64748b,#94a3b8); color:#0d1117; border: 1px solid #cbd5e1; }
-        .vip-5 { background: linear-gradient(135deg,#78350f,#92400e); color:#fde68a; border: 1px solid #d97706; }
+        /* ── BADGES VIP ORIGINAIS COM OS 7 NÍVEIS ATUALIZADOS ── */
+        .vip-badge { font-size: .68rem; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; letter-spacing: .3px; display: inline-block; position: relative; overflow: hidden; }
+        .vip-0 { background: linear-gradient(90deg,#7f0000,#ff4500,#ffa500,#ffe000,#ff4500,#7f0000); background-size: 300% auto; color:#fff8e1; box-shadow: 0 0 12px #ff4500; border: 1px solid rgba(255,170,0,0.5); animation: lavaFlow 2s linear infinite; }
+        .vip-1 { background: linear-gradient(135deg,#0ea5e9,#00f0ff,#6366f1); color:#fff; border: 1px solid #00f0ff; box-shadow: 0 0 12px #00f0ff; animation: cyanBreathe 2.2s ease-in-out infinite; }
+        .vip-2 { background: transparent; color:#ff0033; border: 1px solid #ff0033; animation: rubi-glow 2s infinite ease-in-out; }
 
-        .nick-cell   { font-size: .9rem; font-weight: 600; }
-        .amount-cell { font-size: .88rem; color: #22c55e; font-weight: 600; }
+        /* ── LASER BEAM OVERLAY: VIP SUPREME (Laranja), DIAMANTE (Cyan), RUBI (Vermelho) ── */
+        .vip-badge.vip-0::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -100%;
+            width: 40%; height: 200%;
+            background: linear-gradient(90deg, transparent 0%, rgba(255,160,50,.7) 40%, rgba(255,220,100,.9) 50%, rgba(255,160,50,.7) 60%, transparent 100%);
+            transform: skewX(-18deg);
+            animation: laserBeamOrange 2.2s linear infinite;
+            pointer-events: none;
+        }
+        .vip-badge.vip-1::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -100%;
+            width: 40%; height: 200%;
+            background: linear-gradient(90deg, transparent 0%, rgba(0,230,255,.6) 40%, rgba(180,255,255,.9) 50%, rgba(0,230,255,.6) 60%, transparent 100%);
+            transform: skewX(-18deg);
+            animation: laserBeamCyan 2.6s linear infinite;
+            pointer-events: none;
+        }
+        .vip-badge.vip-2::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -100%;
+            width: 40%; height: 200%;
+            background: linear-gradient(90deg, transparent 0%, rgba(255,30,60,.6) 40%, rgba(255,120,120,.9) 50%, rgba(255,30,60,.6) 60%, transparent 100%);
+            transform: skewX(-18deg);
+            animation: laserBeamRed 2.8s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes laserBeamOrange { 0% { left: -100%; } 100% { left: 200%; } }
+        @keyframes laserBeamCyan   { 0% { left: -100%; } 100% { left: 200%; } }
+        @keyframes laserBeamRed    { 0% { left: -100%; } 100% { left: 200%; } }
+        .vip-3 { background: linear-gradient(90deg,#7c5a00,#ffd700,#ffb300,#ffe57f,#ffd700,#7c5a00); background-size: 300% auto; color:#3b2000; border: 1px solid #ffd700; box-shadow: 0 0 8px rgba(255,215,0,.5); animation: metalShimmer 2.5s linear infinite; }
+        .vip-4 { background: linear-gradient(90deg,#94a3b8,#e2e8f0,#ffffff,#e2e8f0,#94a3b8); background-size: 200% auto; color:#0d1117; border: 1px solid #94a3b8; box-shadow: 0 0 5px rgba(148,163,184,.4); animation: laser-swipe 3s linear infinite; }
+        .vip-5 { background: linear-gradient(135deg,#e28743,#ff7f50,#c96a2a); color:#fff; border: 1px solid #ff7f50; box-shadow: 0 0 6px rgba(255,127,80,.4); }
+        .vip-6 { background: #21262d; color:#7ba4c7; border: 1px dashed rgba(123,164,199,.4); }
 
+        /* ── CLASSES DE ESTILIZAÇÃO DOS APELIDOS DOS USUÁRIOS ── */
+        .user-tier-0 {
+            font-family: 'Roboto Mono', monospace !important;
+            font-weight: 900 !important;
+            background: linear-gradient(90deg, #ff4500, #ff8c00, #ff0000, #ff8c00, #ff4500);
+            background-size: 200% auto;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            animation: lavaFlow 2s linear infinite, glitch-shake 0.3s infinite linear;
+        }
+        .user-tier-1 {
+            font-family: 'Orbitron', sans-serif !important;
+            color: #00f0ff !important;
+            text-shadow: 0 0 12px #00f0ff, 0 0 20px rgba(0, 240, 255, 0.5);
+        }
+        .user-tier-2 {
+            font-family: 'Orbitron', sans-serif !important;
+            color: #ff0033 !important;
+            background: transparent !important;
+            animation: glitch-shake 0.5s infinite steps(2);
+        }
+        .user-tier-3 {
+            font-family: 'Orbitron', sans-serif !important;
+            background: linear-gradient(to right, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            font-weight: bold;
+        }
+        .user-tier-4 {
+            font-family: 'Roboto Mono', monospace !important;
+            background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 25%, #ffffff 50%, #cbd5e1 75%, #e2e8f0 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            animation: laser-swipe 3s linear infinite;
+        }
+        .user-tier-5 { color: #ff7f50 !important; font-weight: 700; }
+        .user-tier-6 { color: #7ba4c7 !important; opacity: 0.7; }
+
+        /* ── DECLARAÇÕES KEYFRAMES DAS ANIMAÇÕES ── */
+        @keyframes glitch-shake {
+            0% { transform: translate(0, 0) skew(0deg); }
+            20% { transform: translate(-2px, 2px) skew(-2deg); }
+            40% { transform: translate(2px, -2px) skew(2deg); }
+            60% { transform: translate(-1px, -1px) skew(1deg); }
+            80% { transform: translate(2px, 1px) skew(0deg); }
+            100% { transform: translate(0, 0) skew(0deg); }
+        }
+        @keyframes laser-swipe {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes rubi-glow {
+            0% { box-shadow: 0 0 5px rgba(255, 0, 51, 0.4); border-color: rgba(255,0,51,0.4); }
+            50% { box-shadow: 0 0 20px rgba(255, 0, 51, 0.8); border-color: rgba(255,0,51,1); }
+            100% { box-shadow: 0 0 5px rgba(255, 0, 51, 0.4); border-color: rgba(255,0,51,0.4); }
+        }
+        @keyframes lavaFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes metalShimmer {
+            0% { background-position: 0% center; }
+            100% { background-position: 300% center; }
+        }
+        @keyframes cyanBreathe {
+            0% { box-shadow: 0 0 4px rgba(0,240,255,0.4); }
+            50% { box-shadow: 0 0 16px rgba(0,240,255,0.8); }
+            100% { box-shadow: 0 0 4px rgba(0,240,255,0.4); }
+        }
+
+        .nick-cell   { font-size: .9rem; font-weight: 600; min-width: 0; }
+        .donor-font-default { font-family: 'Segoe UI', sans-serif !important; }
+        .donor-font-inter { font-family: 'Inter', sans-serif !important; }
+        .donor-font-orbitron { font-family: 'Orbitron', sans-serif !important; }
+        .donor-font-rajdhani { font-family: 'Rajdhani', sans-serif !important; }
+        .donor-font-space-grotesk { font-family: 'Space Grotesk', sans-serif !important; }
+        .donor-font-press-start { font-family: 'Press Start 2P', monospace !important; font-size: .68rem; }
+        .donor-font-bangers { font-family: 'Bangers', cursive !important; letter-spacing: .04em; }
+        .donor-font-roboto-mono { font-family: 'Roboto Mono', monospace !important; }
+        .donor-font-montserrat { font-family: 'Montserrat', sans-serif !important; }
+        .donor-font-gothic { font-family: 'UnifrakturCook', serif !important; }
+        .donor-font-script { font-family: 'Caveat', cursive !important; font-size: 1.05em; }
+        .donor-font-pixel { font-family: 'Rubik Mono One', sans-serif !important; font-size: .78rem; }
+        .donor-effect-gradient {
+            background: linear-gradient(90deg,var(--donor-color),#00f0ff,#a855f7);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .donor-effect-neon { text-shadow: 0 0 5px var(--donor-color), 0 0 13px var(--donor-color), 0 0 24px var(--donor-color); }
+        .donor-effect-pop { text-shadow: 2px 2px 0 #ff2d95, -1px -1px 0 #00f0ff; letter-spacing: .03em; }
+        .donor-effect-gummy { text-shadow: 0 2px 0 #a855f7, 0 4px 8px rgba(168,85,247,.55); }
+        .donor-effect-prism {
+            background: linear-gradient(90deg,#00ff88,#00f0ff,#a855f7,#ff2d95,#ffd700);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 8px rgba(0,240,255,.45);
+        }
+        .nick-cell { min-width: 0; }
+        .nick-content { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; width:100%; }
+        .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 auto; }
+        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+        .supporter-presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex:0 0 8px; vertical-align:middle; }
+        .amount-cell { white-space:nowrap; }
+        .amount-value { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; font-weight:700; font-family:'Roboto Mono',monospace; color:#00ff88; text-shadow:0 0 8px rgba(0,255,136,.55),0 0 16px rgba(0,255,136,.25); letter-spacing:.4px; white-space:nowrap; }
+        .amount-icon { display:inline-flex; align-items:center; flex:0 0 auto; }
+        .amount-value small { font-size:.68em; opacity:.72; letter-spacing:0; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; display: block; }
 
         .back-link { font-size: .82rem; color: #8b949e; text-decoration: none; }
         .back-link:hover { color: #e6edf3; }
+
+        /* ── CUSTOM TOOLTIP SYSTEM — dark-theme, CSS-only, [data-tip] ── */
+        [data-tip] { position: relative; }
+        [data-tip]::before {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            background: #0d1117;
+            color: #e6edf3;
+            font-size: .72rem;
+            font-weight: 500;
+            white-space: nowrap;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(148,163,184,.2);
+            box-shadow: 0 4px 14px rgba(0,0,0,.7);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 9999;
+            transition: opacity .18s ease, transform .18s ease;
+        }
+        [data-tip]::after {
+            content: '';
+            position: absolute;
+            bottom: calc(100% + 3px);
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            border: 5px solid transparent;
+            border-top-color: rgba(148,163,184,.2);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 9999;
+            transition: opacity .18s ease, transform .18s ease;
+        }
+        [data-tip]:hover::before { opacity:1; transform:translateX(-50%) translateY(0); }
+        [data-tip]:hover::after  { opacity:1; transform:translateX(-50%) translateY(0); }
+        [data-tip-color="secondary"]::before { border-color:rgba(148,163,184,.2); }
+
+        /* Estilo do Tooltip Flutuante Requisitado */
+        #vip-perks-tooltip {
+            background: rgba(13, 17, 23, 0.95);
+            border: 1px solid #30363d;
+            color: #e6edf3;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            max-width: 280px;
+        }
+        #vip-perks-tooltip ul { list-style: none; margin: 0; padding: 0; }
+        #vip-perks-tooltip li { margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        #vip-perks-tooltip li:last-child { margin-bottom: 0; }
     </style>
 </head>
 <body>
 <div class="page-wrap">
 
     <div class="rank-header">
-        <div style="font-size:2.5rem;margin-bottom:.5rem;">🏆</div>
+        <div style="font-size:2.5rem;margin-bottom:.5rem; cursor:pointer;" onclick="toggleTooltip(event)">🏆</div>
         <h1>Ranking de Doadores</h1>
         <small>Apoiadores que ajudam a manter o serviço vivo e gratuito</small>
+    </div>
+
+    <!-- 4. CONTAINER DO TOOLTIP COMPACTO ATUALIZADO COM OS 7 TOKENS DINÂMICOS -->
+    <div id="vip-perks-tooltip" style="display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 110px; z-index: 1000;">
+        <ul>
+            <li><i class="fas fa-fire" style="color:#ff4500;"></i> <strong>SUPREME:</strong> >= 500.00 (+100 URLs)</li>
+            <li><i class="fas fa-gem" style="color:#00f0ff;"></i> <strong>DIAMANTE:</strong> >= 100.00 (+60 URLs)</li>
+            <li><i class="fas fa-gem" style="color:#ff0033;"></i> <strong>RUBI:</strong> >= 80.00 (+50 URLs)</li>
+            <li><i class="fas fa-crown" style="color:#ffd700;"></i> <strong>OURO:</strong> >= 60.00 (+40 URLs)</li>
+            <li><i class="fas fa-award" style="color:#e2e8f0;"></i> <strong>PRATA:</strong> >= 35.00 (+30 URLs)</li>
+            <li><i class="fas fa-trophy" style="color:#ff7f50;"></i> <strong>BRONZE:</strong> >= 15.00 (+20 URLs)</li>
+            <li><i class="fas fa-star" style="color:#7ba4c7; opacity:0.6;"></i> <strong>ESTELAR:</strong> >= 1.00 (+10 URLs)</li>
+        </ul>
     </div>
 
     <div class="section-card">
@@ -72,7 +289,7 @@
             <table class="rank-table">
                 <thead>
                     <tr>
-                        <th style="width:44px;">#</th>
+                        <th style="width:50px; text-align:center;">#</th>
                         <th style="width:80px;">Perfil</th>
                         <th>Apoiador</th>
                         <th>Total</th>
@@ -82,10 +299,25 @@
                 <tbody>
                 {% for r in rows %}
                 {% set pos = loop.index %}
+                {% set vip = r.vip_level|default(6)|int %}
                 <tr>
-                    <td>
-                        <div class="rank-pos">
-                            {% if pos == 1 %}🥇{% elif pos == 2 %}🥈{% elif pos == 3 %}🥉{% else %}<span style="color:#8b949e;">{{ pos }}</span>{% endif %}
+                    <td class="text-center">
+                        <div class="vip-icon-container">
+                            {% if vip == 0 %}
+                                <span style="font-size: 1.15rem;"><i class="fas fa-fire" style="color: #ff4500; text-shadow: 0 0 10px #ff4500;"></i></span>
+                            {% elif vip == 1 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-gem" style="color: #00f0ff; text-shadow: 0 0 10px #00f0ff;"></i></span>
+                            {% elif vip == 2 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-gem" style="color: #ff0033; text-shadow: 0 0 10px #ff0033;"></i></span>
+                            {% elif vip == 3 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-crown" style="color: #ffd700; text-shadow: 0 0 8px #ffd700;"></i></span>
+                            {% elif vip == 4 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-award" style="color: #e2e8f0; text-shadow: 0 0 8px #e2e8f0;"></i></span>
+                            {% elif vip == 5 %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-trophy" style="color: #ff7f50; text-shadow: 0 0 6px #ff7f50;"></i></span>
+                            {% else %}
+                                <span style="font-size: 1.05rem;"><i class="fas fa-star" style="color: #7ba4c7; opacity: 0.6;"></i></span>
+                            {% endif %}
                         </div>
                     </td>
                     <td>
@@ -93,21 +325,45 @@
                             <img src="/static/donors/donor_{{ r.avatar_id }}.png"
                                  alt="{{ r.nickname }}"
                                  onerror="this.src='/static/donors/donor_m_1.png'" />
-                            <span class="vip-badge vip-{{ r.vip_level }}">
-                                VIP {{ r.vip_level }}{% if r.vip_level == 1 %} 💎{% endif %}
+                            <span class="vip-badge vip-{{ vip }}">
+                                {% if vip == 0 %}SUPREME{% elif vip == 1 %}DIAMANTE{% elif vip == 2 %}RUBI{% elif vip == 3 %}OURO{% elif vip == 4 %}PRATA{% elif vip == 5 %}BRONZE{% else %}ESTELAR{% endif %}
                             </span>
                         </div>
                     </td>
                     <td class="nick-cell">
-                        <span>{{ r.nickname }}</span>{% if r.discriminator %}<span class="text-muted" style="font-size:0.8em;opacity:0.6;">#{{ r.discriminator }}</span>{% endif %}
+                        {% set donor_font = r.font_id|default('default') %}
+                        {% set donor_effect = r.text_effect|default('solid') %}
+                        {% set donor_color = r.name_color|default('#f3f4f6') %}
+                        {% set _presence_title = 'Disponível agora' if r.online else ('Visto por último: ' ~ r.last_seen_label if r.last_seen_label else 'Ainda não foi visto online') %}
+                         <div class="nick-content">
+                             <div class="nick-identity">
+                                 <span class="nick-text user-tier-{{ vip }} donor-font-{{ donor_font }} donor-effect-{{ donor_effect }}" style="--donor-color:{{ donor_color }};color:{{ donor_color }} !important;" title="{{ r.nickname }}">{{ r.nickname }}{% if r.discriminator %}<span class="text-muted" style="font-size:0.8em;opacity:0.6;"> #{{ r.discriminator }}</span>{% endif %}</span>
+                                 <span class="supporter-presence-dot" data-donor-id="{{ r.id }}" title="{{ _presence_title }}" aria-label="{{ 'Online' if r.online else 'Offline' }}" style="background:{% if r.online %}#22c55e{% else %}#fff{% endif %};box-shadow:0 0 7px {% if r.online %}#22c55e{% else %}#fff{% endif %};"></span>
+                             </div>
+                        </div>
                     </td>
-                    <td class="amount-cell">R\$ {{ "%.2f"|format(r.total_donated|float) }}</td>
+                    <td class="amount-cell">
+                        {% set _val = "%.2f"|format(r.total_donated|float) %}
+                        {% set _currency = r.currency|default('BRL')|upper %}
+                        {% set _currency_label = 'Dólar Americano' if _currency == 'USD' else 'Real Brasileiro' %}
+                        <div class="amount-value">
+                            <span class="amount-icon" data-ranking-amount-id="{{ r.id }}" data-tooltip="{{ _currency }} — {{ _currency_label }}" style="display:inline-flex;align-items:center;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </span>
+                            <span>{% if _val.endswith('.00') %}{{ _val[:-3] }}{% else %}{{ _val.split('.')[0] }}<small>,{{ _val.split('.')[1] }}</small>{% endif %}</span>
+                        </div>
+                    </td>
                     <td>
-                        {% if r.vip_level == 1 %}<span class="vip-badge vip-1">Diamante</span>
-                        {% elif r.vip_level == 2 %}<span class="vip-badge vip-2">Ouro</span>
-                        {% elif r.vip_level == 3 %}<span class="vip-badge vip-3">Prata</span>
-                        {% elif r.vip_level == 4 %}<span class="vip-badge vip-4">Bronze</span>
-                        {% else %}<span class="vip-badge vip-5">Bronze</span>{% endif %}
+                        {% if vip == 0 %}<span class="vip-badge vip-0">VIP Supreme 🔥</span>
+                        {% elif vip == 1 %}<span class="vip-badge vip-1">VIP Diamante 💎</span>
+                        {% elif vip == 2 %}<span class="vip-badge vip-2">VIP Rubi 🩸</span>
+                        {% elif vip == 3 %}<span class="vip-badge vip-3">VIP Ouro 👑</span>
+                        {% elif vip == 4 %}<span class="vip-badge vip-4">VIP Prata 🥈</span>
+                        {% elif vip == 5 %}<span class="vip-badge vip-5">VIP Bronze 🥉</span>
+                        {% else %}<span class="vip-badge vip-6">VIP Estelar 🌟</span>{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -127,6 +383,59 @@
         <a href="/" class="back-link"><i class="fas fa-arrow-left me-1"></i>Voltar ao scraper</a>
     </div>
 
-</div>
+<script>
+    function toggleTooltip(event) {
+        var tooltip = document.getElementById('vip-perks-tooltip');
+        if(tooltip.style.display === 'none') {
+            tooltip.style.display = 'block';
+        } else {
+            tooltip.style.display = 'none';
+        }
+    }
+
+    (function() {
+        function localDonorToken() {
+            try { return (localStorage.getItem('donation_token') || '').trim(); }
+            catch (e) { return ''; }
+        }
+        function heartbeat() {
+            fetch('/api/supporter/presence', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
+                cache: 'no-store',
+                body: JSON.stringify({token: localDonorToken()})
+            }).catch(function() {});
+        }
+        function refreshPresence() {
+            fetch('/api/public/ranking', {cache: 'no-store'})
+                .then(function(response) { return response.json(); })
+                .then(function(rows) {
+                    (rows || []).forEach(function(row) {
+                        var dots = document.querySelectorAll('[data-donor-id="' + row.id + '"]');
+                        dots.forEach(function(dot) {
+                            var online = row.online === true;
+                            var color = online ? '#22c55e' : '#fff';
+                            dot.style.background = color;
+                            dot.style.boxShadow = '0 0 7px ' + color;
+                            dot.title = online ? 'Disponível agora' : 'Offline';
+                            dot.setAttribute('aria-label', online ? 'Online' : 'Offline');
+                             var currency = String(row.currency || 'BRL').toUpperCase();
+                             if (currency !== 'USD') currency = 'BRL';
+                             var currencyLabel = currency === 'USD' ? 'Dólar Americano' : 'Real Brasileiro';
+                             document.querySelectorAll('[data-ranking-amount-id="' + row.id + '"]').forEach(function(amount) {
+                                 amount.setAttribute('data-tooltip', currency + ' — ' + currencyLabel);
+                             });
+                        });
+                    });
+                })
+                .catch(function() {});
+        }
+        heartbeat();
+        refreshPresence();
+        setInterval(heartbeat, 30000);
+        setInterval(refreshPresence, 15000);
+    })();
+</script>
 </body>
 </html>

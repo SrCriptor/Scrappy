@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>403 — Acesso Restrito</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+    <style>
+        /* ── Base ─────────────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            min-height: 100vh;
+            background: #0d1117;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            position: relative;
+            overflow-y: auto;
+            padding: 1.5rem 1rem;
+            /* Scrollbar invisível — todos os navegadores */
+            scrollbar-width: none;        /* Firefox */
+            -ms-overflow-style: none;     /* IE / Edge legado */
+        }
+        body::-webkit-scrollbar { display: none; } /* Chrome / Safari / Edge / Celular */
+
+        /* ── Scanline overlay ──────────────────────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,.15) 2px,
+                rgba(0,0,0,.15) 4px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Ambient grid ─────────────────────────────────────────────────── */
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background-image:
+                linear-gradient(rgba(239,68,68,.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(239,68,68,.04) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Corner decorations ────────────────────────────────────────────── */
+        .corner {
+            position: fixed;
+            width: 60px; height: 60px;
+            border-color: rgba(239,68,68,.35);
+            border-style: solid;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .corner-tl { top:20px; left:20px;  border-width: 2px 0 0 2px; }
+        .corner-tr { top:20px; right:20px; border-width: 2px 2px 0 0; }
+        .corner-bl { bottom:20px; left:20px;  border-width: 0 0 2px 2px; }
+        .corner-br { bottom:20px; right:20px; border-width: 0 2px 2px 0; }
+
+        /* ── Glowing orbs background ────────────────────────────────────────── */
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-orb-1 {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(239,68,68,.12) 0%, transparent 70%);
+            top: -120px; left: -100px;
+            animation: orbDrift1 12s ease-in-out infinite alternate;
+        }
+        .bg-orb-2 {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(220,38,38,.08) 0%, transparent 70%);
+            bottom: -100px; right: -80px;
+            animation: orbDrift2 15s ease-in-out infinite alternate;
+        }
+        @keyframes orbDrift1 { from { transform: translate(0,0); } to { transform: translate(40px, 30px); } }
+        @keyframes orbDrift2 { from { transform: translate(0,0); } to { transform: translate(-30px, -40px); } }
+
+        /* ── Main card ──────────────────────────────────────────────────────── */
+        .block-card {
+            position: relative;
+            z-index: 2;
+            background: linear-gradient(160deg, #161b22 0%, #0d1117 60%, #110a0a 100%);
+            border: 1px solid rgba(239,68,68,.3);
+            border-radius: 16px;
+            padding: 2.5rem 2rem 2rem;
+            width: min(640px, 96vw);
+            box-shadow:
+                0 0 0 1px rgba(239,68,68,.1),
+                0 8px 60px rgba(0,0,0,.8),
+                0 0 80px rgba(239,68,68,.07),
+                inset 0 1px 0 rgba(255,255,255,.04);
+        }
+
+        /* ── Top status bar ─────────────────────────────────────────────────── */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            padding-bottom: .75rem;
+            border-bottom: 1px solid rgba(239,68,68,.15);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .65rem;
+            color: #4b5563;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .status-dot {
+            display: inline-flex; align-items: center; gap: .35rem;
+        }
+        .dot-red {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 6px #ef4444;
+            animation: dotPulse 1.4s ease-in-out infinite;
+        }
+        @keyframes dotPulse {
+            0%,100% { opacity: 1; box-shadow: 0 0 6px #ef4444; }
+            50%      { opacity: .4; box-shadow: 0 0 2px #ef4444; }
+        }
+
+        /* ── Shield icon ────────────────────────────────────────────────────── */
+        .shield-wrap {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .shield-icon {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #2a0a0a 0%, #1a0505 100%);
+            border: 1.5px solid rgba(239,68,68,.4);
+            box-shadow: 0 0 30px rgba(239,68,68,.2), 0 0 60px rgba(239,68,68,.08);
+            animation: shieldPulse 3s ease-in-out infinite;
+            font-size: 2rem;
+            color: #ef4444;
+        }
+        @keyframes shieldPulse {
+            0%,100% { box-shadow: 0 0 30px rgba(239,68,68,.2), 0 0 60px rgba(239,68,68,.08); }
+            50%      { box-shadow: 0 0 40px rgba(239,68,68,.35), 0 0 80px rgba(239,68,68,.15); }
+        }
+        .shield-ring {
+            position: absolute; inset: -8px;
+            border-radius: 50%;
+            border: 1px solid rgba(239,68,68,.2);
+            animation: ringExpand 3s ease-in-out infinite;
+        }
+        @keyframes ringExpand {
+            0%,100% { transform: scale(1); opacity: .6; }
+            50%      { transform: scale(1.08); opacity: .2; }
+        }
+
+        /* ── Headings ───────────────────────────────────────────────────────── */
+        .block-code {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .7rem;
+            color: #ef4444;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: .4rem;
+            opacity: .8;
+        }
+        .block-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(1rem, 3.5vw, 1.35rem);
+            font-weight: 900;
+            color: #f8fafc;
+            text-align: center;
+            letter-spacing: .04em;
+            line-height: 1.25;
+            margin-bottom: .5rem;
+        }
+        .block-subtitle {
+            font-size: .8rem;
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 1.75rem;
+            line-height: 1.5;
+        }
+
+        /* ── Detection mode badge ───────────────────────────────────────────── */
+        .detect-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .6rem;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+        }
+        .detect-badge.realtime {
+            background: rgba(239,68,68,.12);
+            border: 1px solid rgba(239,68,68,.45);
+            color: #f87171;
+        }
+        .detect-badge.historical {
+            background: rgba(245,158,11,.1);
+            border: 1px solid rgba(245,158,11,.4);
+            color: #fbbf24;
+        }
+        .detect-badge .badge-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            animation: dotPulse 1.4s ease-in-out infinite;
+        }
+        .detect-badge.realtime .badge-dot { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
+        .detect-badge.historical .badge-dot { background: #f59e0b; box-shadow: 0 0 5px #f59e0b; animation: none; }
+
+        /* ── Reason card ────────────────────────────────────────────────────── */
+        .reason-card {
+            background: rgba(239,68,68,.05);
+            border: 1px solid rgba(239,68,68,.2);
+            border-left: 3px solid #ef4444;
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            margin-bottom: 1.5rem;
+        }
+        .reason-card-header {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .6rem;
+            color: #6b7280;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            margin-bottom: .55rem;
+        }
+        .reason-text {
+            font-size: .83rem;
+            color: #fca5a5;
+            line-height: 1.55;
+            font-weight: 500;
+        }
+        .reason-text strong {
+            color: #f87171;
+            font-weight: 700;
+        }
+
+        /* ── Data card ───────────────────────────────────────────────────────── */
+        .data-card {
+            background: rgba(0,0,0,.3);
+            border: 1px solid #21262d;
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            margin-bottom: 1.5rem;
+        }
+        .data-card-header {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .62rem;
+            color: #4b5563;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            margin-bottom: .75rem;
+            padding-bottom: .5rem;
+            border-bottom: 1px solid #21262d;
+        }
+        .data-table {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: .35rem .9rem;
+        }
+        .dt-label {
+            font-size: .7rem;
+            color: #4b5563;
+            font-family: 'Share Tech Mono', monospace;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            padding-top: 1px;
+        }
+        .dt-value {
+            font-size: .78rem;
+            color: #e6edf3;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        .dt-value.mono {
+            font-family: 'Share Tech Mono', monospace;
+            color: #f87171;
+            font-weight: 700;
+            letter-spacing: .06em;
+            word-break: break-all;
+        }
+        .dt-value.url {
+            font-family: 'Share Tech Mono', monospace;
+            color: #fbbf24;
+            font-size: .7rem;
+            word-break: break-all;
+        }
+        .dt-value.warn {
+            font-size: .7rem;
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        /* ── Reason banner (tarja de motivo) ────────────────────────────────── */
+        .reason-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: .65rem;
+            background: linear-gradient(135deg, rgba(239,68,68,.13) 0%, rgba(185,28,28,.08) 100%);
+            border: 1px solid rgba(239,68,68,.4);
+            border-left: 4px solid #ef4444;
+            border-radius: 10px;
+            padding: .9rem 1.1rem;
+            margin-top: .6rem;
+        }
+        .reason-banner-icon {
+            flex-shrink: 0;
+            width: 30px; height: 30px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(239,68,68,.15);
+            border-radius: 6px;
+            color: #ef4444;
+            font-size: .85rem;
+        }
+        .reason-banner-body { flex: 1; min-width: 0; }
+        .reason-banner-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .58rem;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: .3rem;
+        }
+        .reason-banner-text {
+            font-size: .85rem;
+            color: #fca5a5;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+        .reason-banner-text em {
+            font-style: normal;
+            color: #fff;
+            background: rgba(239,68,68,.18);
+            padding: 0 5px 1px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        /* ── Divider ─────────────────────────────────────────────────────────── */
+        .block-divider {
+            border: none;
+            border-top: 1px solid #21262d;
+            margin: 1.2rem 0;
+        }
+
+        /* ── Footer ──────────────────────────────────────────────────────────── */
+        .block-footer {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            background: rgba(239,68,68,.04);
+            border: 1px solid rgba(239,68,68,.1);
+            border-radius: 8px;
+            padding: .8rem 1rem;
+            font-size: .7rem;
+            color: #6b7280;
+            line-height: 1.55;
+        }
+        .block-footer i { color: #ef4444; margin-top: 2px; flex-shrink: 0; }
+
+        /* ── Bottom bar ──────────────────────────────────────────────────────── */
+        .bottom-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            margin-top: 1.5rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: .6rem;
+            color: #374151;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .bottom-bar span { color: #1f2937; }
+    </style>
+</head>
+<body>
+    <!-- Background decorations -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="block-card">
+
+        <!-- Top status bar -->
+        <div class="status-bar">
+            <span class="status-dot">
+                <span class="dot-red"></span>
+                INCIDENTE ATIVO
+            </span>
+            <span>SISTEMA DE PROTEÇÃO ATIVO</span>
+            <span id="liveTime">--:--:--</span>
+        </div>
+
+        <!-- Shield -->
+        <div class="shield-wrap">
+            <div class="shield-icon">
+                <span class="shield-ring"></span>
+                <i class="fas fa-shield-halved"></i>
+            </div>
+        </div>
+
+        <!-- Title -->
+        <p class="block-code">ERRO 403 &mdash; ACESSO NEGADO</p>
+        <h1 class="block-title">Acesso Restrito</h1>
+        <p class="block-subtitle">
+            Violação de Diretivas de Segurança Detectada.<br>
+            Esta sessão foi interrompida e registrada automaticamente.
+        </p>
+
+        <!-- Detection mode badge -->
+        <div style="text-align:center;margin-bottom:1.25rem;">
+            {% if realtime %}
+            <span class="detect-badge realtime">
+                <span class="badge-dot"></span>
+                Detecção em Tempo Real
+            </span>
+            {% else %}
+            <span class="detect-badge historical">
+                <span class="badge-dot"></span>
+                Histórico de Ameaça Registrado
+            </span>
+            {% endif %}
+        </div>
+
+        <!-- Reason card -->
+        <div class="reason-card">
+            <div class="reason-card-header">
+                <i class="fas fa-shield-exclamation" style="color:#ef4444;"></i>
+                Motivo do Bloqueio
+            </div>
+            <div class="reason-banner">
+                <div class="reason-banner-icon">
+                    <i class="fas fa-ban"></i>
+                </div>
+                <div class="reason-banner-body">
+                    <div class="reason-banner-label">
+                        {% if realtime %}
+                            ⚡ Ataque identificado em flagrante — registrado em tempo real
+                        {% else %}
+                            🗂 Atividade maliciosa previamente documentada neste IP
+                        {% endif %}
+                    </div>
+                    <div class="reason-banner-text">
+                        {{ threat_type | replace(' — ', ' — <em>') | replace(' (', '</em> (') | safe
+                           if ' — ' in threat_type
+                           else threat_type }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attacker data card -->
+        <div class="data-card">
+            <div class="data-card-header">
+                <i class="fas fa-database" style="color:#ef4444;"></i>
+                Dados do Terminal Interceptado
+            </div>
+            <div class="data-table">
+                <span class="dt-label">IP Público</span>
+                <span class="dt-value mono">{{ attacker_ip }}</span>
+
+                <span class="dt-label">Data / Hora</span>
+                <span class="dt-value">{{ blocked_ts }}</span>
+
+                <span class="dt-label">Recurso Alvo</span>
+                <span class="dt-value url">{{ blocked_url }}</span>
+
+                <span class="dt-label">Assinatura</span>
+                <span class="dt-value warn">Assinatura digital de hardware e geolocalização estimada consolidadas no relatório de incidentes.</span>
+            </div>
+        </div>
+
+        <!-- Footer notice -->
+        <div class="block-footer">
+            <i class="fas fa-circle-info"></i>
+            <span>
+                Este log foi <strong style="color:#94a3b8;">arquivado</strong> e
+                <strong style="color:#94a3b8;">encaminhado automaticamente</strong> à administração
+                do sistema e às autoridades competentes em crimes cibernéticos. Nenhuma ação
+                adicional é necessária da sua parte — o incidente já está em análise.
+            </span>
+        </div>
+
+    </div><!-- /block-card -->
+
+    <!-- Bottom watermark -->
+    <div class="bottom-bar" style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);">
+        <i class="fas fa-lock" style="font-size:.55rem;"></i>
+        <span>SISTEMA DE SEGURANÇA</span>
+        &middot;
+        <span>PROTEÇÃO AVANÇADA CONTRA INVASÕES</span>
+    </div>
+
+    <script>
+        /* Live clock in the status bar */
+        function updateTime() {
+            var now = new Date();
+            var h = String(now.getHours()).padStart(2,'0');
+            var m = String(now.getMinutes()).padStart(2,'0');
+            var s = String(now.getSeconds()).padStart(2,'0');
+            var el = document.getElementById('liveTime');
+            if (el) el.textContent = h + ':' + m + ':' + s;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+    </script>
+</body>
+</html>
