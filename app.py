@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 import uuid
 import colorlog
 
-__version__ = "2.2.1"
+__version__ = "2.2.0"
 
 # Fonts exposed to supporters are a server-side allowlist. The same ids are
 # used by the donation form, the ranking JSON and the CSS preview.
@@ -223,6 +223,7 @@ def oracle_stop():
     oracle_bot.parar_bot_oracle()
     return jsonify({"status": "stopped"})
 
+
 # ==============================================================================
 
 # ── Admin auth system ─────────────────────────────────────────────────────────
@@ -347,7 +348,13 @@ def inject_chat_context():
             'internal_access_mod': admin_store.get_internal_access_moderator(),
             'internal_access_helper': admin_store.get_internal_access_helper(),
             'role_meta': admin_store.ROLE_META,
-            'has_gateway_access': admin_store.has_admin_permission(admin, 'manageGateways'),
+            'has_gateway_access': (
+                admin_store.has_admin_permission(admin, 'manageGateways')
+                or admin_store.has_admin_permission(admin, 'viewGateways')
+            ),
+            'has_gateway_manage_access': admin_store.has_admin_permission(
+                admin, 'manageGateways'
+            ),
         }
     except Exception:
         return {}
@@ -723,11 +730,14 @@ def _guard_admin_areas():
         admin['status'] = 'online'
     for prefix, perm in _SENSITIVE_PERM_PATHS.items():
         if path.startswith(prefix):
-            allowed = (
-                admin_store.has_admin_permission(admin, 'manageGateways')
-                if perm == 'gateway'
-                else admin_store.has_perm(admin['role'], perm)
-            )
+            if perm == 'gateway':
+                allowed = (
+                    _has_gateway_view_access(admin)
+                    if path == '/payment/admin' and request.method == 'GET'
+                    else _has_gateway_access(admin)
+                )
+            else:
+                allowed = admin_store.has_perm(admin['role'], perm)
             if not allowed:
                 _fire_access_alert(admin, path, perm)
                 abort(404)
@@ -940,13 +950,13 @@ def index():
     developer_admin, developer_available, developer_enabled = _developer_ui_state()
     
     _VIP_DEFAULTS = [
-        {'tier_id': 0, 'tier_name': 'VIP SUPREME',  'min_value': 500, 'bonus_urls': 100},
-        {'tier_id': 1, 'tier_name': 'VIP DIAMANTE',  'min_value': 100, 'bonus_urls': 60},
-        {'tier_id': 2, 'tier_name': 'VIP RUBI',      'min_value': 80,  'bonus_urls': 50},
-        {'tier_id': 3, 'tier_name': 'VIP OURO',      'min_value': 60,  'bonus_urls': 40},
-        {'tier_id': 4, 'tier_name': 'VIP PRATA',     'min_value': 35,  'bonus_urls': 30},
-        {'tier_id': 5, 'tier_name': 'VIP BRONZE',    'min_value': 15,  'bonus_urls': 20},
-        {'tier_id': 6, 'tier_name': 'VIP ESTELAR',   'min_value': 1,   'bonus_urls': 10},
+        {'tier_id': 0, 'tier_name': 'VIP SUPREME',  'min_value': 500, 'bonus_urls': 150},
+        {'tier_id': 1, 'tier_name': 'VIP DIAMANTE', 'min_value': 100, 'bonus_urls': 100},
+        {'tier_id': 2, 'tier_name': 'VIP RUBI',     'min_value': 80,  'bonus_urls': 60},
+        {'tier_id': 3, 'tier_name': 'VIP OURO',     'min_value': 60,  'bonus_urls': 40},
+        {'tier_id': 4, 'tier_name': 'VIP PRATA',    'min_value': 35,  'bonus_urls': 30},
+        {'tier_id': 5, 'tier_name': 'VIP BRONZE',   'min_value': 15,  'bonus_urls': 20},
+        {'tier_id': 6, 'tier_name': 'VIP ESTELAR',  'min_value': 1,   'bonus_urls': 10},
     ]
     
     try:
@@ -965,14 +975,7 @@ def index():
         user_data = dict(g.user)
         total = float(user_data.get('total_donated') or 0.0)
         
-        if total >= 500.00: user_data['vip_level'] = 0
-        elif total >= 100.00: user_data['vip_level'] = 1
-        elif total >= 80.00:  user_data['vip_level'] = 2
-        elif total >= 60.00:  user_data['vip_level'] = 3
-        elif total >= 35.00:  user_data['vip_level'] = 4
-        elif total >= 15.00:  user_data['vip_level'] = 5
-        elif total >= 1.00:   user_data['vip_level'] = 6
-        else: user_data['vip_level'] = 6
+        user_data['vip_level'] = admin_store._compute_vip_level(total)
 
     # 2. PEGA O RANKING DO BANCO E FORÇA O DESCONGELAMENTO DE TODOS OS BADGES DO MENUS LATERAL
     raw_ranking = []
@@ -981,20 +984,7 @@ def index():
     except Exception:
         pass
 
-    updated_ranking = []
-    for r in raw_ranking:
-        r_dict = dict(r)
-        total_donated = float(r_dict.get('total_donated') or 0.0)
-        
-        if total_donated >= 500.00: r_dict['vip_level'] = 0
-        elif total_donated >= 100.00: r_dict['vip_level'] = 1
-        elif total_donated >= 80.00:  r_dict['vip_level'] = 2
-        elif total_donated >= 60.00:  r_dict['vip_level'] = 3
-        elif total_donated >= 35.00:  r_dict['vip_level'] = 4
-        elif total_donated >= 15.00:  r_dict['vip_level'] = 5
-        else: r_dict['vip_level'] = 6  # VIP ESTELAR para doações de R$ 1 até R$ 14.99
-        
-        updated_ranking.append(r_dict)
+    updated_ranking = [dict(row) for row in raw_ranking]
 
     return render_template(
         'index.html',
@@ -2672,8 +2662,16 @@ def payment_disabled_status():
 
 
 def _has_gateway_access(admin) -> bool:
-    """Gateway access is controlled by the target user's permission flag."""
+    """Full gateway management is controlled by this user's persisted flag."""
     return admin_store.has_admin_permission(admin, 'manageGateways')
+
+
+def _has_gateway_view_access(admin) -> bool:
+    """Allow read access when the user has either read-only or full access."""
+    return (
+        _has_gateway_access(admin)
+        or admin_store.has_admin_permission(admin, 'viewGateways')
+    )
 
 
 @app.route('/payment/admin/pix-status', methods=['GET'])
@@ -2740,7 +2738,11 @@ def payment_admin():
     admin, _ = _get_admin()
     if not admin:
         return redirect('/admin/login')
-    if not _has_gateway_access(admin):
+    has_manage_access = _has_gateway_access(admin)
+    has_view_access = _has_gateway_view_access(admin)
+    if (request.method == 'GET' and not has_view_access) or (
+        request.method == 'POST' and not has_manage_access
+    ):
         # Item 2: retorna tela "Acesso Negado" para não-owners sem permissão
         return render_template('admin/gateway_denied.html', admin=admin,
                                role_meta=admin_store.ROLE_META), 403
@@ -2781,6 +2783,7 @@ def payment_admin():
                            custom_colors=pgw.CUSTOM_COLORS,
                            admin_msg=admin_msg,
                            gateway_notice=gateway_notice,
+                           gateway_readonly=not has_manage_access,
                            admin=admin,
                            pix_payments=pix_payments,
                            gateway_backups=gateway_backups,
@@ -3524,8 +3527,16 @@ def admin_ranking_view():
     rows  = admin_store.get_ranking()
     tiers = admin_store.get_vip_tiers()
     now = time.time()
+    banner_by_tier = {
+        0: '/static/banners/banner-supreme.png',
+        1: '/static/banners/banner_diamante.png',
+        2: '/static/banners/banner-rubi.png',
+        3: '/static/banners/banner_ouro.png',
+        4: '/static/banners/banner_prata.png',
+        5: '/static/banners/banner_bronze.png',
+        6: '/static/banners/banner_estrela.png',
+    }
 
-    # Intercepta e recalcula os níveis antigos em tempo de execução
     updated_rows = []
     for r in rows:
         r_dict = dict(r)  # Evita erros de objeto protegido contra escrita
@@ -3535,24 +3546,7 @@ def admin_ranking_view():
             )
         except (TypeError, ValueError):
             r_dict['online'] = False
-        total = float(r_dict.get('total_donated') or 0.0)
-        
-        # Enforça a nova hierarquia cronológica estrita de 7 níveis (>=)
-        if total >= 500.00:
-            r_dict['vip_level'] = 0  # VIP SUPREME
-        elif total >= 100.00:
-            r_dict['vip_level'] = 1  # VIP DIAMANTE
-        elif total >= 80.00:
-            r_dict['vip_level'] = 2  # VIP RUBI
-        elif total >= 60.00:
-            r_dict['vip_level'] = 3  # VIP OURO
-        elif total >= 35.00:
-            r_dict['vip_level'] = 4  # VIP PRATA
-        elif total >= 15.00:
-            r_dict['vip_level'] = 5  # VIP BRONZE
-        else:
-            r_dict['vip_level'] = 6  # VIP ESTELAR
-
+        r_dict['banner_url'] = banner_by_tier.get(int(r_dict.get('vip_level', 6)), banner_by_tier[6])
         updated_rows.append(r_dict)
 
     internal_access_mod    = admin_store.get_internal_access_moderator()
@@ -3568,6 +3562,7 @@ def admin_ranking_view():
         role_meta=admin_store.ROLE_META,
         rows=updated_rows,
         tiers=tiers,
+        avatar_ids=sorted(donor_avatars.get_valid_avatar_ids()),
         internal_access_mod=internal_access_mod,
         internal_access_helper=internal_access_helper,
         chat_admins=chat_admins,
@@ -3590,9 +3585,10 @@ def admin_ranking_config_update(tier_id):
     ok = admin_store.update_vip_tier(tier_id, min_val, bonus_urls)
     if not ok:
         return jsonify({'error': 'Tier não encontrado'}), 404
+    recalculated = admin_store.recalculate_vip_levels()
     admin_store.audit(admin['id'], admin['username'], admin['role'], 'vip_tier_update',
-                      f'Tier {tier_id}: min_value={min_val}, bonus_urls={bonus_urls}')
-    return jsonify({'ok': True})
+                      f'Tier {tier_id}: min_value={min_val}, bonus_urls={bonus_urls}; recalculated={recalculated}')
+    return jsonify({'ok': True, 'recalculated': recalculated})
 
 
 @app.route('/admin/ranking/create-manual', methods=['POST'])
@@ -3604,7 +3600,7 @@ def admin_ranking_create_manual():
         return jsonify({'error': 'Sem permissão'}), 403
 
     data      = request.get_json(silent=True) or {}
-    nickname  = str(data.get('nickname', '')).strip()[:40]
+    nickname  = str(data.get('nickname', '')).strip()[:24]
     avatar_id = str(data.get('avatar_id', 'm_1')).strip().lower()
     try:
         amount = float(data.get('amount', 0))
@@ -3612,7 +3608,7 @@ def admin_ranking_create_manual():
         return jsonify({'error': 'Valor inválido'}), 400
 
     if not nickname or len(nickname) < 2:
-        return jsonify({'error': 'Apelido inválido (mínimo 2 caracteres)'}), 400
+        return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
     if amount < 0.01:
         return jsonify({'error': 'Valor deve ser maior que R$ 0,00'}), 400
     if avatar_id not in donor_avatars.get_valid_avatar_ids():
@@ -3656,6 +3652,41 @@ def admin_ranking_create_manual():
     })
 
 
+@app.route('/admin/ranking/update-profile/<int:donor_id>', methods=['POST'])
+def admin_ranking_update_profile(donor_id):
+    """Owner-only edit of a supporter nickname, avatar, and saved visual style."""
+    admin = g.admin
+    if admin.get('role') != 'owner':
+        return jsonify({'error': 'Sem permissão'}), 403
+    data = request.get_json(silent=True) or {}
+    avatar_id = str(data.get('avatar_id', '')).strip().lower()
+    if avatar_id not in donor_avatars.get_valid_avatar_ids():
+        return jsonify({'error': 'Avatar inválido'}), 400
+    style = _clean_donor_style(data)
+    try:
+        updated = admin_store.update_donor_profile(
+            donor_id=donor_id,
+            nickname=data.get('nickname', ''),
+            avatar_id=avatar_id,
+            font_id=style['font_id'],
+            text_effect=style['text_effect'],
+            name_color=style['name_color'],
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        app_logger.error(f'admin_ranking_update_profile error: {exc}')
+        return jsonify({'error': 'Erro interno ao atualizar o apoiador'}), 500
+    if not updated:
+        return jsonify({'error': 'Apoiador não encontrado'}), 404
+    admin_store.audit(
+        admin['id'], admin['username'], admin['role'], 'supporter_profile_updated',
+        f"id={donor_id} nickname={updated['nickname']} avatar={avatar_id} "
+        f"font={style['font_id']} effect={style['text_effect']}"
+    )
+    return jsonify({'ok': True, **updated})
+
+
 @app.route('/api/donation/register', methods=['POST'])
 def donation_register():
     import uuid as _uuid
@@ -3672,7 +3703,11 @@ def donation_register():
         return jsonify({'error': 'Pagamento não identificado'}), 400
 
     # ── Server-side payment verification — amount comes ONLY from our DB ──
-    payment_row = admin_store.get_pix_payment_by_id(payment_id)
+    try:
+        payment_row = admin_store.get_pix_payment_by_id(payment_id)
+    except Exception as exc:
+        app_logger.error(f'donation_register payment lookup failed: {exc}')
+        return jsonify({'error': 'Não foi possível validar o pagamento agora. Tente novamente.'}), 503
     if not payment_row or payment_row.get('status') != 'paid':
         return jsonify({'error': 'Pagamento não confirmado ou não encontrado'}), 403
 
@@ -3688,7 +3723,9 @@ def donation_register():
             # Fetch full row for nickname+avatar
             donor_row = admin_store.check_returning_donor(token, client_ip, client_ua)
             if donor_row:
-                nickname  = donor_row['nickname']
+                nickname = str(data.get('nickname', donor_row['nickname']) or donor_row['nickname']).strip()[:24]
+                if len(nickname) < 2:
+                    return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
                 avatar_id = donor_row['avatar_id']
                 # Gender-locked avatar refresh: a returning supporter may pick a NEW
                 # avatar from the success-modal grid, but only within their own
@@ -3754,11 +3791,11 @@ def donation_register():
                 return resp
         # Token not verified — fall through to standard new-donor registration
 
-    nickname  = str(data.get('nickname', '')).strip()[:40]
+    nickname  = str(data.get('nickname', '')).strip()[:24]
     avatar_id = str(data.get('avatar_id', 'm_1')).strip().lower()
 
     if not nickname or len(nickname) < 2:
-        return jsonify({'error': 'Apelido inválido'}), 400
+        return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
     # Gender-prefixed avatar ids: donor_m_*.png -> masculino, donor_f_*.png -> feminino.
     # The valid set is scanned live from static/donors/, so newly-added avatar
     # files are accepted immediately without any code change.
@@ -3854,7 +3891,9 @@ def api_public_ranking():
             row['online'] = bool(last_seen and now - float(last_seen) <= 120)
         except (TypeError, ValueError):
             row['online'] = False
-    return jsonify(rows)
+    response = jsonify(rows)
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return response
 
 
 @app.route('/api/ranking/latest')
@@ -4001,23 +4040,6 @@ def public_ranking_view():
     rows = admin_store.get_ranking()
     now = time.time()
     for row in rows:
-        # Recalculate from the accumulated amount so old/stale persisted
-        # vip_level values cannot show the wrong badge on the public page.
-        total = float(row.get('total_donated') or 0.0)
-        if total >= 500.00:
-            row['vip_level'] = 0  # VIP SUPREME
-        elif total >= 100.00:
-            row['vip_level'] = 1  # VIP DIAMANTE
-        elif total >= 80.00:
-            row['vip_level'] = 2  # VIP RUBI
-        elif total >= 60.00:
-            row['vip_level'] = 3  # VIP OURO
-        elif total >= 35.00:
-            row['vip_level'] = 4  # VIP PRATA
-        elif total >= 15.00:
-            row['vip_level'] = 5  # VIP BRONZE
-        else:
-            row['vip_level'] = 6  # VIP ESTELAR
         try:
             row['online'] = bool(row.get('last_seen_at') and now - float(row['last_seen_at']) <= 120)
             if row.get('last_seen_at'):
@@ -4027,7 +4049,13 @@ def public_ranking_view():
         except (TypeError, ValueError):
             row['online'] = False
             row['last_seen_label'] = ''
-    return render_template('ranking.html', rows=rows)
+    response = app.make_response(render_template(
+        'ranking.html',
+        rows=rows,
+        vip_tiers=admin_store.get_vip_tiers(),
+    ))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return response
 
 
 @app.route('/admin/settings')
@@ -4078,6 +4106,16 @@ def admin_update_permissions(target_id):
         return jsonify({'ok': False, 'error': 'Usuário não pode ser alterado.'}), 404
     if not admin_store.can_manage(admin['role'], target['role']):
         return jsonify({'ok': False, 'error': 'Sem permissão para este usuário.'}), 403
+    if permission == 'manageGateways' and target['role'] != 'admin':
+        return jsonify({
+            'ok': False,
+            'error': 'Gerenciamento completo de gateways está disponível somente para Administradores.'
+        }), 403
+    if permission == 'viewGateways' and target['role'] not in ('moderator', 'helper'):
+        return jsonify({
+            'ok': False,
+            'error': 'A permissão de somente leitura está disponível para Moderadores e Ajudantes.'
+        }), 403
     enabled = bool(data.get('enabled', False))
     permissions = admin_store.update_admin_permission(target_id, permission, enabled)
     if permissions is None:
@@ -4645,7 +4683,7 @@ def admin_notifications():
     admin = g.admin
     notifications = admin_store.get_notifications(
         limit=50, viewer_role=admin['role'], admin_id=admin['id'],
-        manage_gateways=admin_store.has_admin_permission(admin, 'manageGateways')
+        manage_gateways=_has_gateway_view_access(admin)
     )
     # Mark all as read
     for n in notifications:
@@ -4682,7 +4720,7 @@ def admin_notifications_clear_all():
 @app.route('/admin/notifications/api')
 def admin_notifications_api():
     admin = g.admin
-    manage_gateways = admin_store.has_admin_permission(admin, 'manageGateways')
+    manage_gateways = _has_gateway_view_access(admin)
     count = admin_store.count_unread_notifications(admin['id'], admin['role'], manage_gateways)
     notifications = admin_store.get_notifications(
         limit=30, viewer_role=admin['role'],

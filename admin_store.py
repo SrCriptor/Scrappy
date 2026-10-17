@@ -126,7 +126,8 @@ def init_db():
             status       TEXT NOT NULL DEFAULT 'offline',
             crowned      INTEGER NOT NULL DEFAULT 0,
             access_dev_mode BOOLEAN NOT NULL DEFAULT FALSE,
-            manage_gateways BOOLEAN NOT NULL DEFAULT FALSE
+            manage_gateways BOOLEAN NOT NULL DEFAULT FALSE,
+            view_gateways BOOLEAN NOT NULL DEFAULT FALSE
         )
         """)
         c.execute("""
@@ -466,16 +467,17 @@ def init_db():
             resolved    BOOLEAN NOT NULL DEFAULT FALSE
         )
         """)
-        # Seed default VIP tiers if empty (VIP SUPREME=0 highest, VIP 5 = base)
+        # Seed default VIP tiers if empty (VIP SUPREME=0 highest, VIP 6 = base).
         c.execute("SELECT COUNT(*) AS n FROM vip_tiers_config")
         if (c.fetchone()['n'] or 0) == 0:
             for _td, _tn, _mv, _bu in [
                 (0, 'VIP SUPREME 🔥', 500, 150),
                 (1, 'VIP 1 💎',       100, 100),
-                (2, 'VIP 2',           60,  60),
-                (3, 'VIP 3',           35,  40),
-                (4, 'VIP 4',           15,  20),
-                (5, 'VIP 5',            5,  10),
+                (2, 'VIP 2',           80,  60),
+                (3, 'VIP 3',           60,  40),
+                (4, 'VIP 4',           35,  30),
+                (5, 'VIP 5',           15,  20),
+                (6, 'VIP ESTELAR',      1,  10),
             ]:
                 c.execute(
                     "INSERT INTO vip_tiers_config(tier_id, tier_name, min_value, bonus_urls) VALUES(%s,%s,%s,%s)",
@@ -485,6 +487,10 @@ def init_db():
         c.execute(
             "INSERT INTO vip_tiers_config(tier_id, tier_name, min_value, bonus_urls) "
             "VALUES(0,'VIP SUPREME \U0001f525',500,150) ON CONFLICT(tier_id) DO NOTHING"
+        )
+        c.execute(
+            "INSERT INTO vip_tiers_config(tier_id, tier_name, min_value, bonus_urls) "
+            "VALUES(6,'VIP ESTELAR',1,10) ON CONFLICT(tier_id) DO NOTHING"
         )
 
         _migrate_columns(c)
@@ -497,7 +503,7 @@ def init_db():
         # an owner inserted by a previous installation before these columns
         # existed.
         c.execute(
-            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE "
+            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE, view_gateways=FALSE "
             "WHERE role='owner'"
         )
 
@@ -509,26 +515,28 @@ def init_db():
 # ── Donation Ranking ───────────────────────────────────────────────────────────
 
 def _compute_vip_level_with_conn(c, total_donated: float) -> int:
-    """Compute VIP level from DB tiers config using an open cursor.
-    VIP SUPREME (0) is the god-tier; VIP 5 is the default fallback.
-    Uses >= so that exact threshold donations are correctly assigned.
-    tier_id=0 (SUPREME, 500) comes first in ASC order naturally."""
+    """Compute the highest eligible VIP tier from the editable database config."""
     try:
         c.execute(
             "SELECT tier_id, min_value FROM vip_tiers_config "
-            "WHERE tier_id < 5 ORDER BY tier_id ASC"
+            "ORDER BY tier_id ASC"
         )
-        for tier in c.fetchall():
+        tiers = c.fetchall()
+        for tier in tiers:
             if total_donated >= float(tier['min_value']):
                 return int(tier['tier_id'])
+        if tiers:
+            return max(int(tier['tier_id']) for tier in tiers)
     except Exception:
-        # Fallback to hardcoded thresholds if table not yet available
+        # Defaults are only used during first-time database initialization.
         if total_donated >= 500: return 0
         if total_donated >= 100: return 1
-        if total_donated >= 60:  return 2
-        if total_donated >= 35:  return 3
-        if total_donated >= 15:  return 4
-    return 5
+        if total_donated >= 80:  return 2
+        if total_donated >= 60:  return 3
+        if total_donated >= 35:  return 4
+        if total_donated >= 15:  return 5
+        return 6
+    return 6
 
 
 def _compute_vip_level(total_donated: float) -> int:
@@ -546,7 +554,7 @@ def get_vip_tiers() -> list:
 
 def update_vip_tier(tier_id: int, min_value: float, bonus_urls: int) -> bool:
     """Owner: update a single VIP tier's min_value and bonus_urls. Returns True on success."""
-    if tier_id not in (0, 1, 2, 3, 4, 5):
+    if tier_id not in (0, 1, 2, 3, 4, 5, 6):
         return False
     with _conn() as c:
         c.execute(
@@ -554,6 +562,17 @@ def update_vip_tier(tier_id: int, min_value: float, bonus_urls: int) -> bool:
             (min_value, bonus_urls, tier_id)
         )
         return c.rowcount == 1
+
+
+def recalculate_vip_levels() -> int:
+    """Persist current configured VIP tiers for every supporter after tier edits."""
+    with _lock, _conn() as c:
+        c.execute("SELECT id, total_donated FROM donation_ranking ORDER BY id")
+        rows = c.fetchall()
+        for row in rows:
+            vip = _compute_vip_level_with_conn(c, float(row['total_donated'] or 0))
+            c.execute("UPDATE donation_ranking SET vip_level=%s WHERE id=%s", (vip, row['id']))
+        return len(rows)
 
 
 def get_vip_link_limits() -> dict:
@@ -678,7 +697,7 @@ def _generate_discriminator(c, nickname: str) -> str:
     """Roll a unique 4-digit #Tag for a given nickname (checked inside current transaction).
     Loops up to 200 times before giving up (9 000 possible slots makes collision near-impossible)."""
     import random as _rand
-    nick = nickname[:40]
+    nick = nickname[:24]
     for _ in range(200):
         disc = str(_rand.randint(1000, 9999))
         c.execute(
@@ -767,14 +786,14 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
                 "UPDATE donation_ranking SET total_donated=%s, vip_level=%s, avatar_id=%s, nickname=%s, "
                 "currency=%s, last_ip=%s, last_ua=%s, discriminator=%s, font_id=%s, text_effect=%s, name_color=%s, last_seen_at=%s "
                 "WHERE secret_token=%s",
-                (new_total, vip, avatar_id, nickname[:40], currency, ip, ua, disc, font_id,
+                (new_total, vip, avatar_id, nickname[:24], currency, ip, ua, disc, font_id,
                  text_effect, name_color, seen_at, token)
             )
             # is_new=False signals a repeat donation from an already-known supporter
             # (secret_token already had a ranking row) — used by app.py to fire the
             # "apoiador de elite" repeat-donation notification/webhook.
             return {'id': existing['id'], 'total_donated': new_total, 'vip_level': vip,
-                    'nickname': nickname[:40], 'discriminator': disc, 'font_id': font_id,
+                    'nickname': nickname[:24], 'discriminator': disc, 'font_id': font_id,
                     'text_effect': text_effect, 'name_color': name_color,
                     'is_new': False, 'previous_vip_level': int(existing['vip_level'])}
         else:
@@ -789,12 +808,12 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
                    nickname, avatar_id, total_donated, currency, vip_level, secret_token, ts,
                    last_ip, last_ua, discriminator, font_id, text_effect, name_color, last_seen_at)
                    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (nickname[:40], avatar_id, credited, currency, vip, token, ts, ip, ua, disc,
+                (nickname[:24], avatar_id, credited, currency, vip, token, ts, ip, ua, disc,
                   font_id, text_effect, name_color, seen_at)
             )
             row = c.fetchone()
             return {'id': row['id'], 'total_donated': credited, 'vip_level': vip,
-                    'nickname': nickname[:40], 'discriminator': disc, 'font_id': font_id,
+                    'nickname': nickname[:24], 'discriminator': disc, 'font_id': font_id,
                     'text_effect': text_effect, 'name_color': name_color,
                     'is_new': True, 'previous_vip_level': None}
 
@@ -802,6 +821,8 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
 def get_ranking(limit: int = 50) -> list:
     """Return top donors by total, preserving first-support order on ties."""
     with _conn() as c:
+        c.execute("SELECT tier_id, min_value FROM vip_tiers_config ORDER BY tier_id ASC")
+        tiers = c.fetchall()
         c.execute(
             "SELECT id, nickname, avatar_id, total_donated, vip_level, ts, discriminator, "
             "currency, font_id, text_effect, name_color, last_seen_at "
@@ -815,6 +836,9 @@ def get_ranking(limit: int = 50) -> list:
         allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
         for row in c.fetchall():
             item = dict(row)
+            item['vip_level'] = _compute_vip_level_from_tiers(
+                float(item.get('total_donated') or 0), tiers
+            )
             item['currency'] = str(item.get('currency') or 'BRL').upper()
             if item['currency'] not in {'BRL', 'USD'}:
                 item['currency'] = 'BRL'
@@ -826,6 +850,20 @@ def get_ranking(limit: int = 50) -> list:
                 item['name_color'] = '#f3f4f6'
             rows.append(item)
         return rows
+
+
+def _compute_vip_level_from_tiers(total_donated: float, tiers) -> int:
+    """Compute the highest eligible tier from a previously fetched config list."""
+    for tier in tiers or []:
+        if total_donated >= float(tier['min_value']):
+            return int(tier['tier_id'])
+    if tiers:
+        return max(int(tier['tier_id']) for tier in tiers)
+    # Only used if the config table is unexpectedly empty.
+    for tier_id, threshold in ((0, 500), (1, 100), (2, 80), (3, 60), (4, 35), (5, 15), (6, 1)):
+        if total_donated >= threshold:
+            return tier_id
+    return 6
 
 
 def get_vip_by_token(token: str):
@@ -866,6 +904,53 @@ def update_donor_style(token: str, font_id: str = 'default',
         return c.rowcount == 1
 
 
+def update_donor_profile(donor_id: int, nickname: str, avatar_id: str,
+                         font_id: str, text_effect: str, name_color: str):
+    """Owner-managed edit of a supporter profile, with safe style allowlists."""
+    allowed_fonts = {'default', 'inter', 'orbitron', 'rajdhani', 'space-grotesk',
+                     'press-start', 'bangers', 'roboto-mono', 'montserrat',
+                     'gothic', 'script', 'pixel'}
+    allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
+    nickname = str(nickname or '').strip()[:24]
+    if len(nickname) < 2:
+        raise ValueError('Apelido deve ter entre 2 e 24 caracteres.')
+    if font_id not in allowed_fonts:
+        raise ValueError('Fonte inválida.')
+    if text_effect not in allowed_effects:
+        raise ValueError('Efeito inválido.')
+    if not re.fullmatch(r'#[0-9a-fA-F]{6}', str(name_color or '')):
+        raise ValueError('Cor inválida.')
+    if not re.fullmatch(r'[mf]_[A-Za-z0-9_-]+', str(avatar_id or '')):
+        raise ValueError('Avatar inválido.')
+
+    with _lock, _conn() as c:
+        c.execute(
+            "SELECT id, discriminator FROM donation_ranking WHERE id=%s",
+            (donor_id,)
+        )
+        donor = c.fetchone()
+        if not donor:
+            return None
+        discriminator = donor.get('discriminator') or _generate_discriminator(c, nickname)
+        c.execute(
+            "SELECT 1 FROM donation_ranking WHERE nickname=%s AND discriminator=%s AND id<>%s",
+            (nickname, discriminator, donor_id)
+        )
+        if c.fetchone():
+            discriminator = _generate_discriminator(c, nickname)
+        c.execute(
+            "UPDATE donation_ranking SET nickname=%s, avatar_id=%s, discriminator=%s, "
+            "font_id=%s, text_effect=%s, name_color=%s WHERE id=%s",
+            (nickname, avatar_id, discriminator, font_id, text_effect,
+             str(name_color).lower(), donor_id)
+        )
+        return {
+            'id': donor_id, 'nickname': nickname, 'avatar_id': avatar_id,
+            'discriminator': discriminator, 'font_id': font_id,
+            'text_effect': text_effect, 'name_color': str(name_color).lower()
+        }
+
+
 def touch_supporter_presence(token: str) -> bool:
     """Mark a supporter as recently active without exposing their token."""
     if not token:
@@ -902,10 +987,13 @@ def _migrate_columns(c):
         c.execute("ALTER TABLE admins ADD COLUMN crowned INTEGER NOT NULL DEFAULT 0")
     added_dev_mode = 'access_dev_mode' not in existing
     added_gateways = 'manage_gateways' not in existing
+    added_gateway_view = 'view_gateways' not in existing
     if added_dev_mode:
         c.execute("ALTER TABLE admins ADD COLUMN access_dev_mode BOOLEAN NOT NULL DEFAULT FALSE")
     if added_gateways:
         c.execute("ALTER TABLE admins ADD COLUMN manage_gateways BOOLEAN NOT NULL DEFAULT FALSE")
+    if added_gateway_view:
+        c.execute("ALTER TABLE admins ADD COLUMN view_gateways BOOLEAN NOT NULL DEFAULT FALSE")
     if added_dev_mode:
         c.execute(
             "UPDATE admins SET access_dev_mode = (role IN ('owner','admin'))"
@@ -914,8 +1002,20 @@ def _migrate_columns(c):
         # The former global gateway switch is intentionally not migrated into
         # every admin account. New access is granted explicitly per user.
         c.execute("UPDATE admins SET manage_gateways = FALSE")
+    if added_gateway_view:
+        # Preserve existing helper/moderator grants as read-only access, and
+        # provision full gateway management for administrator accounts.
+        c.execute(
+            "UPDATE admins SET view_gateways=TRUE, manage_gateways=FALSE "
+            "WHERE role IN ('moderator','helper') AND manage_gateways=TRUE"
+        )
+        c.execute(
+            "UPDATE admins SET manage_gateways=TRUE, view_gateways=FALSE "
+            "WHERE role IN ('owner','admin')"
+        )
     c.execute(
-        "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE WHERE role='owner'"
+        "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE, view_gateways=FALSE "
+        "WHERE role='owner'"
     )
 
     existing_log = _cols('activity_log')
@@ -1098,7 +1198,7 @@ def _seed_owner(c):
             "access_dev_mode, manage_gateways) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username) DO NOTHING",
             (username, generate_password_hash(pw), role, avatar, display_name, now, status,
-             role == 'owner', role == 'owner')
+             role == 'owner', role in ('owner', 'admin'))
         )
 
 
@@ -1817,6 +1917,7 @@ def list_admins():
         item['permissions'] = {
             'accessDevMode': bool(item.get('access_dev_mode')),
             'manageGateways': bool(item.get('manage_gateways')),
+            'viewGateways': bool(item.get('view_gateways')),
         }
         result.append(item)
     return sorted(result, key=lambda r: (ROLE_LEVEL.get(r['role'], 99), r['username']))
@@ -1832,6 +1933,7 @@ def get_admin_by_id(admin_id: int):
     result['permissions'] = {
         'accessDevMode': bool(result.get('access_dev_mode')),
         'manageGateways': bool(result.get('manage_gateways')),
+        'viewGateways': bool(result.get('view_gateways')),
     }
     return result
 
@@ -1845,10 +1947,11 @@ def create_admin(username: str, password: str, role: str,
     now = _now()
     with _lock, _conn() as c:
         c.execute(
-            "INSERT INTO admins(username, password, role, avatar, display_name, created_at, created_by) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            "INSERT INTO admins(username, password, role, avatar, display_name, created_at, created_by, "
+            "manage_gateways, view_gateways) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,FALSE) RETURNING id",
             (username.strip(), generate_password_hash(password),
-             role, avatar, display_name.strip(), now, created_by)
+             role, avatar, display_name.strip(), now, created_by, role == 'admin')
         )
         return c.fetchone()['id']
 
@@ -1857,7 +1960,14 @@ def update_role(admin_id: int, new_role: str):
     if new_role not in ROLES:
         raise ValueError("Cargo inválido")
     with _lock, _conn() as c:
-        c.execute("UPDATE admins SET role=%s WHERE id=%s", (new_role, admin_id))
+        c.execute("SELECT role FROM admins WHERE id=%s", (admin_id,))
+        current = c.fetchone()
+        if not current or current['role'] == new_role:
+            return
+        c.execute(
+            "UPDATE admins SET role=%s, manage_gateways=%s, view_gateways=FALSE WHERE id=%s",
+            (new_role, new_role in ('owner', 'admin'), admin_id)
+        )
 
 
 def toggle_active(admin_id: int, active: bool):
@@ -1899,21 +2009,23 @@ def delete_admin(admin_id: int):
 ADMIN_PERMISSION_COLUMNS = {
     'accessDevMode': 'access_dev_mode',
     'manageGateways': 'manage_gateways',
+    'viewGateways': 'view_gateways',
 }
 
 
 def get_admin_permissions(admin_id: int) -> dict:
     with _conn() as c:
         c.execute(
-            "SELECT access_dev_mode, manage_gateways FROM admins WHERE id=%s",
+            "SELECT access_dev_mode, manage_gateways, view_gateways FROM admins WHERE id=%s",
             (admin_id,)
         )
         row = c.fetchone()
     if not row:
-        return {'accessDevMode': False, 'manageGateways': False}
+        return {'accessDevMode': False, 'manageGateways': False, 'viewGateways': False}
     return {
         'accessDevMode': bool(row['access_dev_mode']),
         'manageGateways': bool(row['manage_gateways']),
+        'viewGateways': bool(row['view_gateways']),
     }
 
 
@@ -1929,7 +2041,7 @@ def ensure_owner_permissions(admin_id: int) -> None:
     """Owners retain both built-in controls even when their row predates flags."""
     with _lock, _conn() as c:
         c.execute(
-            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE "
+            "UPDATE admins SET access_dev_mode=TRUE, manage_gateways=TRUE, view_gateways=FALSE "
             "WHERE id=%s AND role='owner'",
             (admin_id,)
         )
