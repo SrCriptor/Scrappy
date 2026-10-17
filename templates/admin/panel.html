@@ -184,7 +184,7 @@
     {% endif %}
 
     <!-- Payments disabled banner -->
-    {% if payments_disabled and has_gateway_access %}
+    {% if payments_disabled and has_gateway_manage_access %}
     <div class="maint-banner" style="background:#1a0a2e;border-color:#7c3aed66;color:#c4b5fd;">
         <i class="fas fa-ban"></i>
         <span><strong>Meios de Pagamento DESATIVADOS</strong> — nenhum gateway de pagamento está ativo no momento.</span>
@@ -264,7 +264,7 @@
                 <a href="/payment/admin" class="quick-btn">
                     <i class="fas fa-credit-card text-success"></i>
                     Gateway
-                    <br><small>Pagamentos</small>
+                    <br><small>{% if has_gateway_manage_access %}Configurar pagamentos{% else %}Somente visualizar{% endif %}</small>
                 </a>
             </div>
             {% endif %}

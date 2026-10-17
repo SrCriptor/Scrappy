@@ -180,7 +180,7 @@
         .donor-font-script { font-family: 'Caveat', cursive !important; font-size: 1.05em; }
         .donor-font-pixel { font-family: 'Rubik Mono One', sans-serif !important; font-size: .78rem; }
         .donor-effect-gradient {
-            background: linear-gradient(90deg,var(--donor-color),#00f0ff,#a855f7);
+            background: linear-gradient(90deg,#38bdf8,#00f0ff,#a855f7);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         .donor-effect-neon { text-shadow: 0 0 5px var(--donor-color), 0 0 13px var(--donor-color), 0 0 24px var(--donor-color); }
@@ -273,20 +273,25 @@
     <!-- 4. CONTAINER DO TOOLTIP COMPACTO ATUALIZADO COM OS 7 TOKENS DINÂMICOS -->
     <div id="vip-perks-tooltip" style="display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 110px; z-index: 1000;">
         <ul>
-            <li><i class="fas fa-fire" style="color:#ff4500;"></i> <strong>SUPREME:</strong> >= 500.00 (+100 URLs)</li>
-            <li><i class="fas fa-gem" style="color:#00f0ff;"></i> <strong>DIAMANTE:</strong> >= 100.00 (+60 URLs)</li>
-            <li><i class="fas fa-gem" style="color:#ff0033;"></i> <strong>RUBI:</strong> >= 80.00 (+50 URLs)</li>
-            <li><i class="fas fa-crown" style="color:#ffd700;"></i> <strong>OURO:</strong> >= 60.00 (+40 URLs)</li>
-            <li><i class="fas fa-award" style="color:#e2e8f0;"></i> <strong>PRATA:</strong> >= 35.00 (+30 URLs)</li>
-            <li><i class="fas fa-trophy" style="color:#ff7f50;"></i> <strong>BRONZE:</strong> >= 15.00 (+20 URLs)</li>
-            <li><i class="fas fa-star" style="color:#7ba4c7; opacity:0.6;"></i> <strong>ESTELAR:</strong> >= 1.00 (+10 URLs)</li>
+            {% for tier in vip_tiers %}
+            <li>
+                {% if tier.tier_id == 0 %}<i class="fas fa-fire" style="color:#ff4500;"></i><strong>SUPREME:</strong>
+                {% elif tier.tier_id == 1 %}<i class="fas fa-gem" style="color:#00f0ff;"></i><strong>DIAMANTE:</strong>
+                {% elif tier.tier_id == 2 %}<i class="fas fa-gem" style="color:#ff0033;"></i><strong>RUBI:</strong>
+                {% elif tier.tier_id == 3 %}<i class="fas fa-crown" style="color:#ffd700;"></i><strong>OURO:</strong>
+                {% elif tier.tier_id == 4 %}<i class="fas fa-award" style="color:#e2e8f0;"></i><strong>PRATA:</strong>
+                {% elif tier.tier_id == 5 %}<i class="fas fa-trophy" style="color:#ff7f50;"></i><strong>BRONZE:</strong>
+                {% else %}<i class="fas fa-star" style="color:#7ba4c7;opacity:.6;"></i><strong>ESTELAR:</strong>{% endif %}
+                &ge; {{ '%.2f'|format(tier.min_value|float) }} (+{{ tier.bonus_urls }} URLs)
+            </li>
+            {% endfor %}
         </ul>
     </div>
 
-    <div class="section-card">
+    <div class="section-card" id="rankingSection">
         {% if rows %}
         <div class="table-responsive">
-            <table class="rank-table">
+            <table class="rank-table" id="publicRankingTable">
                 <thead>
                     <tr>
                         <th style="width:50px; text-align:center;">#</th>
@@ -296,7 +301,7 @@
                         <th>Tier</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="publicRankingRows">
                 {% for r in rows %}
                 {% set pos = loop.index %}
                 {% set vip = r.vip_level|default(6)|int %}
@@ -435,6 +440,25 @@
         refreshPresence();
         setInterval(heartbeat, 30000);
         setInterval(refreshPresence, 15000);
+    })();
+
+    /* Keep the full leaderboard current without reloading the whole page. */
+    (function() {
+        async function refreshRankingTable() {
+            if (document.hidden) return;
+            try {
+                var response = await fetch('/ranking', {cache: 'no-store'});
+                if (!response.ok) return;
+                var html = await response.text();
+                var parsed = new DOMParser().parseFromString(html, 'text/html');
+                var current = document.getElementById('rankingSection');
+                var updated = parsed.getElementById('rankingSection');
+                if (current && updated && current.innerHTML !== updated.innerHTML) {
+                    current.replaceWith(updated);
+                }
+            } catch (e) {}
+        }
+        window.setInterval(refreshRankingTable, 5000);
     })();
 </script>
 </body>

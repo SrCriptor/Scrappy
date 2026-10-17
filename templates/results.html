@@ -678,6 +678,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='download-resilience.js') }}"></script>
+    <script src="{{ url_for('static', filename='download-progress-list.js') }}"></script>
     <script src="{{ url_for('static', filename='js/site-notice.js') }}"></script>
     <script>
       var tooltipTriggerList = [].slice.call(
@@ -750,8 +751,9 @@
       card.setAttribute('role', 'status');
       card.setAttribute('aria-live', 'polite');
       card.style.cssText = 'display:block;position:fixed;bottom:20px;right:20px;z-index:9999;' +
-        'background:#0d1117;border:1px solid #30363d;border-radius:8px;' +
-        'padding:12px 16px;min-width:260px;max-width:340px;' +
+        'background:#0d1117;border:1px solid #30363d;border-radius:10px;' +
+        'padding:12px 14px;width:min(420px,calc(100vw - 24px));max-width:420px;' +
+        'max-height:70vh;overflow:hidden;' +
         'box-shadow:0 8px 24px rgba(0,0,0,.75);';
       card.innerHTML =
         '<div style="display:flex;align-items:center;gap:12px;">' +
@@ -766,10 +768,8 @@
                     'style="transition:stroke-dashoffset .3s ease;"></circle>' +
           '</svg>' +
           '<div style="flex:1;min-width:0;">' +
-            '<div id="downloadProgressLabel" style="font-size:.82rem;font-weight:600;color:#e6edf3;' +
-                'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Processando Arquivos...</div>' +
-            '<div id="downloadProgressFile" style="font-size:.68rem;color:#a5b4fc;margin-top:2px;' +
-                'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Preparando o próximo arquivo…</div>' +
+            '<div id="downloadProgressLabel" style="font-size:.82rem;font-weight:600;color:#e6edf3;">Preparando downloads...</div>' +
+            '<div id="downloadProgressFile" style="font-size:.68rem;color:#a5b4fc;margin-top:2px;">0 ativos · ' + total + ' na fila</div>' +
             '<div id="downloadProgressCount" style="font-size:.72rem;color:#8b949e;margin-top:2px;">0/' + total + '</div>' +
           '</div>' +
           '<button id="downloadProgressPauseBtn" type="button" aria-label="Pausar download" ' +
@@ -777,12 +777,17 @@
               'flex-shrink:0;padding:0;border:1px solid #334155;border-radius:7px;background:#111827;' +
               'color:#67e8f9;cursor:pointer;"><i class="fas fa-pause" aria-hidden="true"></i></button>' +
         '</div>' +
+        '<div id="downloadProgressFiles" class="download-progress-files" ' +
+          'aria-live="polite" aria-label="Arquivos em download"></div>' +
         '<div style="margin-top:10px;background:#1c2128;border-radius:4px;height:4px;overflow:hidden;">' +
           '<div id="downloadProgressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" ' +
               'style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);' +
                      'border-radius:4px;transition:width .3s ease;"></div>' +
         '</div>';
       document.body.appendChild(card);
+      if (window.DownloadProgressList) {
+        window.DownloadProgressList.reset('downloadProgressFiles');
+      }
       document.getElementById('downloadProgressPauseBtn').addEventListener('click', function() {
         var manager = window.MediaDownloadManager;
         if (!manager) return;
@@ -811,42 +816,50 @@
       button.setAttribute('aria-label', isPaused ? 'Continuar download' : 'Pausar download');
       button.title = isPaused ? 'Continuar download' : 'Pausar download';
       button.style.color = isPaused ? '#fbbf24' : '#67e8f9';
+      if (window.DownloadProgressList) {
+        window.DownloadProgressList.setPaused('downloadProgressFiles', isPaused);
+      }
     }
 
     function updateDownloadProgressCard(progress) {
       if (!progress || typeof progress !== 'object') return;
       var total = Number(progress.total) || 0;
       var completed = Math.max(0, Number(progress.completed) || 0);
-      var index = Math.max(0, Number(progress.index) || 0);
+      var progressList = window.DownloadProgressList;
+      if (progressList) progressList.update('downloadProgressFiles', progress);
       var filePercent = progress.filePercent === null || progress.filePercent === undefined
         ? null : Math.max(0, Math.min(100, Number(progress.filePercent) || 0));
       var isQueueProgress = progress.phase === 'queue-progress';
-      var percentage = total > 0
+      var percentage = progressList
+        ? progressList.overallPercent('downloadProgressFiles', total)
+        : (total > 0
         ? (isQueueProgress ? completed : completed + (filePercent || 0) / 100) / total * 100
-        : 0;
+        : 0);
       percentage = Math.max(0, Math.min(100, Math.round(percentage)));
-      var currentNumber = isQueueProgress ? completed : Math.min(total, index + 1);
       var count = document.getElementById('downloadProgressCount');
       var label = document.getElementById('downloadProgressLabel');
       var file = document.getElementById('downloadProgressFile');
       var bar = document.getElementById('downloadProgressBar');
       var ring = document.getElementById('downloadProgressRingValue');
       var ringContainer = document.getElementById('downloadProgressRing');
+      var activeCount = progressList ? progressList.countActive('downloadProgressFiles') : 0;
+      var queuedCount = Math.max(0, total - completed - activeCount);
 
-      if (count) count.textContent = currentNumber + ' / ' + total + ' · ' + percentage + '% geral';
+      if (count) count.textContent = completed + ' / ' + total +
+        (completed === 1 ? ' concluído · ' : ' concluídos · ') + percentage + '% geral';
       if (label) {
         label.textContent = progress.paused
           ? 'Download pausado'
           : (isQueueProgress
-              ? (completed >= total ? 'Download concluído!' : 'Preparando próximo arquivo…')
-              : 'Baixando arquivo ' + currentNumber + ' de ' + total);
+              ? (completed >= total ? 'Downloads concluídos!' : 'Baixando arquivos…')
+              : (activeCount
+                  ? 'Baixando ' + activeCount + (activeCount === 1 ? ' arquivo' : ' arquivos')
+                  : 'Preparando downloads…'));
       }
       if (file) {
-        var fileName = progress.fileName || 'arquivo atual';
-        var fileStatus = filePercent === null ? 'recebendo dados…' : filePercent + '%';
-        file.textContent = isQueueProgress
-          ? fileName + ' · concluído'
-          : fileName + ' · ' + fileStatus;
+        file.textContent = completed + (completed === 1 ? ' concluído' : ' concluídos') +
+          ' · ' + activeCount + (activeCount === 1 ? ' ativo' : ' ativos') +
+          ' · ' + queuedCount + ' na fila';
       }
       setDownloadPauseButton(progress.paused === true);
       if (bar) {
@@ -959,9 +972,12 @@
       specs.forEach(function(s) {
         var el = document.getElementById(s.id);
         if (!el) return;
-        var newTitle = (isSelectionMode && s.set.size > 0) ? s.sel(s.set.size) : s.all;
-        el.title = newTitle;
-        el.setAttribute('data-bs-original-title', newTitle);
+        var tooltipText = (isSelectionMode && s.set.size > 0) ? s.sel(s.set.size) : s.all;
+        /* Use the site's single custom tooltip; a native title creates a second
+           browser tooltip on the same hover. */
+        el.setAttribute('data-tip', tooltipText);
+        el.removeAttribute('title');
+        el.removeAttribute('data-bs-original-title');
       });
 
       /* ── Sync the descriptive counter below the Download em Massa heading ── */

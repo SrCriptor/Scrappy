@@ -185,8 +185,56 @@
             #batchResultsSection {
                 display: none;
             }
+            .batch-scrape-progress {
+                width: 100%;
+                max-width: 920px;
+                margin: 0 auto;
+                padding: 14px 16px;
+                border: 1px solid #273449;
+                border-radius: 12px;
+                background: linear-gradient(160deg, #1b2434 0%, #111827 75%);
+                box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+            }
+            .batch-scrape-progress__header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                color: #e2e8f0;
+                font-size: .88rem;
+                font-weight: 600;
+            }
+            .batch-scrape-progress__title {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+            }
+            .batch-scrape-progress__icon {
+                color: #8b7cff;
+                filter: drop-shadow(0 0 5px rgba(139, 124, 255, .35));
+            }
+            .batch-scrape-progress__count {
+                color: #cbd5e1;
+                font-size: .8rem;
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+            .batch-scrape-progress__track {
+                height: 6px;
+                margin: 10px 0 12px;
+                overflow: hidden;
+                border-radius: 999px;
+                background: #283244;
+            }
+            #batchScrapeProgressBar {
+                width: 0%;
+                height: 100%;
+                border-radius: inherit;
+                background: linear-gradient(90deg, #8b5cf6, #3b82f6);
+                transition: width .28s ease;
+            }
             .url-log {
-                max-height: 220px;
+                max-height: min(32vh, 260px);
                 overflow-y: auto;
                 display: flex;
                 flex-direction: column;
@@ -196,6 +244,7 @@
                 display: flex;
                 align-items: center;
                 gap: 10px;
+                min-width: 0;
                 padding: 6px 12px;
                 border-radius: 6px;
                 background: #161b22;
@@ -232,6 +281,7 @@
             }
             .log-url {
                 flex: 1;
+                min-width: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
@@ -242,6 +292,20 @@
                 color: #8b949e;
                 white-space: nowrap;
                 flex-shrink: 0;
+            }
+            @media (max-width: 575.98px) {
+                .batch-scrape-progress {
+                    padding: 11px 10px;
+                }
+                .log-item {
+                    gap: 6px;
+                    padding: 6px 8px;
+                }
+                .log-counts {
+                    max-width: 38%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
             }
             .image-container {
                 overflow: hidden;
@@ -1947,14 +2011,31 @@
 
                     <!-- ── Batch Progress (inline) ── -->
                     <div id="batchProgressSection" class="mt-4">
-                        <!-- log inline de URLs permanece aqui -->
-                        <div class="url-log" id="batchUrlLog"></div>
+                        <div class="batch-scrape-progress">
+                            <div class="batch-scrape-progress__header">
+                                <div class="batch-scrape-progress__title">
+                                    <i class="fas fa-spinner fa-spin batch-scrape-progress__icon"
+                                       aria-hidden="true"></i>
+                                    <span id="batchScrapeProgressLabel">Processando...</span>
+                                </div>
+                                <span id="batchScrapeProgressCount"
+                                      class="batch-scrape-progress__count">0 / 0</span>
+                            </div>
+                            <div class="batch-scrape-progress__track" role="progressbar"
+                                 aria-label="Progresso da raspagem em lote"
+                                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="batchScrapeProgressBar"></div>
+                            </div>
+                            <div class="url-log" id="batchUrlLog" role="list"
+                                 aria-label="Status de cada URL"></div>
+                        </div>
                     </div>
                     <!-- ── Toast de progresso: fixo no canto inferior direito, não invasivo ── -->
                     <div id="batchProgressToast"
                          style="display:none;position:fixed;bottom:20px;right:20px;z-index:9999;
-                                background:#0d1117;border:1px solid #30363d;border-radius:8px;
-                                padding:12px 16px;min-width:260px;max-width:340px;
+                                background:#0d1117;border:1px solid #30363d;border-radius:10px;
+                                padding:12px 14px;width:min(420px,calc(100vw - 24px));max-width:420px;
+                                max-height:70vh;overflow:hidden;
                                 box-shadow:0 8px 24px rgba(0,0,0,.75);">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <svg id="batchProgressSpinner" width="22" height="22" viewBox="0 0 24 24"
@@ -1974,9 +2055,8 @@
                                     Processando…
                                 </div>
                                 <div id="batchProgressFile"
-                                     style="font-size:.68rem;color:#a5b4fc;margin-top:2px;
-                                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                    Preparando o próximo arquivo…
+                                     style="font-size:.68rem;color:#a5b4fc;margin-top:2px;">
+                                    0 ativos · 0 na fila
                                 </div>
                                 <div id="batchProgressCount"
                                      style="font-size:.72rem;color:#8b949e;margin-top:2px;">0 / 0</div>
@@ -1991,6 +2071,8 @@
                                 <i class="fas fa-pause" aria-hidden="true"></i>
                             </button>
                         </div>
+                        <div id="batchProgressFiles" class="download-progress-files"
+                             aria-live="polite" aria-label="Arquivos em download"></div>
                         <div style="margin-top:10px;background:#1c2128;border-radius:4px;height:4px;overflow:hidden;">
                             <div id="batchProgressBar"
                                  style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);
@@ -3039,8 +3121,7 @@
             </div>
             <div id="rankingSidebarFooter">
                 <small style="color: #8b949e; font-size: 0.7rem"
-                    ><i class="fas fa-info-circle me-1"></i>Rankings atualizados
-                    em tempo real</small
+                    ><i class="fas fa-info-circle me-1"></i>Atualizado automaticamente a cada 3 segundos enquanto aberto</small
                 >
             </div>
         </div>
@@ -3783,6 +3864,7 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="{{ url_for('static', filename='download-resilience.js') }}"></script>
+        <script src="{{ url_for('static', filename='download-progress-list.js') }}"></script>
         <script src="{{ url_for('static', filename='js/site-notice.js') }}"></script>
         <script src="{{ url_for('static', filename='script.js') }}"></script>
         <script>
@@ -4134,6 +4216,7 @@
             ═══════════════════════════════════════════════════════════════ */
             var _batchImageUrls       = [];
             var _batchVideoUrls       = [];
+            var _batchSourceByMedia   = new Map();
             var _batchIsSelectionMode = false;
             var _batchSelected        = { images: new Set(), videos: new Set() };
 
@@ -4243,8 +4326,11 @@
                 var file = document.getElementById('batchProgressFile');
                 var count = document.getElementById('batchProgressCount');
                 var bar = document.getElementById('batchProgressBar');
-                if (label) label.textContent = 'Processando Arquivos...';
-                if (file) file.textContent = 'Preparando o próximo arquivo…';
+                if (window.DownloadProgressList) {
+                    window.DownloadProgressList.reset('batchProgressFiles');
+                }
+                if (label) label.textContent = 'Preparando downloads...';
+                if (file) file.textContent = '0 ativos · ' + total + ' na fila';
                 if (count) count.textContent = '0 / ' + total + ' · 0% geral';
                 setBatchDownloadPauseButton(false);
                 if (bar) {
@@ -4264,39 +4350,47 @@
                 button.setAttribute('aria-label', isPaused ? 'Continuar download' : 'Pausar download');
                 button.title = isPaused ? 'Continuar download' : 'Pausar download';
                 button.style.color = isPaused ? '#fbbf24' : '#67e8f9';
+                if (window.DownloadProgressList) {
+                    window.DownloadProgressList.setPaused('batchProgressFiles', isPaused);
+                }
             }
 
             function updateBatchDownloadProgress(progress) {
                 if (!progress || typeof progress !== 'object') return;
+                var progressList = window.DownloadProgressList;
+                if (progressList) progressList.update('batchProgressFiles', progress);
                 var total = Number(progress.total) || 0;
                 var completed = Math.max(0, Number(progress.completed) || 0);
-                var index = Math.max(0, Number(progress.index) || 0);
                 var filePercent = progress.filePercent === null || progress.filePercent === undefined
                     ? null : Math.max(0, Math.min(100, Number(progress.filePercent) || 0));
                 var isQueueProgress = progress.phase === 'queue-progress';
-                var percentage = total > 0
+                var percentage = progressList
+                    ? progressList.overallPercent('batchProgressFiles', total)
+                    : (total > 0
                     ? (isQueueProgress ? completed : completed + (filePercent || 0) / 100) / total * 100
-                    : 0;
+                    : 0);
                 percentage = Math.max(0, Math.min(100, Math.round(percentage)));
-                var currentNumber = isQueueProgress ? completed : Math.min(total, index + 1);
                 var count = document.getElementById('batchProgressCount');
                 var label = document.getElementById('batchProgressLabel');
                 var file = document.getElementById('batchProgressFile');
                 var bar = document.getElementById('batchProgressBar');
-                if (count) count.textContent = currentNumber + ' / ' + total + ' · ' + percentage + '% geral';
+                var activeCount = progressList ? progressList.countActive('batchProgressFiles') : 0;
+                var queuedCount = Math.max(0, total - completed - activeCount);
+                if (count) count.textContent = completed + ' / ' + total +
+                    (completed === 1 ? ' concluído · ' : ' concluídos · ') + percentage + '% geral';
                 if (label) {
                     label.textContent = progress.paused
                         ? 'Download pausado'
                         : (isQueueProgress
-                            ? (completed >= total ? 'Download concluído!' : 'Preparando próximo arquivo…')
-                            : 'Baixando arquivo ' + currentNumber + ' de ' + total);
+                            ? (completed >= total ? 'Downloads concluídos!' : 'Baixando arquivos…')
+                            : (activeCount
+                                ? 'Baixando ' + activeCount + (activeCount === 1 ? ' arquivo' : ' arquivos')
+                                : 'Preparando downloads…'));
                 }
                 if (file) {
-                    var fileName = progress.fileName || 'arquivo atual';
-                    var fileStatus = filePercent === null ? 'recebendo dados…' : filePercent + '%';
-                    file.textContent = isQueueProgress
-                        ? fileName + ' · concluído'
-                        : fileName + ' · ' + fileStatus;
+                    file.textContent = completed + (completed === 1 ? ' concluído' : ' concluídos') +
+                        ' · ' + activeCount + (activeCount === 1 ? ' ativo' : ' ativos') +
+                        ' · ' + queuedCount + ' na fila';
                 }
                 setBatchDownloadPauseButton(progress.paused === true);
                 if (bar) {
@@ -4340,8 +4434,13 @@
                 });
                 const failed = result.failed.length + result.unavailable.length;
                 if (copyFailuresBtn) {
-                    copyFailuresBtn._failedUrls = result.failed.slice();
-                    copyFailuresBtn.style.display = result.failed.length > 0 ? '' : 'none';
+                    const sourceUrls = new Set();
+                    result.failed.concat(result.unavailable).forEach(function(mediaUrl) {
+                        const pages = _batchSourceByMedia.get(mediaUrl);
+                        if (pages) pages.forEach(function(pageUrl) { sourceUrls.add(pageUrl); });
+                    });
+                    copyFailuresBtn._failedUrls = Array.from(sourceUrls);
+                    copyFailuresBtn.style.display = sourceUrls.size > 0 ? '' : 'none';
                 }
                 updateBatchDownloadProgress({
                     phase: 'queue-progress',
@@ -4363,6 +4462,18 @@
                     }
                 );
             }
+
+            /* Single-file actions use the same stable progress row. Batch
+               downloads call the updater directly and do not broadcast. */
+            window.addEventListener('media-download-progress', function(event) {
+                var progress = event && event.detail;
+                if (!progress || Number(progress.total) !== 1) return;
+                if (progress.phase === 'file-start') showBatchDownloadProgressCard(1);
+                updateBatchDownloadProgress(progress);
+                if (progress.phase === 'file-complete') {
+                    window.setTimeout(hideBatchDownloadProgressCard, 1100);
+                }
+            });
 
             function batchDownloadImages() {
                 downloadBatchThrottled(_batchIsSelectionMode
@@ -4389,7 +4500,7 @@
                         <div class="selection-check"><i class="fas fa-check"></i></div>
                         <div class="image-container" title="Clique para ampliar">
                             <img src="${src}" alt="Imagem extraída" loading="lazy"
-                                onerror="this.parentElement.innerHTML='<div class=\\'placeholder-image d-flex align-items-center justify-content-center\\'><i class=\\'fas fa-image-slash fa-2x\\'></i></div>';updateEyeButtonVisibility()"
+                                onerror="this.closest('[data-media-url]').dataset.batchMediaError='true';this.parentElement.innerHTML='<div class=\\'placeholder-image d-flex align-items-center justify-content-center\\'><i class=\\'fas fa-image-slash fa-2x\\'></i></div>';updateEyeButtonVisibility()"
                                 onclick="openBatchImageModal('${esc}')" />
                         </div>
                         <div class="card-body p-2 d-flex justify-content-between align-items-center">
@@ -4521,6 +4632,8 @@
                 if (errSub)   errSub.textContent   = msg.sub;
 
                 overlay.classList.add('active');
+                const mediaCol = video.closest('[data-media-url]');
+                if (mediaCol) mediaCol.dataset.batchMediaError = 'true';
                 video.style.opacity = '0';
                 video.style.pointerEvents = 'none';
                 updateEyeButtonVisibility();
@@ -4531,27 +4644,13 @@
             var _batchEyeHasBeenUsed = false;
             var _isTogglingBatchEye = false;
 
-            var _batchEyeErrorKeywords = [
-                '404', '403', 'Bloqueado', 'Não Encontrado', 'Indisponível',
-                'Removido', 'Copyright'
-            ];
-
             function _batchEyeMediaCols(type) {
                 var gridId = type === 'image' ? 'batchImagesGrid' : 'batchVideosGrid';
                 return document.querySelectorAll('#' + gridId + ' > [class*="col-"]');
             }
 
             function _batchEyeCardHasError(col) {
-                if (col.querySelector('.video-error-overlay.active, .placeholder-image')) {
-                    return true;
-                }
-
-                // O fallback textual só considera texto atualmente visível, para
-                // não confundir o texto padrão de overlays ainda inativos com erro.
-                var visibleText = col.innerText || '';
-                return _batchEyeErrorKeywords.some(function(keyword) {
-                    return visibleText.indexOf(keyword) !== -1;
-                });
+                return col.dataset.batchMediaError === 'true';
             }
 
             function _batchEyeHasErrors(type) {
@@ -4639,25 +4738,44 @@
                 const el = document.createElement('div');
                 el.className = 'log-item ' + state;
                 el.dataset.url = url;
-                const short  = url.replace(/^https?:\/\//, '').slice(0, 60) + (url.length > 65 ? '…' : '');
-                const badge  = state === 'processing' ? 'Buscando…' : state === 'ok' ? 'OK' : 'Erro';
-                const counts = state === 'ok' ? `${imgs} img · ${vids} vídeo` : (errMsg ? errMsg.slice(0, 45) : '');
-                el.innerHTML = `<span class="log-badge ${state}">${badge}</span>
-                                <span class="log-url" title="${url}">${short}</span>
-                                <span class="log-counts">${counts}</span>`;
+                el.setAttribute('role', 'listitem');
+                const badge = document.createElement('span');
+                badge.className = 'log-badge ' + state;
+                badge.textContent = state === 'processing' ? 'Buscando…' : state === 'ok' ? 'OK' : 'Erro';
+
+                const urlLabel = document.createElement('span');
+                urlLabel.className = 'log-url';
+                urlLabel.title = url;
+                const displayUrl = url.replace(/^https?:\/\//, '');
+                urlLabel.textContent = displayUrl.length > 60 ? displayUrl.slice(0, 60) + '…' : displayUrl;
+
+                const countLabel = document.createElement('span');
+                countLabel.className = 'log-counts';
+                countLabel.textContent = state === 'ok'
+                    ? `${imgs} img · ${vids} vídeo`
+                    : (errMsg ? errMsg.slice(0, 45) : '');
+
+                el.appendChild(badge);
+                el.appendChild(urlLabel);
+                el.appendChild(countLabel);
                 return el;
             }
 
-            function updateBatchProgressRing(percent) {
-                var ring = document.getElementById('batchProgressRingValue');
-                var spinner = document.getElementById('batchProgressSpinner');
-                if (!ring) return;
-                var normalized = Math.max(0, Math.min(100, Number(percent) || 0));
-                ring.style.strokeDashoffset = (56.55 * (1 - normalized / 100)).toFixed(2);
-                if (spinner) {
-                    spinner.setAttribute('aria-valuenow', String(Math.round(normalized)));
-                    spinner.style.animation = 'bpRingGlow 1.5s ease-in-out infinite alternate';
+            function updateBatchScrapeProgress(processed, total, isDone) {
+                var safeTotal = Math.max(0, Number(total) || 0);
+                var safeProcessed = Math.max(0, Math.min(safeTotal, Number(processed) || 0));
+                var percent = safeTotal ? Math.round(safeProcessed / safeTotal * 100) : 0;
+                var bar = document.getElementById('batchScrapeProgressBar');
+                var track = bar ? bar.parentElement : null;
+                var count = document.getElementById('batchScrapeProgressCount');
+                var label = document.getElementById('batchScrapeProgressLabel');
+                if (bar) {
+                    bar.style.width = percent + '%';
+                    if (isDone) bar.style.background = '#22c55e';
                 }
+                if (track) track.setAttribute('aria-valuenow', String(percent));
+                if (count) count.textContent = safeProcessed + ' / ' + safeTotal;
+                if (label) label.textContent = isDone ? 'Concluído!' : 'Processando...';
             }
 
             batchStart.addEventListener('click', async function() {
@@ -4734,6 +4852,14 @@
                 document.getElementById('batchImagesGrid').innerHTML = '';
                 document.getElementById('batchVideosGrid').innerHTML = '';
                 document.getElementById('batchUrlLog').innerHTML = '';
+                _batchSourceByMedia.clear();
+                _batchEyeShowingErrors = true;
+                _batchEyeHasBeenUsed = false;
+                var copyFailuresBtn = document.getElementById('batchCopyFailuresBtn');
+                if (copyFailuresBtn) {
+                    copyFailuresBtn.style.display = 'none';
+                    copyFailuresBtn._failedUrls = [];
+                }
                 ['batchStatImgs','batchStatVids','batchStatTotal','batchTabImgCount','batchTabVidCount'].forEach(id => document.getElementById(id).textContent = '0');
                 document.getElementById('batchNoImages').style.display = 'none';
                 document.getElementById('batchNoVideos').style.display = 'none';
@@ -4743,18 +4869,19 @@
                 document.getElementById('mainCard').style.display = 'none';
                 cardHeaderBatch.classList.remove('visible');
 
-                document.getElementById('batchProgressToast').style.display = 'block';
+                document.getElementById('batchProgressToast').style.display = 'none';
                 batchProgressSec.style.display = 'block';
                 batchResultsSec.style.display  = 'none';
                 featuresRow.style.display      = 'none';
 
-                const pb = document.getElementById('batchProgressBar');
-                pb.style.width = '0%';
-                pb.style.background = 'linear-gradient(90deg,#3b82f6,#06b6d4)';
-                updateBatchProgressRing(0);
-                document.getElementById('batchProgressCount').textContent = '0 / ' + urls.length;
-                document.getElementById('batchProgressLabel').textContent = 'Processando…';
-                /* spinner sempre visível — sem ícone separado */
+                const scrapeBar = document.getElementById('batchScrapeProgressBar');
+                if (scrapeBar) {
+                    scrapeBar.style.width = '0%';
+                    scrapeBar.style.background = 'linear-gradient(90deg,#8b5cf6,#3b82f6)';
+                }
+                updateBatchScrapeProgress(0, urls.length, false);
+                document.getElementById('batchUrlLog').innerHTML = '';
+                batchProgressSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
                 /* ── SSE stream (matches server format: "data: {...}\n\n") ── */
                 const resp = await fetch('/batch/stream', {
@@ -4783,14 +4910,12 @@
                         if (evt.type === 'progress') {
                             /* URL started processing → add log row */
                             const li = makeBatchLogItem(evt.url, 'processing', 0, 0, '');
-                            document.getElementById('batchUrlLog').appendChild(li);
-                            li.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            const urlLog = document.getElementById('batchUrlLog');
+                            urlLog.appendChild(li);
+                            urlLog.scrollTop = urlLog.scrollHeight;
                             logItems.push({ url: evt.url, el: li });
 
-                            const pct = Math.round(evt.index / evt.total * 100);
-                            pb.style.width = pct + '%';
-                            updateBatchProgressRing(pct);
-                            document.getElementById('batchProgressCount').textContent = evt.index + ' / ' + evt.total;
+                            updateBatchScrapeProgress(evt.index, evt.total, false);
                         }
 
                         if (evt.type === 'result') {
@@ -4813,8 +4938,16 @@
 
                             if (evt.ok) {
                                 totalImgs += imgs; totalVids += vids;
-                                (evt.images || []).forEach(addBatchImageCard);
-                                (evt.videos || []).forEach(addBatchVideoCard);
+                                (evt.images || []).forEach(function(mediaUrl) {
+                                    if (!_batchSourceByMedia.has(mediaUrl)) _batchSourceByMedia.set(mediaUrl, new Set());
+                                    _batchSourceByMedia.get(mediaUrl).add(evt.url);
+                                    addBatchImageCard(mediaUrl);
+                                });
+                                (evt.videos || []).forEach(function(mediaUrl) {
+                                    if (!_batchSourceByMedia.has(mediaUrl)) _batchSourceByMedia.set(mediaUrl, new Set());
+                                    _batchSourceByMedia.get(mediaUrl).add(evt.url);
+                                    addBatchVideoCard(mediaUrl);
+                                });
                             }
 
                             document.getElementById('batchStatImgs').textContent    = totalImgs;
@@ -4823,10 +4956,7 @@
                             document.getElementById('batchTabImgCount').textContent = totalImgs;
                             document.getElementById('batchTabVidCount').textContent = totalVids;
 
-                            const pct2 = Math.round((evt.index + 1) / evt.total * 100);
-                            pb.style.width = pct2 + '%';
-                            updateBatchProgressRing(pct2);
-                            document.getElementById('batchProgressCount').textContent = (evt.index + 1) + ' / ' + evt.total;
+                            updateBatchScrapeProgress(evt.index + 1, evt.total, false);
                         }
 
                         if (evt.type === 'done') {
@@ -4837,18 +4967,12 @@
                             document.getElementById('batchTabImgCount').textContent = evt.total_images;
                             document.getElementById('batchTabVidCount').textContent = evt.total_videos;
 
-                            pb.style.width = '100%';
-                            pb.style.background = '#22c55e';
-                            updateBatchProgressRing(100);
-                            document.getElementById('batchProgressLabel').textContent = 'Concluído!';
-                            document.getElementById('batchProgressCount').textContent = urls.length + ' / ' + urls.length;
-                            /* parar animação do spinner */
-                            var sp = document.getElementById('batchProgressSpinner');
-                            if (sp) { sp.style.borderTopColor = '#22c55e'; sp.style.animation = 'none'; }
+                            updateBatchScrapeProgress(urls.length, urls.length, true);
                             document.getElementById('batchProcessedDesc').textContent = urls.length + ' URL' + (urls.length > 1 ? 's' : '') + ' processada' + (urls.length > 1 ? 's' : '');
 
                             if (evt.total_images === 0) document.getElementById('batchNoImages').style.display = 'block';
                             if (evt.total_videos === 0) document.getElementById('batchNoVideos').style.display = 'block';
+                            updateEyeButtonVisibility();
 
                             /* Show / update Download em Massa card */
                             _batchUpdateDownloadBtns();
@@ -5505,11 +5629,9 @@
                 }
                 window.rankSelectGender = rankSelectGender;
 
-                /* ── Returning-donor "update avatar" mode ────────────────────────
-                   Locks step3 to the supporter's own saved gender: hides the nickname
-                   field (already known), hides the opposite gender pill, centers the
-                   locked one, filters the avatar grid to that gender only, pre-selects
-                   their current avatar, and relabels the submit button. */
+                /* ── Returning-donor profile update mode ────────────────────────
+                   Keep the saved gender locked, but allow the supporter to edit
+                   their nickname, avatar, and visual style. */
                 var _rankMode = 'create'; /* 'create' | 'update' */
                 var _returningNickname = '';
 
@@ -5518,7 +5640,9 @@
                     _returningNickname = donorInfo.nickname || '';
 
                     var nickWrap = document.getElementById('rankNicknameWrap');
-                    if (nickWrap) nickWrap.style.display = 'none';
+                    var nickInput = document.getElementById('rankNickname');
+                    if (nickWrap) nickWrap.style.display = '';
+                    if (nickInput) nickInput.value = _returningNickname.slice(0, 24);
 
                     var gender = ((donorInfo.avatar_id || 'm_1').split('_')[0] === 'f') ? 'f' : 'm';
                     var mBtn = document.getElementById('rankGenderM');
@@ -5557,20 +5681,18 @@
                     }
 
                     var submitBtn = document.getElementById('rankSubmitBtn');
-                    if (submitBtn) submitBtn.textContent = '🔄 Atualizar Avatar no Ranking';
+                    if (submitBtn) submitBtn.textContent = '🔄 Atualizar Perfil no Ranking';
                 }
 
                 async function rankSubmit() {
                     var isUpdateMode = (_rankMode === 'update');
-                    var nickname = isUpdateMode
-                        ? _returningNickname
-                        : ((document.getElementById('rankNickname') || {}).value || '').trim();
+                    var nickname = ((document.getElementById('rankNickname') || {}).value || '').trim();
                     var aid = (document.getElementById('rankSelectedAid') || {}).value || '';
                     var fontId = ((document.getElementById('rankFontSelect') || {}).value || 'default');
-                    var defaultLabel = isUpdateMode ? '🔄 Atualizar Avatar no Ranking' : 'Enviar para o Ranking';
+                    var defaultLabel = isUpdateMode ? '🔄 Atualizar Perfil no Ranking' : 'Enviar para o Ranking';
 
-                    if (!isUpdateMode && nickname.length < 2) {
-                        showSiteNotice('Por favor, insira um apelido com ao menos 2 caracteres.', { type: 'warning' });
+                    if (nickname.length < 2 || nickname.length > 24) {
+                        showSiteNotice('Use um apelido com 2 a 24 caracteres.', { type: 'warning' });
                         return;
                     }
                     if (!aid) {
@@ -5585,60 +5707,80 @@
                     var btn = document.getElementById('rankSubmitBtn');
                     if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
 
+                    var payload = {
+                        nickname: nickname, avatar_id: aid, font_id: styleState.font_id,
+                        text_effect: styleState.text_effect, name_color: styleState.name_color,
+                        payment_id: currentPayId
+                    };
+                    if (isUpdateMode) payload.returning = true;
+
+                    var resp;
                     try {
-                        var payload = {
-                            nickname: nickname, avatar_id: aid, font_id: styleState.font_id,
-                            text_effect: styleState.text_effect, name_color: styleState.name_color,
-                            payment_id: currentPayId
-                        };
-                        if (isUpdateMode) payload.returning = true;
-                        var resp = await fetch('/api/donation/register', {
+                        resp = await fetch('/api/donation/register', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            cache: 'no-store',
                             /* amount is NOT sent — server reads it from the verified payment record */
                             body: JSON.stringify(payload)
                         });
-                        var data = await resp.json();
-                        if (data.ok) {
-                            try { localStorage.setItem('donation_token', data.token); } catch(e) {}
-                            clearStoredPixPayment();
-                            if (typeof _hideKeyTriggerForSupporter === 'function') _hideKeyTriggerForSupporter();
-                            var s3    = document.getElementById('suc-step3');
-                            var thanks = document.getElementById('rankThanks');
-                            if (s3)    s3.style.display    = 'none';
-                            if (thanks) {
-                                thanks.innerHTML = isUpdateMode
-                                    ? '❤️ Obrigado pelo novo apoio! Seus bônus VIP foram estendidos.' +
-                                      '<br><button type="button" id="pixSuccessCloseBtn2" class="btn btn-success btn-sm mt-2">Concluir</button>'
-                                    : '✅ Você está no ranking! Obrigado 🏆' +
-                                      '<br><button type="button" id="pixSuccessCloseBtn2" class="btn btn-success btn-sm mt-2">Concluir</button>';
-                                thanks.style.display = 'block';
-                                var closeBtn2 = document.getElementById('pixSuccessCloseBtn2');
-                                if (closeBtn2) closeBtn2.addEventListener('click', function() {
-                                    var modalEl = closeBtn2.closest('.modal');
-                                    if (modalEl && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-                                    else if (modalEl) modalEl.style.display = 'none';
-                                });
-                            }
-
-                            /* ── Fire morphing ticker for this user (immediate) ── */
-                            showDonorTicker(data.nickname || nickname, data.avatar_id || aid, data.vip_level, data.discriminator, !isUpdateMode, data.amount, data.previous_vip_level);
-                        } else {
-                            if (btn) { btn.disabled = false; btn.textContent = defaultLabel; }
-                            var errMsg = data.error || 'tente novamente.';
-                            if (errMsg.toLowerCase().indexOf('apelido') !== -1 || errMsg.toLowerCase().indexOf('tag') !== -1) {
-                                showSiteNotice('Este apelido já está em uso com esta Tag. Por favor, escolha outro Nick!', {
-                                    type: 'warning',
-                                    title: 'Apelido indisponível'
-                                });
-                            } else {
-                                showSiteNotice('Erro ao salvar: ' + errMsg, { type: 'error' });
-                            }
-                        }
                     } catch(e) {
                         if (btn) { btn.disabled = false; btn.textContent = defaultLabel; }
                         showSiteNotice('Erro de rede. Tente novamente.', { type: 'error' });
+                        return;
                     }
+
+                    var data;
+                    try {
+                        data = await resp.json();
+                    } catch(e) {
+                        if (btn) { btn.disabled = false; btn.textContent = defaultLabel; }
+                        showSiteNotice(
+                            resp.ok
+                                ? 'O servidor respondeu em um formato inválido. Tente novamente.'
+                                : 'Não foi possível confirmar o pagamento agora. Tente novamente.',
+                            { type: 'error' }
+                        );
+                        return;
+                    }
+
+                    if (!data.ok) {
+                        if (btn) { btn.disabled = false; btn.textContent = defaultLabel; }
+                        var errMsg = data.error || 'tente novamente.';
+                        if (errMsg.toLowerCase().indexOf('apelido') !== -1 || errMsg.toLowerCase().indexOf('tag') !== -1) {
+                            showSiteNotice('Este apelido não pôde ser usado. Escolha outro Nick.', {
+                                type: 'warning',
+                                title: 'Apelido indisponível'
+                            });
+                        } else {
+                            showSiteNotice('Erro ao salvar: ' + errMsg, { type: 'error' });
+                        }
+                        return;
+                    }
+
+                    try { localStorage.setItem('donation_token', data.token); } catch(e) {}
+                    clearStoredPixPayment();
+                    if (typeof _hideKeyTriggerForSupporter === 'function') _hideKeyTriggerForSupporter();
+                    var s3 = document.getElementById('suc-step3');
+                    var thanks = document.getElementById('rankThanks');
+                    if (s3) s3.style.display = 'none';
+                    if (thanks) {
+                        thanks.innerHTML = isUpdateMode
+                            ? '❤️ Perfil atualizado e apoio registrado. Seus bônus VIP foram estendidos.' +
+                              '<br><button type="button" id="pixSuccessCloseBtn2" class="btn btn-success btn-sm mt-2">Concluir</button>'
+                            : '✅ Você está no ranking! Obrigado 🏆' +
+                              '<br><button type="button" id="pixSuccessCloseBtn2" class="btn btn-success btn-sm mt-2">Concluir</button>';
+                        thanks.style.display = 'block';
+                        var closeBtn2 = document.getElementById('pixSuccessCloseBtn2');
+                        if (closeBtn2) closeBtn2.addEventListener('click', function() {
+                            var modalEl = closeBtn2.closest('.modal');
+                            if (modalEl && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                            else if (modalEl) modalEl.style.display = 'none';
+                        });
+                    }
+
+                    showDonorTicker(data.nickname || nickname, data.avatar_id || aid, data.vip_level,
+                        data.discriminator, !isUpdateMode, data.amount, data.previous_vip_level);
                 }
                 window.rankSubmit = rankSubmit;
 
@@ -5740,7 +5882,7 @@
 
                             /* ── Step 3: registration form (hidden initially) — no own border ──
                                For a verified returning donor, this same step3 is reconfigured
-                               in-place by _configureReturningUpdateMode() (nickname hidden,
+                               in-place by _configureReturningUpdateMode() (nickname editable,
                                gender locked, avatar grid filtered, submit relabeled) once SIM
                                is chosen on suc-step-return. ── */
                             '<div id="suc-step3" style="display:none;opacity:0;width:100%;padding-top:4px;transition:opacity .4s;">' +
@@ -5752,7 +5894,7 @@
                                       'data-bs-toggle="tooltip" data-bs-placement="top"></i>' +
                                 '</div>' +
                                 '<div id="rankNicknameWrap">' +
-                                    '<input id="rankNickname" type="text" maxlength="40"' +
+                                    '<input id="rankNickname" type="text" maxlength="24"' +
                                     ' class="form-control form-control-sm bg-dark text-white border-secondary mb-2"' +
                                     ' placeholder="Seu apelido/Nick (Ex: LeviskBR)…" />' +
                                 '</div>' +
@@ -5785,6 +5927,7 @@
                                         '<button type="button" class="style-option" data-effect="gummy" style="color:#f9a8d4;text-shadow:0 2px 0 #a855f7;">Gummy</button>' +
                                         '<button type="button" class="style-option" data-effect="prism" style="color:#facc15;text-shadow:0 0 6px #22d3ee;">Prism</button>' +
                                     '</div>' +
+                                    '<div id="rankColorSection">' +
                                     '<div class="style-section-label"><span>Escolha cor</span><i class="fas fa-eye-dropper" title="Paleta neon ou cor personalizada."></i></div>' +
                                     '<div id="rankColorGrid" class="style-color-grid">' +
                                         '<button type="button" class="style-color" data-color="#f3f4f6" style="background:#f3f4f6;" aria-label="Branco"></button>' +
@@ -5796,6 +5939,7 @@
                                         '<button type="button" class="style-color" data-color="#ff7f50" style="background:#ff7f50;" aria-label="Coral"></button>' +
                                         '<button type="button" class="style-color" data-color="#3b82f6" style="background:#3b82f6;" aria-label="Azul"></button>' +
                                         '<input type="color" id="rankColorPicker" class="style-color-picker" value="#f3f4f6" title="Escolher uma cor personalizada" aria-label="Escolher cor personalizada" />' +
+                                    '</div>' +
                                     '</div>' +
                                     '<select id="rankFontSelect" aria-hidden="true" tabindex="-1" style="display:none;">' +
                                         '<option value="default">Padrão</option><option value="inter">Inter</option><option value="orbitron">Orbitron</option><option value="rajdhani">Rajdhani</option><option value="space-grotesk">Space Grotesk</option><option value="press-start">Press Start 2P</option><option value="bangers">Bangers</option><option value="roboto-mono">Roboto Mono</option><option value="montserrat">Montserrat</option><option value="gothic">Gótico</option><option value="script">Script</option><option value="pixel">Pixel</option>' +
@@ -5856,7 +6000,7 @@
                                 letterSpacing: ''
                             };
                             if (styleState.text_effect === 'gradient') {
-                                css.background = 'linear-gradient(90deg,' + color + ',#00f0ff,#a855f7)';
+                                css.background = 'linear-gradient(90deg,#38bdf8,#00f0ff,#a855f7)';
                                 css.webkitBackgroundClip = 'text';
                                 css.webkitTextFillColor = 'transparent';
                             } else if (styleState.text_effect === 'neon') {
@@ -5905,6 +6049,12 @@
                         function setEffectStyle(effect) {
                             styleState.text_effect = effect || 'solid';
                             markStyleSelection('#rankEffectGrid [data-effect]', 'data-effect', styleState.text_effect);
+                            var colorSection = document.getElementById('rankColorSection');
+                            if (colorSection) {
+                                colorSection.style.display =
+                                    (styleState.text_effect === 'gradient' || styleState.text_effect === 'prism')
+                                        ? 'none' : '';
+                            }
                             updateStylePreview();
                         }
                         function setColorStyle(color) {
@@ -6665,7 +6815,7 @@ function _donorNameStyle(row) {
         '-webkit-text-fill-color:' + color + ' !important;' +
         'animation:none !important;text-transform:none !important;letter-spacing:normal !important;';
     if (effect === 'gradient') {
-        style += 'background:linear-gradient(90deg,' + color + ',#00f0ff,#a855f7) !important;' +
+        style += 'background:linear-gradient(90deg,#38bdf8,#00f0ff,#a855f7) !important;' +
             'background-size:100% 100% !important;-webkit-background-clip:text !important;' +
             'background-clip:text !important;-webkit-text-fill-color:transparent !important;';
     } else if (effect === 'neon') {
@@ -6715,17 +6865,10 @@ function renderPublicRanking(rows) {
     var html = '';
 
     rows.forEach(function(r) {
-        // 1. RECALCULO DINÂMICO DOS PREÇOS (Garante a correção de todos os cargos antigos)
-        var total = parseFloat(r.total_donated || r.total_accumulated || 0);
-        var vip = 6; // Padrão: VIP ESTELAR
-
-        if (total >= 500.00) vip = 0;      // VIP SUPREME
-        else if (total >= 100.00) vip = 1; // VIP DIAMANTE
-        else if (total >= 80.00) vip = 2;  // VIP RUBI
-        else if (total >= 60.00) vip = 3;  // VIP OURO
-        else if (total >= 35.00) vip = 4;  // VIP PRATA
-        else if (total >= 15.00) vip = 5;  // VIP BRONZE
-        else if (total >= 1.00) vip = 6;   // VIP ESTELAR
+        /* The server resolves VIP using the current editable tier configuration. */
+        var configuredVip = parseInt(r.vip_level, 10);
+        var vip = Number.isInteger(configuredVip) && configuredVip >= 0 && configuredVip <= 6
+            ? configuredVip : 6;
 
         var VIP_BANNERS = {
             0: '/static/banners/banner-supreme.png',
@@ -6820,7 +6963,7 @@ function renderPublicRanking(rows) {
                 '        <span class="supporter-presence-dot" data-donor-id="' + r.id + '" title="' + safePresenceTitle + '" aria-label="' + (r.online ? 'Online' : 'Offline') + '" style="background:' + presenceColor + ';box-shadow:0 0 7px ' + presenceColor + ';"></span>' +
                 '      </div>' +
                 '    </div>' +
-                '    <div class="rank-amount"><span class="amount-icon" data-donor-id="' + r.id + '" data-tooltip="' + currency + ' — ' + currencyLabel + '" title="' + currency + ' — ' + currencyLabel + '"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span><span>' + amountHtml + '</span></div>' +
+                '    <div class="rank-amount"><span class="amount-icon" data-donor-id="' + r.id + '" data-tooltip="' + currency + ' — ' + currencyLabel + '"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span><span>' + amountHtml + '</span></div>' +
                 '  </div>' +
                 '</div>';
     });
@@ -6865,7 +7008,7 @@ function renderPublicRanking(rows) {
                     clearInterval(_rankPresenceTimer);
                     _rankPresenceTimer = setInterval(function() {
                         if (rankSidebar && rankSidebar.classList.contains('ranking-open')) refreshRanking();
-                    }, 15000);
+                    }, 3000);
                 }
 
                 function closeRankingSidebar() {

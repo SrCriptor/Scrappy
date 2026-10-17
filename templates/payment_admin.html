@@ -108,9 +108,11 @@
         .gateway-requests-link { white-space:nowrap; }
         .gateway-toast { position:fixed; top:1rem; right:1rem; z-index:1100; width:min(420px, calc(100vw - 2rem)); background:#161b22; border:1px solid #00ff88; color:#e6edf3; border-radius:10px; padding:.85rem 2.2rem .85rem 1rem; box-shadow:0 10px 35px rgba(0,0,0,.55); font-size:.78rem; line-height:1.45; }
         .gateway-toast button { position:absolute; top:.45rem; right:.55rem; border:0; background:transparent; color:#8b949e; cursor:pointer; font-size:1rem; }
+        .gateway-readonly #mainForm .icon-opt,
+        .gateway-readonly #mainForm .color-dot { pointer-events:none; }
     </style>
 </head>
-<body>
+<body class="{% if gateway_readonly %}gateway-readonly{% endif %}">
 <div class="container py-4" style="max-width:700px;">
 
     <div class="d-flex align-items-center justify-content-between mb-4">
@@ -134,8 +136,15 @@
         {{ gateway_notice }}
     </div>
     {% endif %}
+    {% if gateway_readonly %}
+    <div class="alert alert-info py-2 small mb-3">
+        <i class="fas fa-eye me-1"></i>
+        Modo somente leitura: você pode consultar os gateways e seus status, mas não alterar configurações nem visualizar credenciais.
+    </div>
+    {% endif %}
 
     <form method="POST" action="/payment/admin" id="mainForm">
+    <fieldset {% if gateway_readonly %}disabled{% endif %} style="border:0;padding:0;margin:0;min-width:0;">
 
         <!-- Gateway principal -->
         <div class="mb-3">
@@ -470,6 +479,7 @@
             </span>
         </div>
 
+    </fieldset>
     </form>
 
     <!-- ═══ Progresso dos PIXs gerados (Owner only) ═══ -->

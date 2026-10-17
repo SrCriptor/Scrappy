@@ -179,6 +179,7 @@
                                      title="Painel de Permissões — exclusivo do Owner"
                                      data-permission-id="{{ a.id }}"
                                      data-permission-name="{{ a.display_name | e }}"
+                                     data-permission-role="{{ a.role }}"
                                      data-permissions='{{ a.permissions | tojson }}'>
                                  <i class="fas fa-cog"></i>
                              </button>
@@ -254,12 +255,19 @@
                     </div>
                     <button type="button" class="permission-toggle" id="permissionDevBtn"></button>
                 </div>
-                <div class="permission-row">
+                <div class="permission-row" id="permissionGatewayViewRow">
                     <div>
-                        <div class="permission-row-title"><i class="fas fa-credit-card me-1" style="color:#fbbf24;"></i>Gerenciar Gateways de Pagamento</div>
-                        <div class="permission-row-desc">Permite que este usuário visualize, configure e altere os gateways de pagamento do site.</div>
+                        <div class="permission-row-title"><i class="fas fa-eye me-1" style="color:#38bdf8;"></i>Visualizar Gateways (somente leitura)</div>
+                        <div class="permission-row-desc">Para Moderadores e Ajudantes: mostra métodos e status, sem permitir alterações nem revelar credenciais.</div>
                     </div>
-                    <button type="button" class="permission-toggle" id="permissionGatewayBtn"></button>
+                    <button type="button" class="permission-toggle" id="permissionGatewayViewBtn"></button>
+                </div>
+                <div class="permission-row" id="permissionGatewayManageRow">
+                    <div>
+                        <div class="permission-row-title"><i class="fas fa-sliders me-1" style="color:#fbbf24;"></i>Gerenciar Gateways</div>
+                        <div class="permission-row-desc">Para Administradores: permite configurar e alterar gateways; mudanças críticas continuam sujeitas à aprovação do Owner.</div>
+                    </div>
+                    <button type="button" class="permission-toggle" id="permissionGatewayManageBtn"></button>
                 </div>
                 <div id="permissionError" class="text-danger mt-2" style="font-size:.72rem;display:none;"></div>
             </div>
@@ -501,6 +509,7 @@
     let permissionAdminId = null;
     let permissionState = {};
     let permissionSourceButton = null;
+    let permissionAdminRole = '';
     function renderPermissionButton(button, enabled) {
         button.classList.toggle('is-on', enabled);
         button.classList.toggle('is-off', !enabled);
@@ -508,8 +517,9 @@
             ? '<i class="fas fa-toggle-on me-1"></i>Ativado'
             : '<i class="fas fa-toggle-off me-1"></i>Desativado';
     }
-    function openPermissionModal(id, name, permissions) {
+    function openPermissionModal(id, name, role, permissions) {
         permissionAdminId = id;
+        permissionAdminRole = role || '';
         permissionState = Object.assign({}, permissions || {});
         permissionSourceButton = document.querySelector(
             '.permission-btn[data-permission-id="' + id + '"]'
@@ -517,7 +527,12 @@
         document.getElementById('permissionAdminName').textContent = name;
         document.getElementById('permissionError').style.display = 'none';
         renderPermissionButton(document.getElementById('permissionDevBtn'), !!permissionState.accessDevMode);
-        renderPermissionButton(document.getElementById('permissionGatewayBtn'), !!permissionState.manageGateways);
+        document.getElementById('permissionGatewayViewRow').style.display =
+            ['moderator', 'helper'].includes(permissionAdminRole) ? '' : 'none';
+        document.getElementById('permissionGatewayManageRow').style.display =
+            permissionAdminRole === 'admin' ? '' : 'none';
+        renderPermissionButton(document.getElementById('permissionGatewayViewBtn'), !!permissionState.viewGateways);
+        renderPermissionButton(document.getElementById('permissionGatewayManageBtn'), !!permissionState.manageGateways);
         new bootstrap.Modal(document.getElementById('permissionModal')).show();
     }
     async function updatePermission(permission, button) {
@@ -555,7 +570,10 @@
     document.getElementById('permissionDevBtn').addEventListener('click', function() {
         updatePermission('accessDevMode', this);
     });
-    document.getElementById('permissionGatewayBtn').addEventListener('click', function() {
+    document.getElementById('permissionGatewayViewBtn').addEventListener('click', function() {
+        updatePermission('viewGateways', this);
+    });
+    document.getElementById('permissionGatewayManageBtn').addEventListener('click', function() {
         updatePermission('manageGateways', this);
     });
     document.querySelectorAll('.permission-btn').forEach(function(button) {
@@ -569,6 +587,7 @@
             openPermissionModal(
                 Number(button.getAttribute('data-permission-id')),
                 button.getAttribute('data-permission-name') || '',
+                button.getAttribute('data-permission-role') || '',
                 permissions
             );
         });
