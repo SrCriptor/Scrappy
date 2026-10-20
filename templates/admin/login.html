@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/images/favicon.ico" />
     <title>Admin — Acesso</title>
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
     <link href="/static/admin-responsive.css" rel="stylesheet" />
@@ -117,7 +118,8 @@
             </div>
         </div>
         {% else %}
-        <form method="POST" action="/admin/login" autocomplete="off">
+        <form id="adminLoginForm" method="POST" action="/admin/login" autocomplete="off">
+            <input type="hidden" id="staffDeviceFingerprint" name="staff_device_fingerprint" value="" />
             <div class="mb-3">
                 <label class="form-label small text-muted">Usuário</label>
                 <div class="input-group">
@@ -174,6 +176,67 @@
         pwToggle.addEventListener('click', () => {
             locked = !locked;
             if (locked) { showPw(); } else { hidePw(); }
+        });
+    }
+
+    /* Collect only browser/device hints needed for the account-bound WAF check.
+       The server stores keyed digests, never these raw values. */
+    const adminLoginForm = document.getElementById('adminLoginForm');
+    const staffDeviceFingerprint = document.getElementById('staffDeviceFingerprint');
+    if (adminLoginForm && staffDeviceFingerprint) {
+        adminLoginForm.addEventListener('submit', function(event) {
+            if (this.dataset.deviceFingerprintReady === 'true') return;
+            event.preventDefault();
+
+            let canvasFp = '';
+            let gpu = '?';
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 240;
+                canvas.height = 60;
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(128, 2, 90, 22);
+                ctx.font = '15px Arial';
+                ctx.fillStyle = '#069';
+                ctx.fillText('staff-device-probe', 2, 15);
+                ctx.fillStyle = 'rgba(102,204,0,.75)';
+                ctx.font = '12px Times New Roman';
+                ctx.fillText('hardware\u2665', 4, 34);
+                ctx.strokeStyle = 'rgba(255,80,80,.5)';
+                ctx.arc(200, 30, 18, 0, Math.PI * 2);
+                ctx.stroke();
+                const encoded = canvas.toDataURL();
+                let hash = 0;
+                for (let i = 0; i < encoded.length; i += 1) {
+                    hash = Math.imul(31, hash) + encoded.charCodeAt(i) | 0;
+                }
+                canvasFp = 'cnv_' + (hash >>> 0).toString(16).padStart(8, '0');
+            } catch (_) {}
+
+            try {
+                const glCanvas = document.createElement('canvas');
+                const gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
+                const debugInfo = gl && gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) gpu = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '?';
+            } catch (_) {}
+
+            const platform = (navigator.userAgentData && navigator.userAgentData.platform)
+                || navigator.platform || '';
+            const payload = {
+                canvas_fp: canvasFp,
+                platform: platform,
+                cores: navigator.hardwareConcurrency || 0,
+                memory: navigator.deviceMemory || 0,
+                gpu: gpu,
+                screen: screen.width + 'x' + screen.height,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                languages: (navigator.languages || [navigator.language]).join(',')
+            };
+            staffDeviceFingerprint.value = JSON.stringify(payload);
+            this.dataset.deviceFingerprintReady = 'true';
+            HTMLFormElement.prototype.submit.call(this);
         });
     }
 

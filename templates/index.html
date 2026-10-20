@@ -651,6 +651,20 @@
                 padding: 1.2rem 1.4rem 1rem;
                 border-bottom: 1px solid #21262d;
             }
+            @keyframes donateCloseFeedback {
+                0%, 100% { transform:scale(1); filter:brightness(0) invert(1); }
+                25%, 65% {
+                    transform:scale(1.18);
+                    filter:brightness(0) saturate(100%) invert(66%) sepia(94%) saturate(2100%) hue-rotate(345deg) drop-shadow(0 0 6px #fb923c);
+                }
+            }
+            #donateModalClose.donate-close-pulse {
+                animation:donateCloseFeedback .75s ease-in-out 2;
+                transform-origin:center;
+            }
+            @media (prefers-reduced-motion: reduce) {
+                #donateModalClose.donate-close-pulse { animation-duration:.01ms; animation-iteration-count:2; }
+            }
             .donate-header-icon {
                 width: 46px;
                 height: 46px;
@@ -2545,8 +2559,10 @@
                         </div>
                         <button
                             type="button"
+                            id="donateModalClose"
                             class="btn-close btn-close-white ms-auto"
                             data-bs-dismiss="modal"
+                            aria-label="Fechar modal de apoio"
                         ></button>
                     </div>
                     <div class="modal-body p-0" id="donateModalBody">
@@ -3261,7 +3277,7 @@
                 flex: 1 1 auto;
                 min-width: 0;
                 margin-left: 8px;
-                overflow: visible;
+                overflow: hidden;
             }
             .rank-name-line {
                 display: flex;
@@ -3270,7 +3286,7 @@
                 width: 100%;
                 min-width: 0;
                 line-height: 1.25;
-                overflow: visible;
+                overflow: hidden;
             }
             .rank-name-group {
                 display: flex;
@@ -3279,23 +3295,23 @@
                 min-width: 0;
                 flex: 1 1 auto;
                 width: 100%;
-                overflow: visible;
+                overflow: hidden;
             }
-            /* Keep the original single-line ranking layout. Long names get a
-               smaller inline font from renderPublicRanking so they remain
-               readable without changing the row structure. */
+            /* Keep avatar, name and value in the established row. The name
+               stays on one line and is measured after rendering when a wide
+               display font needs a small size adjustment. */
             .rank-name-text.user-tier-base {
                 display: block !important;
                 min-width: 0 !important;
-                flex: 0 1 auto !important;
-                width: max-content;
-                max-width: none !important;
-                overflow: visible !important;
-                text-overflow: clip !important;
+                flex: 1 1 auto !important;
+                width: 0;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
                 white-space: nowrap !important;
                 overflow-wrap: normal;
                 word-break: normal;
-                font-size: .75rem !important;
+                font-size: clamp(0.7rem, 2vw, 1.1rem);
                 line-height: 1.15;
             }
             .rank-name-line .supporter-presence-dot {
@@ -3331,6 +3347,24 @@
                 cursor: help;
             }
             .rank-amount small { font-size: .65em; opacity: .85; }
+            /* The VIP label sits below the avatar in this narrow drawer.
+               Keep its footprint compact so long custom names have room. */
+            #rankingSidebar #publicRankingList > div {
+                gap: 6px !important;
+                padding-left: .6rem !important;
+                padding-right: .6rem !important;
+            }
+            #rankingSidebar #publicRankingList > div > div:first-child {
+                width: 24px !important;
+            }
+            #rankingSidebar .rank-donor-main { margin-left: 0 !important; }
+            #rankingSidebar .rank-name-group { gap: 3px !important; }
+            #rankingSidebar .vip-badge {
+                font-size: .48rem !important;
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+                letter-spacing: 0 !important;
+            }
             /* Keep the currency tooltip independent from the presence title
                on the name row. */
             #rankingSidebar [data-tooltip]::after {
@@ -6465,6 +6499,20 @@
                 backToStep1.addEventListener('click', cancelCurrentPaymentAndReturn);
 
                 const donateModal = document.getElementById('donateModal');
+                const donateModalClose = document.getElementById('donateModalClose');
+                donateModal.addEventListener('hidePrevented.bs.modal', function() {
+                    if (!donateModalClose) return;
+                    donateModalClose.classList.remove('donate-close-pulse');
+                    void donateModalClose.offsetWidth;
+                    donateModalClose.classList.add('donate-close-pulse');
+                    const clearClosePulse = function(event) {
+                        if (event && event.target !== donateModalClose) return;
+                        donateModalClose.classList.remove('donate-close-pulse');
+                        donateModalClose.removeEventListener('animationend', clearClosePulse);
+                    };
+                    donateModalClose.addEventListener('animationend', clearClosePulse);
+                    window.setTimeout(clearClosePulse, 1700);
+                });
                 donateModal.addEventListener('shown.bs.modal', function() {
                      if (readStoredPixPayment()) hideAccessKeyPromptForPayment();
                     restoreStoredPayment();
@@ -6723,9 +6771,14 @@
                                     var _rankSide = document.getElementById('rankingSidebar');
                                     if (_rankList && _rankSide && _rankSide.classList.contains('ranking-open')) {
                                         fetch('/api/public/ranking', { cache: 'no-store' })
-                                            .then(function(r2) { return r2.json(); })
+                                            .then(function(r2) {
+                                                if (!r2.ok) throw new Error('ranking request failed');
+                                                return r2.json();
+                                            })
                                             .then(function(rows) { if (typeof renderPublicRanking === 'function') renderPublicRanking(rows); })
-                                            .catch(function() {});
+                                            .catch(function() {
+                                                if (typeof renderPublicRanking === 'function') renderPublicRanking(null);
+                                            });
                                     }
                                 }
                             }
@@ -6823,7 +6876,13 @@ function _vipBadge(vip) {
 function renderPublicRanking(rows) {
     var list = document.getElementById('publicRankingList');
     if (!list) return;
-    if (!rows || rows.length === 0) {
+    if (!Array.isArray(rows)) {
+        list.innerHTML = '<div role="status" style="text-align:center;padding:2rem;color:#fca5a5;font-size:.85rem;"><i class="fas fa-triangle-exclamation d-block mb-2" style="font-size:1.5rem;"></i>Não foi possível carregar o ranking agora.</div>';
+        list.style.display = 'block';
+        return;
+    }
+    rows = rows.filter(function(row) { return row && typeof row === 'object'; });
+    if (rows.length === 0) {
         list.innerHTML = '<div style="text-align:center;padding:2rem;color:#8b949e;font-size:.85rem;"><i class="fas fa-trophy text-warning d-block mb-2" style="font-size:2rem;"></i>Nenhum apoiador ainda</div>';
         list.style.display = 'block'; 
         return;
@@ -6884,18 +6943,14 @@ function renderPublicRanking(rows) {
         var presenceColor = r.online ? '#22c55e' : '#ffffff';
         var rawNickname = String(r.username || r.nickname || '?');
         var safeNickname = _escapeRankHtml(rawNickname);
-        /* Keep the established one-line layout, but make the text itself
-           shrink enough that every nickname remains visible beside the dot.
-           This is intentionally length-aware instead of using ellipsis. */
-        var rankNameSize = rawNickname.length > 18 ? '.38rem'
-            : rawNickname.length > 13 ? '.54rem'
-            : rawNickname.length > 7 ? '.62rem'
-            : '.78rem';
         var safeDiscriminator = r.discriminator ? _escapeRankHtml('#' + r.discriminator) : '';
+        var safeDonorId = String(r.id == null ? '' : r.id).replace(/[^\d]/g, '').slice(0, 18);
         var safePresenceTitle = _escapeRankHtml(presenceTitle);
         var currency = String(r.currency || 'BRL').toUpperCase();
         if (currency !== 'USD') currency = 'BRL';
         var currencyLabel = currency === 'USD' ? 'Dólar Americano' : 'Real Brasileiro';
+        var total = Number(r.total_donated);
+        if (!Number.isFinite(total) || total < 0) total = 0;
         var amountValue = Math.max(0, Math.round(total * 100));
         var amountInteger = Math.floor(amountValue / 100);
         var amountCents = amountValue % 100;
@@ -6913,28 +6968,61 @@ function renderPublicRanking(rows) {
             : '<span style="font-size: 1.05rem; width: 24px !important; text-align: center !important; display: inline-block !important;"><i class="fas fa-star" style="color: #7ba4c7; opacity: 0.6;"></i></span>';
 
         var numColor = vip === 0 ? '#ff4500' : vip === 1 ? '#00f0ff' : vip === 2 ? '#ff0033' : vip === 3 ? '#ffd700' : vip === 4 ? '#e2e8f0' : vip === 5 ? '#ff7f50' : '#7ba4c7';
-        var tooltipEvents = r.discriminator ? ' onmouseenter="showRankTooltip(this,\'' + r.discriminator + '\')" onmouseleave="var t=document.getElementById(\'custom-rank-tooltip\');if(t)t.style.display=\'none\';"' : '';
+        var tooltipData = safeDiscriminator
+            ? ' data-rank-discriminator="' + safeDiscriminator + '"'
+            : '';
         var rowClass = vip === 0 ? 'rank-row-supreme' : vip === 1 ? 'rank-row-diamante' : vip === 2 ? 'rank-row-rubi' : '';
         html += '<div class="' + rowClass + '" style="' + rowStyle + '; margin-bottom: 6px; border-radius: 6px;">' +
                 '  <div style="font-size:.95rem;font-weight:700;width:28px;text-align:center;flex-shrink:0;color:' + numColor + ';">' + vipIcon + '</div>' +
                 '  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">' +
-                '    <img src="' + _avatarSrc(r.avatar_id) + '" style="width:40px;height:40px;border-radius:50%;border:' + avatarBorder + ';object-fit:cover;cursor:default;" onerror="this.src=\'/static/donors/donor_m_1.png\'"' + tooltipEvents + ' />' +
+                '    <img src="' + _avatarSrc(r.avatar_id) + '" style="width:40px;height:40px;border-radius:50%;border:' + avatarBorder + ';object-fit:cover;cursor:default;" onerror="this.src=\'/static/donors/donor_m_1.png\'"' + tooltipData + ' />' +
                 '    ' + _vipBadge(vip) +
                 '  </div>' +
                 '  <div class="rank-donor-main">' +
                 '    <div class="rank-name-line">' +
                 '      <div class="rank-name-group">' +
-                '        <span class="rank-name-text user-tier-base user-tier-' + vip + '" style="' + nameStyle + 'font-size:' + rankNameSize + ' !important;">' + safeNickname + '</span>' +
-                '        <span class="supporter-presence-dot" data-donor-id="' + r.id + '" title="' + safePresenceTitle + '" aria-label="' + (r.online ? 'Online' : 'Offline') + '" style="background:' + presenceColor + ';box-shadow:0 0 7px ' + presenceColor + ';"></span>' +
+                '        <span class="rank-name-text user-tier-base user-tier-' + vip + '" style="' + nameStyle + 'font-size:clamp(0.7rem, 2vw, 1.1rem);">' + safeNickname + '</span>' +
+                '        <span class="supporter-presence-dot" data-donor-id="' + safeDonorId + '" title="' + safePresenceTitle + '" aria-label="' + (r.online ? 'Online' : 'Offline') + '" style="background:' + presenceColor + ';box-shadow:0 0 7px ' + presenceColor + ';"></span>' +
                 '      </div>' +
                 '    </div>' +
-                '    <div class="rank-amount"><span class="amount-icon" data-donor-id="' + r.id + '" data-tooltip="' + currency + ' — ' + currencyLabel + '"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span><span>' + amountHtml + '</span></div>' +
+                '    <div class="rank-amount"><span class="amount-icon" data-donor-id="' + safeDonorId + '" data-tooltip="' + currency + ' — ' + currencyLabel + '"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,255,136,0.5));"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span><span>' + amountHtml + '</span></div>' +
                 '  </div>' +
                 '</div>';
     });
 
     list.innerHTML = html;
     list.style.display = 'block';
+    function fitRankingNames() {
+        list.querySelectorAll('.rank-name-text').forEach(function(name) {
+            name.style.removeProperty('font-size');
+            var availableWidth = name.clientWidth - 1;
+            if (availableWidth <= 0) return;
+            var textRange = document.createRange();
+            textRange.selectNodeContents(name);
+            if (textRange.getBoundingClientRect().width <= availableWidth) return;
+            var base = parseFloat(window.getComputedStyle(name).fontSize) || 11;
+            var low = 8;
+            var high = base;
+            for (var i = 0; i < 12; i += 1) {
+                var mid = (low + high) / 2;
+                name.style.setProperty('font-size', mid + 'px', 'important');
+                if (textRange.getBoundingClientRect().width > availableWidth) high = mid;
+                else low = mid;
+            }
+            name.style.setProperty('font-size', low + 'px', 'important');
+        });
+    }
+    requestAnimationFrame(fitRankingNames);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitRankingNames);
+    list.querySelectorAll('[data-rank-discriminator]').forEach(function(avatar) {
+        avatar.addEventListener('mouseenter', function() {
+            window.showRankTooltip(avatar, avatar.getAttribute('data-rank-discriminator').replace(/^#/, ''));
+        });
+        avatar.addEventListener('mouseleave', function() {
+            var tooltip = document.getElementById('custom-rank-tooltip');
+            if (tooltip) tooltip.style.display = 'none';
+        });
+    });
 }
                     
                 /* ── Ranking Sidebar Drawer open / close ── */
@@ -6965,9 +7053,12 @@ function renderPublicRanking(rows) {
 
                     function refreshRanking() {
                         fetch('/api/public/ranking', { cache: 'no-store' })
-                            .then(function(r) { return r.json(); })
+                            .then(function(r) {
+                                if (!r.ok) throw new Error('ranking request failed');
+                                return r.json();
+                            })
                             .then(renderPublicRanking)
-                            .catch(function() {});
+                            .catch(function() { renderPublicRanking(null); });
                     }
                     refreshRanking();
                     clearInterval(_rankPresenceTimer);
@@ -7004,8 +7095,8 @@ function renderPublicRanking(rows) {
                             'box-shadow:0 8px 24px rgba(0,0,0,.5);text-align:center;display:none;pointer-events:none;';
                         document.body.appendChild(tip);
                     }
-                    tip.innerHTML = '<span style="color:#adb5bd;font-weight:bold;font-size:13px;display:block;margin-bottom:2px;">🆔 Identificador VIP</span>' +
-                        '<small style="color:#8b949e;font-family:monospace;font-size:11px;">ID: #' + donorId + '</small>';
+                    tip.textContent = '🆔 Identificador VIP\nID: #' + String(donorId || '').replace(/[^\d]/g, '').slice(0, 18);
+                    tip.style.whiteSpace = 'pre-line';
                     tip.style.display = 'block';
                     var rect = element.getBoundingClientRect();
                     tip.style.left = (rect.left + window.scrollX + rect.width / 2 - tip.offsetWidth / 2) + 'px';

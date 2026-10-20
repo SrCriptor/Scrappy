@@ -95,43 +95,13 @@
         .vip-6 { background: #21262d; color:#7ba4c7; border: 1px dashed rgba(123,164,199,.4); }
 
         /* ── CLASSES DE ESTILIZAÇÃO DOS APELIDOS DOS USUÁRIOS ── */
-        .user-tier-0 {
-            font-family: 'Roboto Mono', monospace !important;
-            font-weight: 900 !important;
-            background: linear-gradient(90deg, #ff4500, #ff8c00, #ff0000, #ff8c00, #ff4500);
-            background-size: 200% auto;
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            animation: lavaFlow 2s linear infinite, glitch-shake 0.3s infinite linear;
-        }
-        .user-tier-1 {
-            font-family: 'Orbitron', sans-serif !important;
-            color: #00f0ff !important;
-            text-shadow: 0 0 12px #00f0ff, 0 0 20px rgba(0, 240, 255, 0.5);
-        }
-        .user-tier-2 {
-            font-family: 'Orbitron', sans-serif !important;
-            color: #ff0033 !important;
-            background: transparent !important;
-            animation: glitch-shake 0.5s infinite steps(2);
-        }
-        .user-tier-3 {
-            font-family: 'Orbitron', sans-serif !important;
-            background: linear-gradient(to right, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            font-weight: bold;
-        }
-        .user-tier-4 {
-            font-family: 'Roboto Mono', monospace !important;
-            background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 25%, #ffffff 50%, #cbd5e1 75%, #e2e8f0 100%);
-            background-size: 200% auto;
-            -webkit-background-clip: text !important;
-            -webkit-text-fill-color: transparent !important;
-            animation: laser-swipe 3s linear infinite;
-        }
-        .user-tier-5 { color: #ff7f50 !important; font-weight: 700; }
-        .user-tier-6 { color: #7ba4c7 !important; opacity: 0.7; }
+        .user-tier-0 { color:#ff6a00 !important; -webkit-text-fill-color:#ff6a00 !important; font-family:'Orbitron',sans-serif !important; font-weight:800 !important; animation:rgbGlitchSupreme 4s infinite steps(1) !important; }
+        .user-tier-1 { color:#00f0ff !important; -webkit-text-fill-color:#00f0ff !important; font-family:'Orbitron',sans-serif !important; font-weight:800 !important; animation:rgbGlitchDiamond 4.5s infinite steps(1) !important; }
+        .user-tier-2 { color:#ff0033 !important; -webkit-text-fill-color:#ff0033 !important; font-family:'Orbitron',sans-serif !important; font-weight:800 !important; animation:rgbGlitchRubi 3.5s infinite steps(1) !important; }
+        .user-tier-3 { color:#ffd700 !important; -webkit-text-fill-color:#ffd700 !important; font-family:'Orbitron',sans-serif !important; font-weight:700 !important; animation:adminGoldGlow 2.5s infinite ease-in-out !important; }
+        .user-tier-4 { color:#fff !important; -webkit-text-fill-color:#fff !important; font-family:'Orbitron',sans-serif !important; font-weight:700 !important; animation:adminSilverShimmer 2.8s infinite ease-in-out !important; }
+        .user-tier-5 { color:#fff !important; -webkit-text-fill-color:#fff !important; font-family:'Orbitron',sans-serif !important; font-weight:700 !important; animation:adminCopperGlow 2.2s infinite ease-in-out !important; }
+        .user-tier-6 { color:#fff !important; -webkit-text-fill-color:#fff !important; font-family:'Orbitron',sans-serif !important; font-weight:700 !important; animation:adminStarFade 3.5s infinite ease-in-out !important; }
 
         /* ── DECLARAÇÕES KEYFRAMES DAS ANIMAÇÕES ── */
         @keyframes glitch-shake {
@@ -165,6 +135,34 @@
             50% { box-shadow: 0 0 16px rgba(0,240,255,0.8); }
             100% { box-shadow: 0 0 4px rgba(0,240,255,0.4); }
         }
+        @keyframes rgbGlitchSupreme {
+            0%,86%,100% { text-shadow:0 0 8px rgba(255,85,0,.55); }
+            87% { text-shadow:-3px 0 rgba(0,255,255,.65),3px 0 rgba(255,85,0,.8),0 0 18px #ff5500; }
+            88% { text-shadow:2px 0 rgba(0,255,255,.45),-2px 0 rgba(255,85,0,.9); }
+            89% { text-shadow:-1px 0 rgba(0,255,255,.55),1px 0 rgba(255,85,0,.7),0 0 10px rgba(255,210,120,.4); }
+            90% { text-shadow:0 0 14px rgba(255,230,160,.6); }
+            91% { text-shadow:0 0 8px rgba(255,85,0,.55); }
+        }
+        @keyframes rgbGlitchDiamond {
+            0%,86%,100% { text-shadow:0 0 8px rgba(0,243,255,.5); }
+            87% { text-shadow:-3px 0 rgba(255,0,130,.55),3px 0 rgba(0,243,255,.9),0 0 20px #00f3ff; }
+            88% { text-shadow:2px 0 rgba(255,0,130,.35),-2px 0 rgba(0,243,255,.8); }
+            89% { text-shadow:-1px 0 rgba(255,0,130,.45),1px 0 rgba(0,243,255,.7),0 0 14px rgba(210,255,255,.55); }
+            90% { text-shadow:0 0 22px rgba(255,255,255,.7); }
+            91% { text-shadow:0 0 8px rgba(0,243,255,.5); }
+        }
+        @keyframes rgbGlitchRubi {
+            0%,86%,100% { text-shadow:0 0 6px rgba(255,0,60,.45); }
+            87% { text-shadow:-3px 0 rgba(0,255,210,.55),3px 0 rgba(255,0,60,.9),0 0 16px #ff003c; }
+            88% { text-shadow:2px 0 rgba(0,255,210,.4),-2px 0 rgba(255,0,60,.8); }
+            89% { text-shadow:-1px 0 rgba(0,255,210,.5),1px 0 rgba(255,0,60,.7); }
+            90% { text-shadow:0 0 18px rgba(255,130,130,.5); }
+            91% { text-shadow:0 0 6px rgba(255,0,60,.45); }
+        }
+        @keyframes adminGoldGlow { 0%,100% { text-shadow:0 0 3px rgba(255,215,0,.35); } 50% { text-shadow:0 0 12px rgba(255,224,0,.85); } }
+        @keyframes adminSilverShimmer { 0%,100% { text-shadow:0 0 2px rgba(255,255,255,.25); } 50% { text-shadow:0 0 10px rgba(255,255,255,.85); } }
+        @keyframes adminCopperGlow { 0%,100% { text-shadow:0 0 2px rgba(255,127,80,.3); } 50% { text-shadow:0 0 10px rgba(255,127,80,.9); } }
+        @keyframes adminStarFade { 0%,100% { text-shadow:0 0 2px rgba(255,255,255,.2); opacity:.75; } 50% { text-shadow:0 0 8px rgba(255,255,255,.75); opacity:1; } }
 
         .nick-cell   { font-size: .9rem; font-weight: 600; min-width: 0; }
         .donor-font-default { font-family: 'Segoe UI', sans-serif !important; }
@@ -194,7 +192,7 @@
         .nick-cell { min-width: 0; }
         .nick-content { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; width:100%; }
         .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 auto; }
-        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+        .nick-text { display:inline-block; min-width:0; max-width:100%; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; overflow-wrap:normal; word-break:normal; }
         .supporter-presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex:0 0 8px; vertical-align:middle; }
         .amount-cell { white-space:nowrap; }
         .amount-value { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; font-weight:700; font-family:'Roboto Mono',monospace; color:#00ff88; text-shadow:0 0 8px rgba(0,255,136,.55),0 0 16px rgba(0,255,136,.25); letter-spacing:.4px; white-space:nowrap; }
@@ -339,10 +337,11 @@
                         {% set donor_font = r.font_id|default('default') %}
                         {% set donor_effect = r.text_effect|default('solid') %}
                         {% set donor_color = r.name_color|default('#f3f4f6') %}
+                        {% set donor_custom_style = donor_font != 'default' or donor_effect != 'solid' or donor_color != '#f3f4f6' %}
                         {% set _presence_title = 'Disponível agora' if r.online else ('Visto por último: ' ~ r.last_seen_label if r.last_seen_label else 'Ainda não foi visto online') %}
                          <div class="nick-content">
                              <div class="nick-identity">
-                                 <span class="nick-text user-tier-{{ vip }} donor-font-{{ donor_font }} donor-effect-{{ donor_effect }}" style="--donor-color:{{ donor_color }};color:{{ donor_color }} !important;" title="{{ r.nickname }}">{{ r.nickname }}{% if r.discriminator %}<span class="text-muted" style="font-size:0.8em;opacity:0.6;"> #{{ r.discriminator }}</span>{% endif %}</span>
+                                  <span class="nick-text {% if donor_custom_style %}donor-font-{{ donor_font }} donor-effect-{{ donor_effect }}{% else %}user-tier-{{ vip }}{% endif %}" {% if donor_custom_style %}style="--donor-color:{{ donor_color }};color:{{ donor_color }} !important;"{% endif %} title="{{ r.nickname }}">{{ r.nickname }}{% if r.discriminator %}<span class="text-muted" style="font-size:0.8em;opacity:0.6;"> #{{ r.discriminator }}</span>{% endif %}</span>
                                  <span class="supporter-presence-dot" data-donor-id="{{ r.id }}" title="{{ _presence_title }}" aria-label="{{ 'Online' if r.online else 'Offline' }}" style="background:{% if r.online %}#22c55e{% else %}#fff{% endif %};box-shadow:0 0 7px {% if r.online %}#22c55e{% else %}#fff{% endif %};"></span>
                              </div>
                         </div>

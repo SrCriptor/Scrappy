@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/static/images/favicon.ico" />
     <title>Ranking de Doadores — Admin</title>
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet" />
     <link href="/static/admin-responsive.css" rel="stylesheet" />
@@ -14,18 +15,21 @@
         .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
 
         /* ── Leaderboard table ── */
-        .rank-table { width: 100%; min-width: 1050px; table-layout: fixed; border-collapse: collapse; }
-        .rank-table th:nth-child(1), .rank-table td:nth-child(1) { width: 48px; }
-        .rank-table th:nth-child(2), .rank-table td:nth-child(2) { width: 132px; }
-        .rank-table th:nth-child(3), .rank-table td:nth-child(3) { width: 320px; }
-        .rank-table th:nth-child(4), .rank-table td:nth-child(4) { width: 105px; }
-        .rank-table th:nth-child(5), .rank-table td:nth-child(5) { width: 165px; }
-        .rank-table th:nth-child(6), .rank-table td:nth-child(6) { width: 90px; }
-        .rank-table th:nth-child(7), .rank-table td:nth-child(7) { width: 150px; }
+        .rank-table { width: 100%; min-width: 860px; table-layout: fixed; border-collapse: collapse; }
+        .rank-table .col-position { width: 38px; }
+        .rank-table .col-profile { width: 70px; }
+        .rank-table .col-banner { width: 76px; }
+        .rank-table .col-effects { width: 62px; }
+        .rank-table .col-total { width: 92px; }
+        .rank-table .col-tier { width: 112px; }
+        .rank-table .col-date { width: 126px; }
+        .rank-table .col-actions { width: 116px; }
         .rank-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; color: #8b949e; padding: .5rem .75rem; border-bottom: 1px solid #21262d; text-align: left; }
         .rank-table td { padding: .65rem .75rem; border-bottom: 1px solid #21262d; vertical-align: middle; }
         .rank-table tr:last-child td { border-bottom: none; }
         .rank-table tr:hover td { background: rgba(255,255,255,.03); }
+        .ranking-responsive { overflow-x:auto !important; max-width:100%; }
+        .rank-actions { display:flex; align-items:center; justify-content:flex-end; gap:4px; }
 
         /* ── Position medal ── */
         .rank-pos { font-size: 1rem; font-weight: 700; width: 36px; text-align: center; }
@@ -46,8 +50,8 @@
         .profile-block img {
             border-radius: 50% !important;
             object-fit: cover !important;
-            width: 50px !important;
-            height: 50px !important;
+            width: 42px !important;
+            height: 42px !important;
             border: 2px solid #30363d;
         }
 
@@ -107,34 +111,62 @@
         .nick-cell { font-size: .9rem; font-weight: 600; min-width:0; }
         .nick-content { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; min-width:0; width:100%; }
         .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; width:100%; }
-        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:nowrap; overflow-wrap:normal; word-break:normal; }
+        .nick-text { display:inline-block !important; min-width:0; max-width:100%; flex:0 1 auto; overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; overflow-wrap:normal !important; word-break:normal !important; }
         .supporter-presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
-        .admin-style-meta { display:block; width:100%; margin-top:2px; color:#8b949e; font-size:.68rem; line-height:1.4; white-space:normal; overflow-wrap:break-word; }
-        .admin-banner-preview {
-            display:flex; align-items:center; justify-content:center; width:100%; max-width:260px; min-height:36px;
-            margin-top:3px; padding:4px 8px; border:1px solid #30363d; border-radius:5px;
-            background-size:cover; background-position:center; color:#e6edf3;
-            font-size:.68rem; font-weight:600; text-align:center; text-shadow:0 1px 3px #000;
-        }
+        .style-hint-wrap { position:relative; display:inline-flex; }
+        .style-hint { display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px; padding:0; color:#a5b4fc; background:#1c2333; border:1px solid #394568; border-radius:50%; }
+        .style-hint:hover, .style-hint:focus-visible { color:#fff; border-color:#818cf8; outline:none; }
+        .style-tooltip { display:none; position:absolute; right:-4px; bottom:calc(100% + 7px); z-index:30; width:190px; padding:9px 11px; border:1px solid #394150; border-radius:8px; background:#111820; box-shadow:0 8px 24px rgba(0,0,0,.45); color:#c9d1d9; font-size:.72rem; }
+        .style-hint-wrap:hover .style-tooltip, .style-hint-wrap:focus-within .style-tooltip { display:block; }
+        .style-tooltip-row { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+        .style-tooltip-row span { color:#8b949e; }
+        .style-tooltip-row strong { max-width:112px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#e6edf3; text-align:right; }
+        .style-tooltip-font { font-family:inherit; }
+        .style-color-value { display:inline-flex; align-items:center; justify-content:flex-end; gap:5px; }
+        .style-color-swatch { width:12px; height:12px; flex:0 0 12px; border:1px solid rgba(255,255,255,.55); border-radius:3px; }
+        .admin-banner-thumb { display:inline-flex; position:relative; align-items:center; justify-content:center; width:65px; height:auto; overflow:visible; cursor:pointer; }
+        .admin-banner-thumb img { display:block; width:65px; height:auto; max-height:64px; border:1px solid #30363d; border-radius:6px; object-fit:contain; transition:transform .18s ease, box-shadow .18s ease; }
+        .admin-banner-thumb:hover img, .admin-banner-thumb:focus-visible img { position:relative; z-index:20; transform:scale(1.05); box-shadow:0 5px 16px rgba(0,0,0,.5); }
+        .banner-lightbox-image { display:block; max-width:min(90vw, 1100px); max-height:82vh; margin:0 auto; object-fit:contain; border-radius:8px; }
+        .rank-date-display { display:inline-block; padding:4px 6px; border:1px solid #252b36; border-radius:6px; background:#0f111a; color:#aeb8c5; font-family:'Courier New',monospace; font-size:.68rem; white-space:nowrap; }
 
-        /* ── User tier name colors — clean, no webkit clip / mask / fade ── */
-        .user-tier-0 { color: #ff6a00 !important; font-weight: 700 !important; }   /* Supreme: Orange */
-        .user-tier-1 { color: #00f0ff !important; font-weight: 700 !important; }   /* Diamante: Cyan */
-        .user-tier-2 { color: #ff0033 !important; font-weight: 700 !important; }   /* Rubi: Red */
-        .user-tier-3 { color: #ffd700 !important; font-weight: 700 !important; }   /* Ouro: Gold */
-        .user-tier-4 { color: #ffffff !important; font-weight: 700 !important; }   /* Prata: White */
-        .user-tier-5 { color: #ffffff !important; font-weight: 700 !important; }   /* Bronze: White */
-        .user-tier-6 { color: #ffffff !important; font-weight: 700 !important; }   /* Estelar: White */
-        /* Guarantee no mask or background-clip leaks through */
-        span[class^="user-tier-"], span[class*=" user-tier-"] {
-            -webkit-background-clip: unset !important;
-            background-clip: unset !important;
-            -webkit-text-fill-color: unset !important;
-            -webkit-mask-image: none !important;
-            mask-image: none !important;
-            overflow: visible !important;
-            display: inline !important;
+        /* VIP names keep the admin palette while using the public page's
+           animated identity. Custom styles intentionally omit these classes. */
+        .user-tier-0 { color:#ff6a00 !important; font-weight:800 !important; font-family:'Orbitron',sans-serif !important; animation:rgbGlitchSupreme 4s infinite steps(1) !important; }
+        .user-tier-1 { color:#00f0ff !important; font-weight:800 !important; font-family:'Orbitron',sans-serif !important; animation:rgbGlitchDiamond 4.5s infinite steps(1) !important; }
+        .user-tier-2 { color:#ff0033 !important; font-weight:800 !important; font-family:'Orbitron',sans-serif !important; animation:rgbGlitchRubi 3.5s infinite steps(1) !important; }
+        .user-tier-3 { color:#ffd700 !important; font-weight:700 !important; font-family:'Orbitron',sans-serif !important; animation:adminGoldGlow 2.5s infinite ease-in-out !important; }
+        .user-tier-4 { color:#fff !important; font-weight:700 !important; font-family:'Orbitron',sans-serif !important; animation:adminSilverShimmer 2.8s infinite ease-in-out !important; }
+        .user-tier-5 { color:#fff !important; font-weight:700 !important; font-family:'Orbitron',sans-serif !important; animation:adminCopperGlow 2.2s infinite ease-in-out !important; }
+        .user-tier-6 { color:#fff !important; font-weight:700 !important; font-family:'Orbitron',sans-serif !important; animation:adminStarFade 3.5s infinite ease-in-out !important; }
+        @keyframes rgbGlitchSupreme {
+            0%,86%,100% { text-shadow:0 0 8px rgba(255,85,0,.55); }
+            87% { text-shadow:-3px 0 rgba(0,255,255,.65),3px 0 rgba(255,85,0,.8),0 0 18px #ff5500; }
+            88% { text-shadow:2px 0 rgba(0,255,255,.45),-2px 0 rgba(255,85,0,.9); }
+            89% { text-shadow:-1px 0 rgba(0,255,255,.55),1px 0 rgba(255,85,0,.7),0 0 10px rgba(255,210,120,.4); }
+            90% { text-shadow:0 0 14px rgba(255,230,160,.6); }
+            91% { text-shadow:0 0 8px rgba(255,85,0,.55); }
         }
+        @keyframes rgbGlitchDiamond {
+            0%,86%,100% { text-shadow:0 0 8px rgba(0,243,255,.5); }
+            87% { text-shadow:-3px 0 rgba(255,0,130,.55),3px 0 rgba(0,243,255,.9),0 0 20px #00f3ff; }
+            88% { text-shadow:2px 0 rgba(255,0,130,.35),-2px 0 rgba(0,243,255,.8); }
+            89% { text-shadow:-1px 0 rgba(255,0,130,.45),1px 0 rgba(0,243,255,.7),0 0 14px rgba(210,255,255,.55); }
+            90% { text-shadow:0 0 22px rgba(255,255,255,.7); }
+            91% { text-shadow:0 0 8px rgba(0,243,255,.5); }
+        }
+        @keyframes rgbGlitchRubi {
+            0%,86%,100% { text-shadow:0 0 6px rgba(255,0,60,.45); }
+            87% { text-shadow:-3px 0 rgba(0,255,210,.55),3px 0 rgba(255,0,60,.9),0 0 16px #ff003c; }
+            88% { text-shadow:2px 0 rgba(0,255,210,.4),-2px 0 rgba(255,0,60,.8); }
+            89% { text-shadow:-1px 0 rgba(0,255,210,.5),1px 0 rgba(255,0,60,.7); }
+            90% { text-shadow:0 0 18px rgba(255,130,130,.5); }
+            91% { text-shadow:0 0 6px rgba(255,0,60,.45); }
+        }
+        @keyframes adminGoldGlow { 0%,100% { text-shadow:0 0 3px rgba(255,215,0,.35); } 50% { text-shadow:0 0 12px rgba(255,224,0,.85); } }
+        @keyframes adminSilverShimmer { 0%,100% { text-shadow:0 0 2px rgba(255,255,255,.25); } 50% { text-shadow:0 0 10px rgba(255,255,255,.85); } }
+        @keyframes adminCopperGlow { 0%,100% { text-shadow:0 0 2px rgba(255,127,80,.3); } 50% { text-shadow:0 0 10px rgba(255,127,80,.9); } }
+        @keyframes adminStarFade { 0%,100% { text-shadow:0 0 2px rgba(255,255,255,.2); opacity:.75; } 50% { text-shadow:0 0 8px rgba(255,255,255,.75); opacity:1; } }
         .donor-font-default { font-family: 'Segoe UI', sans-serif !important; }
         .donor-font-inter { font-family: 'Inter', sans-serif !important; }
         .donor-font-orbitron { font-family: 'Orbitron', sans-serif !important; }
@@ -190,26 +222,34 @@
         .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; }
 
-        @media (max-width: 1000px) {
-            /* Keep the donor identity readable at the page's 900px max width.
-               The VIP badge already appears with the avatar, so the duplicate
-               tier column can be omitted on compact screens. */
-            .rank-table { min-width: 0; }
-            .rank-table th:nth-child(1), .rank-table td:nth-child(1) { width: 5%; }
-            .rank-table th:nth-child(2), .rank-table td:nth-child(2) { width: 14%; }
-            .rank-table th:nth-child(3), .rank-table td:nth-child(3) { width: 50%; }
-            .rank-table th:nth-child(4), .rank-table td:nth-child(4) { width: 12%; }
-            .rank-table th:nth-child(5), .rank-table td:nth-child(5),
-            .rank-table th:nth-child(6), .rank-table td:nth-child(6) { display: none; }
-            .rank-table th:nth-child(7), .rank-table td:nth-child(7) { width: 19%; }
-            .rank-table th, .rank-table td { padding: .45rem .35rem; }
-            .profile-block img { width: 44px !important; height: 44px !important; }
-            .vip-badge { font-size: .58rem; padding: 2px 5px; }
-            .nick-cell { font-size: .82rem; }
-            .admin-style-meta, .admin-banner-preview { font-size: .62rem; }
+        @media (max-width: 800px) {
+            .rank-table .col-position, .rank-table .col-tier { display:none; }
+            .rank-table .col-profile { width:58px; }
+            .rank-table .col-banner { width:76px; }
+            .rank-table .col-effects { width:48px; }
+            .rank-table .col-total { width:82px; }
+            .rank-table .col-date { width:126px; }
+            .rank-table .col-actions { width:96px; }
+            .rank-table th, .rank-table td { padding:.4rem .3rem; }
+            .profile-block img { width:38px !important; height:38px !important; }
+            .vip-badge { font-size:.55rem; padding:2px 4px; }
+            .nick-cell { font-size:.8rem; }
         }
-        @media (max-width: 768px) {
-            .rank-table { min-width: 760px; }
+        @media (max-width: 560px) {
+            .section-card { padding:.75rem; }
+            .rank-table .col-profile { display:none; }
+            .rank-table .col-banner { width:76px; }
+            .rank-table .col-effects { width:42px; }
+            .rank-table .col-total { width:72px; }
+            .rank-table .col-date { width:126px; }
+            .rank-table .col-actions { width:96px; }
+            .rank-table th, .rank-table td { padding:.35rem .2rem; font-size:.68rem; }
+            .rank-table th.col-banner, .rank-table th.col-effects { font-size:.58rem; letter-spacing:0; }
+            .rank-table .col-supporter { width:auto; }
+            .style-hint { width:23px; height:23px; }
+            .amount-cell { font-size:.74rem; }
+            .rank-actions { display:flex; flex-wrap:nowrap; gap:2px; }
+            .rank-actions .btn { margin:0 !important; padding:2px 4px !important; }
         }
     </style>
 </head>
@@ -242,27 +282,33 @@
         </div>
 
         {% if rows %}
-        <div class="table-responsive">
+        <div class="table-responsive ranking-responsive">
             <table class="rank-table">
                 <thead>
                     <tr>
-                        <th style="width:44px;">#</th>
-                        <th style="width:80px;">Perfil</th>
-                        <th>Apoiador</th>
-                        <th>Total Doado</th>
-                        <th>Tier</th>
-                        <th>Data</th>
-                        <th style="width:80px;"></th>
+                        <th class="col-position">#</th>
+                        <th class="col-profile">Perfil</th>
+                        <th class="col-supporter">Apoiador</th>
+                        <th class="col-banner">Banner VIP</th>
+                        <th class="col-effects">Efeitos</th>
+                        <th class="col-total">Total</th>
+                        <th class="col-tier">Tier</th>
+                        <th class="col-date">Data</th>
+                        <th class="col-actions"></th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for r in rows %}
                 {% set pos = loop.index %}
+                {% set vip = r.vip_level|default(6)|int %}
+                {% set _custom_name = r.font_id|default('default') != 'default' or r.text_effect|default('solid') != 'solid' or r.name_color|default('#f3f4f6') != '#f3f4f6' %}
+                {% set _style_font = donor_fonts.get(r.font_id|default('default'), donor_fonts.get('default', {})) %}
+                {% set _style_effect = donor_effects.get(r.text_effect|default('solid'), 'Sólido') %}
+                {% set _style_color = r.name_color|default('#f3f4f6') %}
 <tr id="rank-row-{{ r.id }}">
                     <!-- Position mineral icon (OBLITERATED SELLER MEDALS) -->
-                    <td>
+                    <td class="col-position">
                         <div class="vip-icon-container">
-                            {% set vip = r.vip_level|default(6)|int %}
                             {% if vip == 0 %}
                                 <span style="font-size: 1.15rem;"><i class="fas fa-fire" style="color: #ff4500; text-shadow: 0 0 10px #ff4500;"></i></span>
                             {% elif vip == 1 %}
@@ -282,9 +328,8 @@
                     </td>
 
                     <!-- Vertical avatar + VIP badge -->
-                    <td>
+                    <td class="col-profile">
                         <div class="profile-block">
-                            {% set vip = r.vip_level|default(6)|int %}
                             <img src="/static/donors/donor_{{ r.avatar_id }}.png"
                                  alt="Avatar {{ r.nickname }}"
                                  onerror="this.src='/static/donors/donor_m_1.png'" />
@@ -300,30 +345,51 @@
                         </div>
                     </td>
 
-                    <!-- Nickname with Tier Styles Alignment -->
-                    <td class="nick-cell">
-                        {% set vip = r.vip_level|default(6)|int %}
+                    <!-- Supporter name: VIP defaults inherit animated tier styling; custom styles remain explicit. -->
+                    <td class="col-supporter nick-cell">
                         <div class="nick-content">
                             <div class="nick-identity">
-                                <span class="nick-text user-tier-{{ vip }} donor-font-{{ r.font_id|default('default') }} donor-effect-{{ r.text_effect|default('solid') }}"
-                                      {% if r.font_id != 'default' or r.text_effect != 'solid' or r.name_color != '#f3f4f6' %}style="--donor-color:{{ r.name_color|default('#f3f4f6') }};color:{{ r.name_color|default('#f3f4f6') }} !important;"{% endif %}
+                                <span class="nick-text {% if _custom_name %}donor-font-{{ r.font_id|default('default') }} donor-effect-{{ r.text_effect|default('solid') }}{% else %}user-tier-{{ vip }}{% endif %}"
+                                      {% if _custom_name %}style="--donor-color:{{ r.name_color|default('#f3f4f6') }};color:{{ r.name_color|default('#f3f4f6') }} !important;"{% endif %}
                                       title="{{ r.nickname }}">{{ r.nickname }}<span class="text-muted ms-1" style="font-size:.8em;opacity:.6;">#{{ r.discriminator or '????' }}</span></span>
                                 <span class="supporter-presence-dot" title="{{ 'Disponível agora' if r.online else 'Offline' }}" aria-label="{{ 'Online' if r.online else 'Offline' }}" style="background:{{ '#22c55e' if r.online else '#fff' }};box-shadow:0 0 7px {{ '#22c55e' if r.online else '#fff' }};"></span>
                             </div>
-                            {% set _custom_name = r.font_id|default('default') != 'default' or r.text_effect|default('solid') != 'solid' or r.name_color|default('#f3f4f6') != '#f3f4f6' %}
-                            <small class="admin-style-meta">
-                                Nome: {{ 'personalizado pelo apoiador' if _custom_name else 'estilo VIP padrão' }} ·
-                                Efeito: {{ r.text_effect|default('solid') }} · Fonte: {{ r.font_id|default('default') }}
-                                {% if r.text_effect not in ['gradient', 'prism'] %}· Cor: {{ r.name_color|default('#f3f4f6') }}{% endif %}
-                            </small>
-                            <div class="admin-banner-preview" style="background-image:linear-gradient(90deg,rgba(13,17,23,.45),rgba(13,17,23,.7)),url('{{ r.banner_url }}');">
-                                Banner VIP atual · {% if vip == 0 %}Supreme{% elif vip == 1 %}Diamante{% elif vip == 2 %}Rubi{% elif vip == 3 %}Ouro{% elif vip == 4 %}Prata{% elif vip == 5 %}Bronze{% else %}Estelar{% endif %}
+                        </div>
+                    </td>
+
+                    <td class="col-banner text-center">
+                        <span class="admin-banner-thumb" tabindex="0" role="button"
+                              aria-label="Ampliar banner VIP de {{ r.nickname }}"
+                              title="Clique para ampliar o banner VIP">
+                            <img src="{{ r.banner_url }}" alt="Banner VIP {{ ['Supreme','Diamante','Rubi','Ouro','Prata','Bronze','Estelar'][vip] }}" />
+                        </span>
+                    </td>
+
+                    <td class="col-effects text-center">
+                        <div class="style-hint-wrap">
+                            <button type="button" class="style-hint" aria-label="Ver detalhes do estilo de {{ r.nickname }}" title="Detalhes do estilo">
+                                <i class="fas fa-paintbrush" aria-hidden="true"></i>
+                            </button>
+                            <div class="style-tooltip" role="tooltip">
+                                <div class="style-tooltip-row"><span>Estilo</span><strong>{{ 'Personalizado' if _custom_name else 'VIP padrão' }}</strong></div>
+                                <div class="style-tooltip-row"><span>Efeito</span><strong>{{ _style_effect }}</strong></div>
+                                <div class="style-tooltip-row">
+                                    <span>Fonte</span>
+                                    <strong class="style-tooltip-font" style="font-family:{{ _style_font.get('css', 'inherit') }};">{{ _style_font.get('label', r.font_id|default('Padrão')) }}</strong>
+                                </div>
+                                <div class="style-tooltip-row">
+                                    <span>Cor</span>
+                                    <strong class="style-color-value" style="color:{{ _style_color }};">
+                                        <i class="style-color-swatch" style="background-color:{{ _style_color }};" aria-hidden="true"></i>
+                                        {{ _style_color }}
+                                    </strong>
+                                </div>
                             </div>
                         </div>
                     </td>
 
                     <!-- Total donated: SVG icon + smart cents, no R$ text -->
-                    <td class="amount-cell">
+                    <td class="col-total amount-cell">
                         <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
                             {% set _currency = r.currency|default('BRL')|upper %}
                             {% set _currency_label = 'Dólar Americano' if _currency == 'USD' else 'Real Brasileiro' %}
@@ -345,7 +411,7 @@
                     </td>
 
                     <!-- Tier label (Corrected Mineral Map 0-6) -->
-                    <td>
+                    <td class="col-tier">
                         {% set vip = r.vip_level|default(6)|int %}
                         {% if vip == 0 %}
                             <span class="vip-badge vip-0"><i class="fas fa-fire"></i> VIP SUPREME 🔥</span>
@@ -365,12 +431,13 @@
                     </td>
 
                     <!-- Date -->
-                    <td style="font-size:.75rem;color:#8b949e;">
-                        {{ r.ts[:10] if r.ts else '—' }}
+                    <td class="col-date">
+                        <span class="rank-date-display">{{ r.ts_br|default('—') }}</span>
                     </td>
 
-                    <!-- Action tools: audit (all admins) + regenerate key + delete (owner only) -->
-                    <td style="white-space:nowrap;">
+                    <!-- Action tools: audit (all admins) + edit/delete (owner only). -->
+                    <td class="col-actions">
+                        <div class="rank-actions">
                         {% if admin.get('role') == 'owner' %}
                         <button type="button" class="btn btn-sm btn-outline-primary edit-supporter-btn"
                                 title="Editar perfil e aparência"
@@ -384,7 +451,6 @@
                                 style="padding:2px 8px !important;font-size:.8rem !important;">
                             <i class="fas fa-user-pen"></i>
                         </button>
-                        <button type="button" onclick="regenerateSupporterShaKey('{{ r.id }}')" class="btn btn-sm btn-outline-warning" title="Gerar nova chave SHA-256" style="padding: 2px 8px !important; font-weight: bold !important; font-size: 0.8rem !important; border-radius: 4px !important;">⚡</button>
                         {% endif %}
                         <button type="button" onclick="auditSupporterDeviceRealtime('{{ r.id }}')" class="btn btn-sm btn-outline-info" title="Auditar Assinatura de Hardware do Apoiador" style="padding: 2px 8px !important; font-weight: bold !important; font-size: 0.8rem !important; border-radius: 4px !important; margin-left: 4px !important;">📖</button>
                         {% if admin.get('role') == 'owner' %}
@@ -393,6 +459,7 @@
                             <i class="fas fa-trash-alt" style="font-size:.75rem;"></i>
                         </button>
                         {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -527,6 +594,67 @@
     });
 })();
 </script>
+{% endif %}
+
+{% if admin.get('role') == 'owner' %}
+<div class="modal fade" id="supporterProfileModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="background:#161b22;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title text-primary"><i class="fas fa-user-pen me-2"></i>Editar perfil e aparência</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="supporterProfileId" />
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="supporterProfileNickname" class="form-label small text-muted">Nome de exibição</label>
+                        <input id="supporterProfileNickname" class="form-control" maxlength="18" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label for="supporterProfileAvatar" class="form-label small text-muted">Avatar</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="supporterProfileAvatar" class="form-select flex-grow-1">
+                                {% for avatar_id in avatar_ids %}
+                                <option value="{{ avatar_id }}">{{ avatar_id }}</option>
+                                {% endfor %}
+                            </select>
+                            <img id="supporterProfileAvatarPreview" src="/static/donors/donor_m_1.png"
+                                 alt="Prévia do avatar selecionado"
+                                 style="width:45px;height:45px;flex:0 0 45px;object-fit:cover;border:1px solid #394150;border-radius:8px;background:#0d1117;" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="supporterProfileFont" class="form-label small text-muted">Fonte</label>
+                        <select id="supporterProfileFont" class="form-select">
+                            {% for font_id, font in donor_fonts.items() %}
+                            <option value="{{ font_id }}" style="font-family:{{ font.css }};">{{ font.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="supporterProfileEffect" class="form-label small text-muted">Efeito</label>
+                        <select id="supporterProfileEffect" class="form-select">
+                            {% for effect_id, effect_label in donor_effects.items() %}
+                            <option value="{{ effect_id }}">{{ effect_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="supporterProfileColor" class="form-label small text-muted">Cor do nome</label>
+                        <input id="supporterProfileColor" type="color" class="form-control form-control-color w-100" value="#f3f4f6" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="supporterProfileSaveBtn">
+                    <i class="fas fa-save me-1"></i>Salvar perfil
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 
 <!-- Manual Donation Creation Modal (owner only) -->
@@ -723,6 +851,21 @@
 </script>
 {% endif %}
 
+<!-- VIP banner preview lightbox -->
+<div class="modal fade" id="bannerPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content" style="background:#0d1117;border:1px solid #30363d;border-radius:12px;">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title text-info"><i class="fas fa-image me-2"></i>Prévia do Banner VIP</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body text-center p-3">
+                <img id="bannerPreviewImage" class="banner-lightbox-image" src="" alt="Banner VIP ampliado" />
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Audit / Key-Gen Modal (all admins) -->
 <div class="modal fade" id="adminAuditModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -735,6 +878,12 @@
                 <div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Carregando…</div>
             </div>
             <div class="modal-footer border-0 pt-0">
+                {% if admin.get('role') == 'owner' %}
+                <button type="button" class="btn btn-outline-danger btn-sm me-auto"
+                        id="adminAuditRegenerateKeyBtn" style="display:none;">
+                    🔑 Revogar e Gerar Chave
+                </button>
+                {% endif %}
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
@@ -742,6 +891,31 @@
 </div>
 <script>
 (function() {
+    var bannerPreviewEl = document.getElementById('bannerPreviewModal');
+    var bannerPreviewImg = document.getElementById('bannerPreviewImage');
+    function openBannerPreview(thumb) {
+        var image = thumb && thumb.querySelector('img');
+        if (!image || !image.currentSrc || !bannerPreviewEl || !bannerPreviewImg) return;
+        bannerPreviewImg.src = image.currentSrc;
+        bannerPreviewImg.alt = image.alt || 'Banner VIP ampliado';
+        bootstrap.Modal.getOrCreateInstance(bannerPreviewEl).show();
+    }
+    document.querySelectorAll('.admin-banner-thumb').forEach(function(thumb) {
+        thumb.addEventListener('click', function() { openBannerPreview(thumb); });
+        thumb.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openBannerPreview(thumb);
+            }
+        });
+    });
+
+    function _escapeAuditHtml(value) {
+        var node = document.createElement('span');
+        node.textContent = String(value == null ? '' : value);
+        return node.innerHTML;
+    }
+
     function _openAuditModal(titleHtml, bodyHtml) {
         document.getElementById('adminAuditModalTitle').innerHTML = titleHtml;
         document.getElementById('adminAuditModalBody').innerHTML  = bodyHtml;
@@ -765,6 +939,12 @@
     }
 
     window.auditSupporterDeviceRealtime = async function(supporterId) {
+        var regenerateKeyBtn = document.getElementById('adminAuditRegenerateKeyBtn');
+        if (regenerateKeyBtn) {
+            regenerateKeyBtn.style.display = 'none';
+            regenerateKeyBtn.disabled = true;
+        }
+        window._auditedSupporterId = String(supporterId);
         _openAuditModal(
             '<i class="fas fa-shield-alt me-2"></i>Auditoria de Assinatura — Apoiador',
             '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Carregando…</div>'
@@ -773,20 +953,24 @@
             var resp = await fetch('/api/admin/audit-supporter/' + supporterId, { cache: 'no-store' });
             var data = await resp.json();
             if (resp.ok && data.status === 'success') {
-                var sigHtml = '<code style="font-family:monospace;font-size:.72rem;word-break:break-all;overflow-wrap:anywhere;color:#a5b4fc;display:block;line-height:1.6;">' + (data.device_signature || '—') + '</code>';
-                var deviceInfoHtml = '<span style="color:#e2e8f0;font-size:.80rem;">' + (data.browser_device_info || 'Usuário Legado / Não Identificado') + '</span>';
+                var sigHtml = '<code style="font-family:monospace;font-size:.72rem;word-break:break-all;overflow-wrap:anywhere;color:#a5b4fc;display:block;line-height:1.6;">' + _escapeAuditHtml(data.device_signature || '—') + '</code>';
+                var deviceInfoHtml = '<span style="color:#e2e8f0;font-size:.80rem;">' + _escapeAuditHtml(data.browser_device_info || 'Usuário Legado / Não Identificado') + '</span>';
                 document.getElementById('adminAuditModalBody').innerHTML =
                     '<table class="table table-sm table-dark mb-0" style="font-size:.82rem;">' +
                     '<tbody>' +
-                    '<tr><th style="color:#8b949e;width:40%;">Apoiador</th><td class="text-white fw-semibold">' + (data.nickname || '—') + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;width:40%;">Apoiador</th><td class="text-white fw-semibold">' + _escapeAuditHtml(data.nickname || '—') + '</td></tr>' +
                     '<tr><th style="color:#8b949e;">Ativado?</th><td>' + (data.is_activated ? '<span class="badge bg-success">Sim</span>' : '<span class="badge bg-secondary">Não</span>') + '</td></tr>' +
-                    '<tr><th style="color:#8b949e;">Ativado em</th><td>' + (data.activated_at || '—') + '</td></tr>' +
+                    '<tr><th style="color:#8b949e;">Ativado em</th><td>' + _escapeAuditHtml(data.activated_at || '—') + '</td></tr>' +
                     '<tr><th style="color:#8b949e;">Dados do Navegador</th><td>' + deviceInfoHtml + '</td></tr>' +
                     '<tr><th style="color:#8b949e;">Assinatura SHA-256</th><td>' + sigHtml + '</td></tr>' +
                     '</tbody></table>';
+                if (regenerateKeyBtn) {
+                    regenerateKeyBtn.style.display = '';
+                    regenerateKeyBtn.disabled = false;
+                }
             } else {
                 document.getElementById('adminAuditModalBody').innerHTML =
-                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + (data.message || data.error || 'Erro ao carregar dados.') + '</p>';
+                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + _escapeAuditHtml(data.message || data.error || 'Erro ao carregar dados.') + '</p>';
             }
         } catch (e) {
             document.getElementById('adminAuditModalBody').innerHTML =
@@ -797,6 +981,8 @@
     {% if admin.get('role') == 'owner' %}
     window.regenerateSupporterShaKey = async function(supporterId) {
         if (!confirm('Tem certeza que deseja gerar uma nova chave SHA-256 para este apoiador? A chave e a vinculação atual serão destruídas.')) return;
+        var regenerateKeyBtn = document.getElementById('adminAuditRegenerateKeyBtn');
+        if (regenerateKeyBtn) regenerateKeyBtn.disabled = true;
         _openAuditModal(
             '<i class="fas fa-key me-2" style="color:#fbbf24;"></i>Geração de Nova Chave SHA-256',
             '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Gerando chave…</div>'
@@ -810,25 +996,35 @@
                     '<p style="color:#fbbf24;font-weight:700;font-size:0.82rem;margin-bottom:10px;">' +
                     '🔑 Nova Chave SHA-256 Gerada! Copie e envie para o apoiador no privado:</p>' +
                     '<div style="background:#090d16;border:1px solid rgba(99,102,241,.4);border-radius:8px;padding:12px 14px;margin-bottom:10px;">' +
-                    '<code id="_newKeyDisplay" style="font-size:.72rem;word-break:break-all;color:#a5b4fc;display:block;line-height:1.6;">' + key + '</code>' +
+                    '<code id="_newKeyDisplay" style="font-size:.72rem;word-break:break-all;color:#a5b4fc;display:block;line-height:1.6;">' + _escapeAuditHtml(key) + '</code>' +
                     '</div>' +
                     '<button id="_copyNewKeyBtn" class="btn btn-outline-info btn-sm w-100" style="font-size:.78rem;font-weight:600;">' +
                     '<i class="fas fa-copy me-1"></i>Copiar Chave</button>' +
                     '<p style="color:#6b7280;font-size:.72rem;margin-top:10px;margin-bottom:0;">' +
-                    '<i class="fas fa-info-circle me-1"></i>' + (data.message || 'Perfil legado atualizado com sucesso.') + '</p>';
+                    '<i class="fas fa-info-circle me-1"></i>' + _escapeAuditHtml(data.message || 'Perfil legado atualizado com sucesso.') + '</p>';
                 document.getElementById('adminAuditModalBody').innerHTML = bodyHtml;
                 document.getElementById('_copyNewKeyBtn').addEventListener('click', function() {
                     _copyToClipboard(key, this);
                 });
             } else {
                 document.getElementById('adminAuditModalBody').innerHTML =
-                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + (data.message || data.error || 'Erro ao gerar chave.') + '</p>';
+                    '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>' + _escapeAuditHtml(data.message || data.error || 'Erro ao gerar chave.') + '</p>';
             }
         } catch (e) {
             document.getElementById('adminAuditModalBody').innerHTML =
                 '<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Erro de rede. Tente novamente.</p>';
+        } finally {
+            if (regenerateKeyBtn) regenerateKeyBtn.disabled = false;
         }
     };
+    var regenerateKeyBtn = document.getElementById('adminAuditRegenerateKeyBtn');
+    if (regenerateKeyBtn) {
+        regenerateKeyBtn.addEventListener('click', function() {
+            if (window._auditedSupporterId) {
+                window.regenerateSupporterShaKey(window._auditedSupporterId);
+            }
+        });
+    }
     {% endif %}
 })();
 </script>
@@ -903,6 +1099,96 @@
 {% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+{% if admin.get('role') == 'owner' %}
+<script>
+(function() {
+    var modalEl = document.getElementById('supporterProfileModal');
+    var saveBtn = document.getElementById('supporterProfileSaveBtn');
+    if (!modalEl || !saveBtn) return;
+    var avatarSelect = document.getElementById('supporterProfileAvatar');
+    var avatarPreview = document.getElementById('supporterProfileAvatarPreview');
+    var effectSelect = document.getElementById('supporterProfileEffect');
+    var colorInput = document.getElementById('supporterProfileColor');
+
+    function updateAvatarPreview() {
+        if (!avatarPreview || !avatarSelect) return;
+        avatarPreview.onerror = function() {
+            this.onerror = null;
+            this.src = '/static/donors/donor_m_1.png';
+        };
+        avatarPreview.src = '/static/donors/donor_' +
+            encodeURIComponent(avatarSelect.value || 'm_1') + '.png';
+    }
+
+    function updateColorAvailability() {
+        if (!effectSelect || !colorInput) return;
+        var fixedColorEffects = ['gradient', 'prism', 'rainbow'];
+        var locked = fixedColorEffects.indexOf(effectSelect.value) !== -1;
+        colorInput.disabled = locked;
+        colorInput.style.opacity = locked ? '.45' : '1';
+        colorInput.style.cursor = locked ? 'not-allowed' : '';
+        colorInput.setAttribute('aria-disabled', locked ? 'true' : 'false');
+        colorInput.title = locked
+            ? 'Este efeito usa cores próprias e não permite escolher outra cor.'
+            : '';
+    }
+
+    if (avatarSelect) avatarSelect.addEventListener('change', updateAvatarPreview);
+    if (effectSelect) effectSelect.addEventListener('change', updateColorAvailability);
+
+    document.querySelectorAll('.edit-supporter-btn').forEach(function(button) {
+        button.addEventListener('click', function() {
+            document.getElementById('supporterProfileId').value = button.dataset.id || '';
+            document.getElementById('supporterProfileNickname').value = button.dataset.nickname || '';
+            avatarSelect.value = button.dataset.avatar || '';
+            document.getElementById('supporterProfileFont').value = button.dataset.font || 'default';
+            effectSelect.value = button.dataset.effect || 'solid';
+            colorInput.value = button.dataset.color || '#f3f4f6';
+            updateAvatarPreview();
+            updateColorAvailability();
+            new bootstrap.Modal(modalEl).show();
+        });
+    });
+
+    saveBtn.addEventListener('click', async function() {
+        var supporterId = document.getElementById('supporterProfileId').value;
+        var nickname = document.getElementById('supporterProfileNickname').value.trim();
+        if (!supporterId || nickname.length < 2) {
+            showSiteNotice('Informe um nome com pelo menos 2 caracteres.', { type: 'warning' });
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Salvando…';
+        try {
+            var response = await fetch('/admin/ranking/update-profile/' + encodeURIComponent(supporterId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nickname: nickname,
+                    avatar_id: document.getElementById('supporterProfileAvatar').value,
+                    font_id: document.getElementById('supporterProfileFont').value,
+                    text_effect: document.getElementById('supporterProfileEffect').value,
+                    name_color: document.getElementById('supporterProfileColor').value
+                })
+            });
+            var result = await response.json();
+            if (!response.ok || !result.ok) {
+                throw new Error(result.error || 'Não foi possível atualizar o perfil.');
+            }
+            bootstrap.Modal.getInstance(modalEl).hide();
+            location.reload();
+        } catch (error) {
+            showSiteNotice(error.message || 'Erro de rede. Tente novamente.', { type: 'error' });
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Salvar perfil';
+        }
+    });
+})();
+</script>
+{% endif %}
 
 <!-- Atualiza automaticamente o ranking e as personalizações recentes. -->
 <script>
