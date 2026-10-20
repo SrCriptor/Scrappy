@@ -545,6 +545,104 @@ def _staff_device_signature(canvas_fp: str) -> str:
     return _hmac.new(secret, payload, _hashlib.sha256).hexdigest()
 
 
+def _staff_hmac_signature(purpose: str, value: str) -> str:
+    """Key a normalized staff-device value without persisting its raw inputs."""
+    import hashlib as _hashlib
+    import hmac as _hmac
+
+    secret = app.secret_key
+    if isinstance(secret, str):
+        secret = secret.encode('utf-8')
+    elif not isinstance(secret, bytes):
+        secret = str(secret).encode('utf-8')
+    payload = ('staff-waf-v3:' + purpose + ':' + value).encode('utf-8')
+    return _hmac.new(secret, payload, _hashlib.sha256).hexdigest()
+
+
+def _staff_login_fingerprint(payload_text: str, user_agent: str) -> dict | None:
+    """Validate login-supplied hints and return keyed, non-reversible signatures."""
+    try:
+        payload = json.loads(str(payload_text or '')[:3000])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    canvas_fp = str(payload.get('canvas_fp') or '').strip()[:128]
+    platform = str(payload.get('platform') or '').strip()[:64]
+    if not re.fullmatch(r'cnv_[a-z0-9]{4,64}', canvas_fp, re.I) or not platform:
+        return None
+    try:
+        cores = int(payload.get('cores'))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if cores < 1 or cores > 256:
+        return None
+
+    ua_lower = str(user_agent or '').lower()
+    platform_lower = platform.lower()
+    os_probe = platform_lower + ' ' + ua_lower
+    if 'android' in os_probe:
+        os_family = 'android'
+    elif any(term in os_probe for term in ('iphone', 'ipad', 'ipod', 'ios')):
+        os_family = 'ios'
+    elif any(term in os_probe for term in ('windows', 'win32', 'win64')):
+        os_family = 'windows'
+    elif any(term in os_probe for term in ('macintosh', 'mac os', 'macintel', 'darwin')):
+        os_family = 'macos'
+    elif 'cros' in os_probe or 'chrome os' in os_probe:
+        os_family = 'chromeos'
+    elif 'linux' in os_probe:
+        os_family = 'linux'
+    else:
+        return None
+
+    memory_value = payload.get('memory')
+    try:
+        memory_number = float(memory_value)
+        if not (0 < memory_number <= 256):
+            memory_number = 0
+    except (TypeError, ValueError, OverflowError):
+        memory_number = 0
+    memory_gb = str(round(memory_number, 1)) if memory_number else '?'
+
+    gpu_raw = str(payload.get('gpu') or '').lower()[:300]
+    gpu_tokens = re.findall(r'[a-z]+|\d{1,4}', gpu_raw)
+    ignored_gpu_tokens = {
+        'angle', 'direct3d', 'd3d11', 'd3d12', 'opengl', 'vulkan', 'metal',
+        'mesa', 'driver', 'version', 'renderer', 'webgl', 'shader', 'vs', 'ps',
+        'swiftshader', 'llvmpipe', '0x',
+    }
+    gpu_model = ' '.join(
+        token for token in gpu_tokens
+        if token not in ignored_gpu_tokens and not token.startswith('0x')
+    )[:120]
+    if gpu_model in ('', '?', 'unknown'):
+        gpu_model = '?'
+
+    stable_hardware = json.dumps({
+        'cores': cores,
+        'memory_gb': memory_gb,
+        'gpu_model': gpu_model,
+    }, sort_keys=True, separators=(',', ':'))
+    volatile_details = json.dumps({
+        'canvas_fp': canvas_fp,
+        'platform': platform,
+        'gpu': gpu_raw,
+        'screen': str(payload.get('screen') or '')[:40],
+        'timezone': str(payload.get('timezone') or '')[:80],
+        'languages': str(payload.get('languages') or '')[:120],
+        'ua': str(user_agent or '')[:200],
+    }, sort_keys=True, separators=(',', ':'))
+    return {
+        'os_signature': _staff_hmac_signature('os', os_family),
+        'hardware_signature': _staff_hmac_signature('hardware', stable_hardware),
+        'fingerprint_signature': _staff_hmac_signature('volatile', volatile_details),
+        # Kept only to upgrade a legacy canvas-only staff entry safely.
+        'legacy_device_id': _staff_device_signature(canvas_fp),
+    }
+
+
 # Paths that bypass the admin auth guard (login pages + public batch report)
 _NO_AUTH_PATHS = frozenset({
     '/admin/login',
@@ -574,21 +672,35 @@ def _waf_enforce():
 
     ip = _get_client_ip()
 
-    # ── Step 1: already banned? ───────────────────────────────────────────
+    # A valid staff login has already checked the per-account device binding.
+    # Reuse that short-lived, signed Flask-session result rather than querying
+    # the WAF tables on every ranking poll/background request.
     try:
-        ban = admin_store.is_ip_banned_waf(ip)
-        if ban:
-            # Check whitelist first — if this IP/device is a known dev/pentester, skip block.
-            # Derive the same keyed SHA-256 device signature used at login time so we can match
-            # the stored hash without ever persisting the raw canvas fingerprint.
-            canvas_fp = request.headers.get('X-Canvas-FP', '').strip()
-            device_sig = _staff_device_signature(canvas_fp)
-            if admin_store.is_ip_whitelisted(ip, device_sig):
-                pass  # Whitelisted — skip block
-            else:
-                return _render_waf_block(ip, ban['reason'], ban['ts'], ban['url_path'])
-    except Exception:
-        pass  # DB not ready yet — fail open, do not block legitimate traffic
+        verified_at = int(session.get('waf_verified_at') or 0)
+        waf_verified = (
+            session.get('waf_verified') is True
+            and 0 <= time.time() - verified_at <= admin_store.SESSION_TTL_H * 60 * 60
+        )
+    except (TypeError, ValueError, OverflowError):
+        waf_verified = False
+
+    # ── Step 1: already banned? ───────────────────────────────────────────
+    if not waf_verified:
+        try:
+            ban = admin_store.is_ip_banned_waf(ip)
+            if ban:
+                # Let the login route perform its stronger account-bound
+                # device check even when an IP has a prior WAF ban. No other
+                # request is allowed through by this exception.
+                if path != '/admin/login':
+                    # Manual developer/pentester entries still bypass by IP
+                    # or their legacy keyed canvas signature.
+                    canvas_fp = request.headers.get('X-Canvas-FP', '').strip()
+                    device_sig = _staff_device_signature(canvas_fp)
+                    if not admin_store.is_ip_whitelisted(ip, device_sig):
+                        return _render_waf_block(ip, ban['reason'], ban['ts'], ban['url_path'])
+        except Exception:
+            pass  # DB not ready yet — fail open, do not block legitimate traffic
 
     # ── Step 2: scan for ban-worthy patterns (two-strikes system) ────────
     qs = request.query_string.decode('utf-8', errors='ignore')
@@ -2489,12 +2601,48 @@ def _annotate_gateway_change_request(item: dict) -> dict:
 def _gateway_diff_detail(before: dict, after: dict, pending: bool) -> str:
     scope = _gateway_change_scope(before, after)
     status = 'Aguardando aprovação do Owner' if pending else 'Aplicada pelo Owner'
+    before_snapshot = _gateway_change_snapshot(before, after, 'before')
+    after_snapshot = _gateway_change_snapshot(before, after, 'after')
     before_safe = json.dumps(
-        _masked_gateway_config(_gateway_change_snapshot(before, after, 'before'), False),
+        _masked_gateway_config(before_snapshot, False),
         ensure_ascii=False, sort_keys=True
     )
+    after_safe_config = _masked_gateway_config(after_snapshot, False)
+    secret_fields = {
+        'pix_key', 'access_token', 'client_id', 'client_secret',
+        'stripe_test_secret_key', 'api_key',
+    }
+    for gateway_id, new_gateway in after_snapshot.get('gateways', {}).items():
+        old_gateway = before_snapshot.get('gateways', {}).get(gateway_id, {})
+        safe_gateway = after_safe_config.get('gateways', {}).get(gateway_id, {})
+        for key in secret_fields:
+            if old_gateway.get(key) != new_gateway.get(key) and new_gateway.get(key):
+                safe_gateway[key] = '** (alterado)'
+
+    old_custom = {
+        str(item.get('id')): item
+        for item in before_snapshot.get('custom_gateways', [])
+        if isinstance(item, dict) and item.get('id')
+    }
+    for new_gateway in after_snapshot.get('custom_gateways', []):
+        if not isinstance(new_gateway, dict) or not new_gateway.get('id'):
+            continue
+        old_gateway = old_custom.get(str(new_gateway['id']), {})
+        safe_gateway = next(
+            (
+                item for item in after_safe_config.get('custom_gateways', [])
+                if str(item.get('id')) == str(new_gateway['id'])
+            ),
+            None,
+        )
+        if safe_gateway is None:
+            continue
+        for key in secret_fields:
+            if old_gateway.get(key) != new_gateway.get(key) and new_gateway.get(key):
+                safe_gateway[key] = '** (alterado)'
+
     after_safe = json.dumps(
-        _masked_gateway_config(_gateway_change_snapshot(before, after, 'after'), False),
+        after_safe_config,
         ensure_ascii=False, sort_keys=True
     )
     return (
@@ -3253,6 +3401,11 @@ def admin_login():
     geo_info  = None
     ua_str    = None
 
+    if request.method == 'POST':
+        # A failed/new login must not inherit a previous browser's WAF pass.
+        session.pop('waf_verified', None)
+        session.pop('waf_verified_at', None)
+
     if request.method == 'POST' and not locked:
         username = request.form.get('username', '').strip()[:64]
         if username[:1].isupper():
@@ -3264,37 +3417,90 @@ def admin_login():
         else:
             user = admin_store.authenticate(username, password)
             if user:
-                admin_store.clear_failures(ip)
-                token = admin_store.create_session(user['id'], ip)
-                admin_store.set_status(user['id'], 'online')
-                admin_store.log_action(user['id'], user['display_name'], user['role'],
-                                       'Login', None, ip)
-                # ── Auto-register device fingerprint in WAF whitelist ──────────────
-                # Derive a keyed SHA-256 so the raw canvas FP is never
-                # stored in the DB.  The WAF derives the same hash on every request
-                # and looks it up via is_ip_whitelisted(ip, device_sig).
-                _canvas_fp = request.headers.get('X-Canvas-FP', '').strip()[:128]
-                _device_sig = _staff_device_signature(_canvas_fp)
-                if _device_sig:
-                    _role_label = user.get('role', 'staff').upper()
-                    admin_store.auto_register_staff_whitelist(
-                        nome_dev=f"[{_role_label}] {user['display_name']}",
-                        ip=ip,
-                        dispositivo_id=_device_sig,
-                    )
-                # Fire login webhook (geo in background to not block)
-                _ua = request.headers.get('User-Agent', '')[:200] or None
-                def _fire_login(name, role, _ip, ua):
-                    geo = _get_geo(_ip)
-                    dwh.fire('admin_login', dwh.build_login_embed(name, role, _ip, geo, ua))
-                threading.Thread(target=_fire_login,
-                                 args=(user['display_name'], user['role'], ip, _ua),
-                                 daemon=True).start()
-                resp = redirect('/admin/')
-                resp.set_cookie(ADMIN_COOKIE, token,
-                                httponly=True, samesite='Strict',
-                                max_age=60 * 60 * 8)
-                return resp
+                fingerprint = _staff_login_fingerprint(
+                    request.form.get('staff_device_fingerprint', ''),
+                    request.headers.get('User-Agent', ''),
+                )
+                if not fingerprint:
+                    error = 'Não foi possível validar este dispositivo. Ative o JavaScript e tente novamente.'
+                else:
+                    try:
+                        allow_development_legacy_rebind = (
+                            username == 'owner'
+                            and admin_store.is_replit_development_environment()
+                        )
+                        device_status = admin_store.validate_staff_device_binding(
+                            admin_id=user['id'],
+                            username=user['username'],
+                            display_name=user['display_name'],
+                            role=user['role'],
+                            ip=ip,
+                            os_signature=fingerprint['os_signature'],
+                            hardware_signature=fingerprint['hardware_signature'],
+                            fingerprint_signature=fingerprint['fingerprint_signature'],
+                            legacy_device_id=fingerprint['legacy_device_id'],
+                            allow_development_legacy_rebind=allow_development_legacy_rebind,
+                        )
+                    except Exception:
+                        app_logger.exception(
+                            'Falha ao validar o dispositivo WAF da conta %s', username)
+                        device_status = 'error'
+
+                    if device_status in ('trusted', 'enrolled', 'development_rebound'):
+                        admin_store.clear_failures(ip)
+                        session['waf_verified'] = True
+                        session['waf_verified_at'] = int(time.time())
+                        token = admin_store.create_session(user['id'], ip)
+                        admin_store.set_status(user['id'], 'online')
+                        admin_store.log_action(
+                            user['id'], user['display_name'], user['role'],
+                            ('Login — dispositivo legado reautorizado em dev'
+                             if device_status == 'development_rebound' else 'Login'),
+                            None, ip)
+                        # Fire login webhook (geo in background to not block).
+                        _ua = request.headers.get('User-Agent', '')[:200] or None
+
+                        def _fire_login(name, role, _ip, ua):
+                            geo = _get_geo(_ip)
+                            dwh.fire(
+                                'admin_login',
+                                dwh.build_login_embed(name, role, _ip, geo, ua))
+
+                        threading.Thread(
+                            target=_fire_login,
+                            args=(user['display_name'], user['role'], ip, _ua),
+                            daemon=True,
+                        ).start()
+                        resp = redirect('/admin/')
+                        resp.set_cookie(
+                            ADMIN_COOKIE, token,
+                            httponly=True, samesite='Strict',
+                            max_age=60 * 60 * 8)
+                        return resp
+
+                    if device_status == 'mismatch':
+                        _ua = request.headers.get('User-Agent', '')[:200]
+                        app_logger.warning(
+                            'WAF staff-device mismatch: username=%s ip=%s',
+                            username, ip)
+                        try:
+                            admin_store.record_suspicious_request(
+                                ip, 'WAF-STAFF-DEVICE-MISMATCH',
+                                '/admin/login', 'POST', ua=_ua,
+                                browser_name=_parse_browser(_ua),
+                                operating_system=_parse_os(_ua))
+                            admin_store.add_notification(
+                                'security',
+                                f'🚨 Tentativa de login da equipe em dispositivo não autorizado\n'
+                                f'👤 Conta: @{username}\n'
+                                f'📍 IP: {ip}\n'
+                                f'💻 Sistema: {_parse_os(_ua)}')
+                        except Exception:
+                            app_logger.exception(
+                                'Não foi possível registrar o alerta de dispositivo WAF')
+                        error = 'Não foi possível autenticar neste dispositivo. A equipe de segurança foi notificada.'
+                    else:
+                        error = 'Não foi possível validar o dispositivo agora. Tente novamente.'
             else:
                 fails = admin_store.record_failure(ip, attempted_username=username)
                 locked_now, lock_min = admin_store.is_locked(ip)
@@ -3469,6 +3675,8 @@ def admin_logout():
                  dwh.build_logout_embed(adm['display_name'], adm['role'], _lip))
     if token:
         admin_store.delete_session(token)
+    session.pop('waf_verified', None)
+    session.pop('waf_verified_at', None)
     resp = redirect('/admin/login')
     resp.delete_cookie(ADMIN_COOKIE)
     return resp
@@ -3542,6 +3750,29 @@ def admin_panel_view():
 
 @app.route('/admin/ranking')
 def admin_ranking_view():
+    from datetime import datetime as _datetime, timezone as _timezone
+    from zoneinfo import ZoneInfo as _ZoneInfo
+
+    br_timezone = _ZoneInfo('America/Sao_Paulo')
+
+    def _format_ranking_timestamp(value):
+        if value is None or value == '':
+            return '—'
+        try:
+            if isinstance(value, _datetime):
+                parsed = value
+            else:
+                raw = str(value).strip()
+                try:
+                    parsed = _datetime.fromtimestamp(float(raw), tz=_timezone.utc)
+                except ValueError:
+                    parsed = _datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=_timezone.utc)
+            return parsed.astimezone(br_timezone).strftime('%d/%m/%Y %H:%M')
+        except (OverflowError, OSError, TypeError, ValueError):
+            return '—'
+
     admin = g.admin
     rows  = admin_store.get_ranking()
     tiers = admin_store.get_vip_tiers()
@@ -3566,6 +3797,7 @@ def admin_ranking_view():
         except (TypeError, ValueError):
             r_dict['online'] = False
         r_dict['banner_url'] = banner_by_tier.get(int(r_dict.get('vip_level', 6)), banner_by_tier[6])
+        r_dict['ts_br'] = _format_ranking_timestamp(r_dict.get('ts'))
         updated_rows.append(r_dict)
 
     ranking_snapshot = json.dumps([
@@ -3598,6 +3830,8 @@ def admin_ranking_view():
         ranking_snapshot=ranking_snapshot,
         tiers=tiers,
         avatar_ids=sorted(donor_avatars.get_valid_avatar_ids()),
+        donor_fonts=DONOR_FONTS,
+        donor_effects=DONOR_EFFECTS,
         internal_access_mod=internal_access_mod,
         internal_access_helper=internal_access_helper,
         chat_admins=chat_admins,
@@ -4167,38 +4401,6 @@ def admin_update_permissions(target_id):
     return jsonify({'ok': True, 'permissions': permissions})
 
 
-@app.route('/admin/api/staff-device', methods=['POST'])
-def admin_register_staff_device():
-    """Register the current staff device in the WAF whitelist after login.
-
-    The endpoint receives hardware hints only to prove this is the browser
-    registration flow; only the keyed canvas signature is persisted.
-    """
-    admin = g.admin
-    data = request.get_json(silent=True) or {}
-    canvas_fp = str(data.get('canvas_fp', '')).strip()[:128]
-    if not re.fullmatch(r'cnv_[a-z0-9]{4,64}', canvas_fp, re.I):
-        return jsonify({'ok': False, 'error': 'Fingerprint de dispositivo inválido.'}), 400
-
-    device_sig = _staff_device_signature(canvas_fp)
-    if not device_sig:
-        return jsonify({'ok': False, 'error': 'Não foi possível identificar este dispositivo.'}), 400
-
-    role_label = str(admin.get('role', 'staff')).upper()
-    created = admin_store.auto_register_staff_whitelist(
-        nome_dev=f'[{role_label}] {admin.get("display_name", "Equipe")}',
-        ip=_get_client_ip(),
-        dispositivo_id=device_sig,
-    )
-    admin_store.log_action(
-        admin['id'], admin['display_name'], admin['role'],
-        'Dispositivo da equipe identificado',
-        'Fingerprint protegido e sincronizado com o WAF',
-        _get_client_ip(),
-    )
-    return jsonify({'ok': True, 'registered': bool(created)})
-
-
 @app.route('/admin/manage/create', methods=['POST'])
 def admin_manage_create():
     admin = g.admin
@@ -4482,6 +4684,8 @@ def admin_profile_password():
         token = request.cookies.get(ADMIN_COOKIE, '')
         if token:
             admin_store.delete_session(token)
+        session.pop('waf_verified', None)
+        session.pop('waf_verified_at', None)
         admin_store.log_action(admin['id'], admin['display_name'], admin['role'],
                                'Senha alterada', None, _get_client_ip())
         resp = redirect('/admin/login')
@@ -5970,4 +6174,18 @@ if __name__ == '__main__':
         threading.Thread(target=_pix_expiry_worker, daemon=True).start()
         app_logger.info("⏰ Thread de expiração de PIX ativada")
 
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    _debug_requested = os.environ.get('FLASK_DEBUG', '').strip().lower() in {
+        '1', 'true', 'yes', 'on'
+    }
+    _is_render = bool(
+        os.environ.get('RENDER')
+        or os.environ.get('RENDER_SERVICE_ID')
+        or os.environ.get('APP_ENV', '').strip().lower() in {'production', 'prod'}
+    )
+    _debug_enabled = _debug_requested and not _is_render
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=_debug_enabled,
+        use_reloader=_debug_enabled,
+    )

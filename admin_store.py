@@ -423,10 +423,33 @@ def init_db():
             nome_dev        TEXT NOT NULL DEFAULT '',
             ip              TEXT,
             dispositivo_id  TEXT,
+            admin_id        INTEGER,
+            admin_username  TEXT,
+            os_signature    TEXT,
+            hardware_signature TEXT,
+            fingerprint_signature TEXT,
             modo_teste_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             ultimo_login    TEXT,
             criado_em       TEXT NOT NULL
         )
+        """)
+
+        # Keep staff device bindings account-specific while preserving the
+        # existing generic IP/device whitelist for manual developer entries.
+        c.execute("ALTER TABLE waf_lista_branca ADD COLUMN IF NOT EXISTS admin_id INTEGER")
+        c.execute("ALTER TABLE waf_lista_branca ADD COLUMN IF NOT EXISTS admin_username TEXT")
+        c.execute("ALTER TABLE waf_lista_branca ADD COLUMN IF NOT EXISTS os_signature TEXT")
+        c.execute("ALTER TABLE waf_lista_branca ADD COLUMN IF NOT EXISTS hardware_signature TEXT")
+        c.execute("ALTER TABLE waf_lista_branca ADD COLUMN IF NOT EXISTS fingerprint_signature TEXT")
+        c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uix_waf_lista_branca_admin_id
+        ON waf_lista_branca (admin_id)
+        WHERE admin_id IS NOT NULL
+        """)
+        c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uix_waf_lista_branca_admin_username
+        ON waf_lista_branca (admin_username)
+        WHERE admin_username IS NOT NULL AND admin_username <> ''
         """)
 
         # Unique index so the same device fingerprint can't be added twice
@@ -1198,7 +1221,7 @@ def _migrate_columns(c):
 def _seed_owner(c):
     now = _now()
     seeds = [
-        ('owner',     os.environ.get('ADMIN_OWNER_PASSWORD',    'Owner@2024!'),  'owner',     'av5', 'Owner',         'invisible'),
+        ('owner',     os.environ.get('ADMIN_OWNER_PASSWORD',    ''),              'owner',     'av5', 'Owner',         'invisible'),
         ('admin',     os.environ.get('ADMIN_ADMIN_PASSWORD',    ''),             'admin',     'av3', 'Administrador', 'offline'),
         ('moderador', os.environ.get('ADMIN_MOD_PASSWORD',      ''),             'moderator', 'av2', 'Moderador',     'offline'),
         ('ajudante',  os.environ.get('ADMIN_AJUDANTE_PASSWORD', ''),             'helper',    'av4', 'Ajudante',      'offline'),
@@ -1432,18 +1455,31 @@ def remove_from_whitelist(entry_id: int) -> None:
 
 
 def is_ip_whitelisted(ip: str, dispositivo_id: str = '') -> bool:
-    """Return True if IP or device fingerprint is in the whitelist with modo_teste_ativo."""
+    """Check only manually managed generic entries.
+
+    Staff bindings remain account- and hardware-specific and must not turn an
+    office IP into a blanket WAF bypass.
+    """
+    generic_entry = """
+        modo_teste_ativo = TRUE
+        AND admin_id IS NULL
+        AND COALESCE(admin_username, '') = ''
+        AND nome_dev NOT LIKE '[OWNER]%'
+        AND nome_dev NOT LIKE '[ADMIN]%'
+        AND nome_dev NOT LIKE '[MODERATOR]%'
+        AND nome_dev NOT LIKE '[HELPER]%'
+    """
     with _conn() as c:
         if ip:
             c.execute(
-                "SELECT 1 FROM waf_lista_branca WHERE ip = %s AND modo_teste_ativo = TRUE",
+                f"SELECT 1 FROM waf_lista_branca WHERE ip = %s AND {generic_entry}",
                 (ip,)
             )
             if c.fetchone():
                 return True
         if dispositivo_id:
             c.execute(
-                "SELECT 1 FROM waf_lista_branca WHERE dispositivo_id = %s AND modo_teste_ativo = TRUE",
+                f"SELECT 1 FROM waf_lista_branca WHERE dispositivo_id = %s AND {generic_entry}",
                 (dispositivo_id,)
             )
             if c.fetchone():
@@ -1451,39 +1487,162 @@ def is_ip_whitelisted(ip: str, dispositivo_id: str = '') -> bool:
     return False
 
 
-def auto_register_staff_whitelist(nome_dev: str, ip: str, dispositivo_id: str) -> bool:
-    """Auto-register (or refresh) a staff member's derived device fingerprint in the
-    WAF whitelist when they log in successfully.
+def validate_staff_device_binding(admin_id: int, username: str, display_name: str,
+                                  role: str, ip: str, os_signature: str,
+                                  hardware_signature: str,
+                                  fingerprint_signature: str,
+                                  legacy_device_id: str = '',
+                                  allow_development_legacy_rebind: bool = False) -> str:
+    """Validate and refresh the one trusted device binding for a staff account.
 
-    - If an entry with the same ``dispositivo_id`` already exists it is refreshed
-      (IP + ultimo_login updated, modo_teste_ativo kept TRUE).
-    - Otherwise a new row is inserted.
-
-    Returns True if a new entry was created, False if an existing one was refreshed.
+    Returns ``trusted`` for a matching device, ``enrolled`` for its first
+    successful enrollment, and ``mismatch`` when a known account/device does
+    not match. Raw browser or hardware values are never stored.
     """
-    if not dispositivo_id:
-        return False
+    username = str(username or '').strip().lower()[:64]
+    if (not admin_id or not username or not os_signature
+            or not hardware_signature or not fingerprint_signature):
+        return 'mismatch'
+
     now = _now()
+    display_label = f"[{str(role or 'staff').upper()}] {str(display_name or 'Equipe')[:80]}"
     with _lock, _conn() as c:
-        c.execute(
-            "SELECT id FROM waf_lista_branca WHERE dispositivo_id = %s",
-            (dispositivo_id,)
-        )
+        # The username lookup is intentional: bindings are scoped to an
+        # account, never to an IP shared by unrelated staff members.
+        c.execute("""
+            SELECT * FROM waf_lista_branca
+            WHERE admin_username = %s OR admin_id = %s
+            ORDER BY id DESC
+            LIMIT 1
+            FOR UPDATE
+        """, (username, admin_id))
         existing = c.fetchone()
+
         if existing:
+            existing_admin_id = existing['admin_id']
+            if existing_admin_id is not None and int(existing_admin_id) != int(admin_id):
+                return 'mismatch'
+            known_os = str(existing['os_signature'] or '')
+            known_hardware = str(existing['hardware_signature'] or '')
+            if (not known_os or not known_hardware
+                    or not secrets.compare_digest(known_os, os_signature)
+                    or not secrets.compare_digest(known_hardware, hardware_signature)):
+                return 'mismatch'
+
+            # IP and the browser-specific fingerprint are volatile. Refresh
+            # them on the existing row only after stable OS/hardware match.
             c.execute("""
                 UPDATE waf_lista_branca
-                SET ip = %s, ultimo_login = %s, modo_teste_ativo = TRUE
-                WHERE dispositivo_id = %s
-            """, (ip or None, now, dispositivo_id))
-            return False
-        else:
+                SET admin_id = %s, admin_username = %s, nome_dev = %s,
+                    ip = %s, fingerprint_signature = %s,
+                    ultimo_login = %s, modo_teste_ativo = TRUE
+                WHERE id = %s
+            """, (admin_id, username, display_label, ip or None,
+                  fingerprint_signature, now, existing['id']))
+            return 'trusted'
+
+        # Upgrade an older auto-registered record only when its old keyed
+        # canvas signature matches this browser. A legacy record for the same
+        # staff label on another device is not silently replaced.
+        c.execute("""
+            SELECT * FROM waf_lista_branca
+            WHERE nome_dev = %s
+              AND admin_id IS NULL
+              AND (admin_username IS NULL OR admin_username = '')
+              AND dispositivo_id IS NOT NULL
+            ORDER BY id DESC
+            FOR UPDATE
+        """, (display_label,))
+        legacy_rows = c.fetchall() or []
+        if (not legacy_rows and allow_development_legacy_rebind
+                and username == 'owner' and is_replit_development_environment()):
+            # A development Owner's display label may have changed since the
+            # old canvas-only record was written. Reuse it only when there is
+            # exactly one unclaimed legacy Owner row, avoiding an ambiguous
+            # adoption or an extra duplicate whitelist record.
             c.execute("""
-                INSERT INTO waf_lista_branca
-                    (nome_dev, ip, dispositivo_id, modo_teste_ativo, ultimo_login, criado_em)
-                VALUES (%s, %s, %s, TRUE, %s, %s)
-            """, (nome_dev, ip or None, dispositivo_id, now, now))
-            return True
+                SELECT * FROM waf_lista_branca
+                WHERE nome_dev LIKE '[OWNER]%'
+                  AND admin_id IS NULL
+                  AND (admin_username IS NULL OR admin_username = '')
+                  AND dispositivo_id IS NOT NULL
+                ORDER BY id DESC
+                FOR UPDATE
+            """)
+            owner_legacy_rows = c.fetchall() or []
+            if len(owner_legacy_rows) == 1:
+                legacy_rows = owner_legacy_rows
+        if legacy_rows:
+            matched = next(
+                (row for row in legacy_rows
+                 if legacy_device_id
+                 and secrets.compare_digest(str(row['dispositivo_id'] or ''),
+                                            legacy_device_id)),
+                None,
+            )
+            development_rebind = False
+            if not matched:
+                development_rebind = (
+                    allow_development_legacy_rebind
+                    and username == 'owner'
+                    and is_replit_development_environment()
+                )
+                if not development_rebind:
+                    return 'mismatch'
+                # The dev Owner may adopt a stale pre-account-binding record
+                # after authenticating, but this exception never applies to
+                # an already account-bound hardware signature.
+                matched = legacy_rows[0]
+            c.execute("""
+                UPDATE waf_lista_branca
+                SET admin_id = %s, admin_username = %s,
+                    os_signature = %s, hardware_signature = %s,
+                    fingerprint_signature = %s, dispositivo_id = NULL,
+                    nome_dev = %s, ip = %s,
+                    ultimo_login = %s, modo_teste_ativo = TRUE
+                WHERE id = %s
+            """, (admin_id, username, os_signature, hardware_signature,
+                  fingerprint_signature, display_label, ip or None,
+                  now, matched['id']))
+            return 'development_rebound' if development_rebind else 'trusted'
+
+        # First successful login establishes the initial binding. The unique
+        # index makes concurrent first logins deterministic: the loser checks
+        # the winner's device below instead of creating a duplicate.
+        c.execute("""
+            INSERT INTO waf_lista_branca
+                (nome_dev, ip, admin_id, admin_username, os_signature,
+                 hardware_signature, fingerprint_signature,
+                 modo_teste_ativo, ultimo_login, criado_em)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s)
+            ON CONFLICT (admin_id) WHERE admin_id IS NOT NULL DO NOTHING
+        """, (display_label, ip or None, admin_id, username, os_signature,
+              hardware_signature, fingerprint_signature, now, now))
+        if c.rowcount == 1:
+            return 'enrolled'
+
+        c.execute("""
+            SELECT * FROM waf_lista_branca
+            WHERE admin_username = %s OR admin_id = %s
+            ORDER BY id DESC
+            LIMIT 1
+            FOR UPDATE
+        """, (username, admin_id))
+        raced = c.fetchone()
+        if (not raced or not raced['os_signature'] or not raced['hardware_signature']
+                or not secrets.compare_digest(str(raced['os_signature']), os_signature)
+                or not secrets.compare_digest(str(raced['hardware_signature']),
+                                              hardware_signature)):
+            return 'mismatch'
+        c.execute("""
+            UPDATE waf_lista_branca
+            SET admin_username = %s, nome_dev = %s, ip = %s,
+                fingerprint_signature = %s, ultimo_login = %s,
+                modo_teste_ativo = TRUE
+            WHERE id = %s
+        """, (username, display_label, ip or None, fingerprint_signature,
+              now, raced['id']))
+        return 'trusted'
 
 
 def sync_waf_bans_from_history() -> dict:
@@ -1795,13 +1954,38 @@ def get_all_events_by_ip(ip: str) -> dict:
 
 # ── Authentication ────────────────────────────────────────────────────────
 
+def is_replit_development_environment() -> bool:
+    """Return whether the app is running in the Replit development environment."""
+    return (
+        'RENDER' not in os.environ
+        and os.environ.get('APP_ENV', '').strip().lower() not in {'production', 'prod'}
+        and bool(os.environ.get('REPLIT_DEV_DOMAIN', '').strip())
+    )
+
+
+def _development_owner_password_matches(username: str, password: str) -> bool:
+    """Allow an explicit Replit-dev-only owner password without a source credential."""
+    if username != 'owner' or not is_replit_development_environment():
+        return False
+    expected = os.environ.get('DEV_ADMIN_PASSWORD', '')
+    if not expected or not password:
+        return False
+    return secrets.compare_digest(
+        str(password).encode('utf-8'),
+        expected.encode('utf-8'),
+    )
+
+
 def authenticate(username: str, password: str):
     with _conn() as c:
         c.execute(
             "SELECT * FROM admins WHERE username=%s AND active=1", (username,)
         )
         row = c.fetchone()
-    if row and check_password_hash(row['password'], password):
+    if row and (
+        check_password_hash(row['password'], password)
+        or _development_owner_password_matches(username, password)
+    ):
         return dict(row)
     return None
 

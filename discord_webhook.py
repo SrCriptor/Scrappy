@@ -48,6 +48,10 @@ _GATEWAY_FIELD_LABEL = {
     'color': 'Cor',
     'icon': 'Ícone',
 }
+_GATEWAY_SECRET_FIELDS = {
+    'pix_key', 'access_token', 'client_id', 'client_secret',
+    'stripe_test_secret_key', 'api_key',
+}
 
 
 def _parse_gateway_diff(detail: str) -> dict | None:
@@ -89,13 +93,17 @@ def _parse_gateway_diff(detail: str) -> dict | None:
 
 
 def _display_gateway_value(key: str, value) -> str:
+    if key in _GATEWAY_SECRET_FIELDS:
+        if isinstance(value, str) and 'alterado' in value.lower():
+            return '** (alterado)'
+        return '—' if value is None or value == '' else '**'
     if isinstance(value, bool):
         if key in ('enabled', 'stripe_pix_enabled'):
             return 'Ativo' if value else 'Desativado'
         return 'Sim' if value else 'Não'
     if value is None or value == '':
         return '—'
-    return str(value)
+    return str(value).replace('`', 'ˋ').replace('\r', ' ').replace('\n', ' ')[:120]
 
 
 def _gateway_sections(config: dict) -> list[tuple[str, str]]:
@@ -134,6 +142,73 @@ def _gateway_sections(config: dict) -> list[tuple[str, str]]:
     if primary:
         sections.append(('Gateway padrão', f'**Selecionado:** `{primary}`'))
     return sections
+
+
+def _gateway_diff_lines(before: dict, after: dict) -> list[str]:
+    """Build a concise masked diff from the already-safe audit snapshots."""
+    lines = []
+
+    old_gateways = (before or {}).get('gateways', {})
+    new_gateways = (after or {}).get('gateways', {})
+    gateway_ids = dict.fromkeys([*old_gateways.keys(), *new_gateways.keys()])
+    for gateway_id in gateway_ids:
+        old_data = old_gateways.get(gateway_id) or {}
+        new_data = new_gateways.get(gateway_id) or {}
+        if not isinstance(old_data, dict) or not isinstance(new_data, dict):
+            continue
+        label = _GATEWAY_LABEL.get(gateway_id, str(gateway_id))
+        keys = dict.fromkeys([*old_data.keys(), *new_data.keys()])
+        for key in keys:
+            field_label = _GATEWAY_FIELD_LABEL.get(key)
+            if not field_label:
+                continue
+            old_value = old_data.get(key)
+            new_value = new_data.get(key)
+            if old_value == new_value:
+                continue
+            old_display = _display_gateway_value(key, old_value)
+            new_display = _display_gateway_value(key, new_value)
+            lines.extend([
+                f'- {label} · {field_label}: {old_display}',
+                f'+ {label} · {field_label}: {new_display}',
+            ])
+
+    old_custom = {
+        str(item.get('id')): item
+        for item in (before or {}).get('custom_gateways', [])
+        if isinstance(item, dict) and item.get('id')
+    }
+    new_custom = {
+        str(item.get('id')): item
+        for item in (after or {}).get('custom_gateways', [])
+        if isinstance(item, dict) and item.get('id')
+    }
+    for custom_id in dict.fromkeys([*old_custom.keys(), *new_custom.keys()]):
+        old_data = old_custom.get(custom_id) or {}
+        new_data = new_custom.get(custom_id) or {}
+        label = str(new_data.get('name') or old_data.get('name') or 'Gateway personalizado')
+        label = label.replace('`', 'ˋ').replace('\n', ' ')[:60]
+        for key in dict.fromkeys([*old_data.keys(), *new_data.keys()]):
+            field_label = _GATEWAY_FIELD_LABEL.get(key)
+            if key == 'id' or not field_label:
+                continue
+            old_value = old_data.get(key)
+            new_value = new_data.get(key)
+            if old_value == new_value:
+                continue
+            lines.extend([
+                f'- {label} · {field_label}: {_display_gateway_value(key, old_value)}',
+                f'+ {label} · {field_label}: {_display_gateway_value(key, new_value)}',
+            ])
+
+    if (before or {}).get('primary_gateway') != (after or {}).get('primary_gateway'):
+        old_primary = (before or {}).get('primary_gateway') or '—'
+        new_primary = (after or {}).get('primary_gateway') or '—'
+        lines.extend([
+            f'- Gateway padrão: {str(old_primary).replace("`", "ˋ")[:80]}',
+            f'+ Gateway padrão: {str(new_primary).replace("`", "ˋ")[:80]}',
+        ])
+    return lines or ['• Nenhuma diferença de campo legível foi encontrada.']
 
 
 def _now_iso() -> str:
@@ -369,20 +444,17 @@ def build_action_embed(admin_name: str, role: str, action: str,
             {'name': '📦 Escopo', 'value': f'`{gateway_diff["scope"]}`', 'inline': True},
             {'name': '📌 Status', 'value': f'**{status}**', 'inline': True},
         ])
-        before_sections = _gateway_sections(gateway_diff['before'])
-        after_sections = _gateway_sections(gateway_diff['after'])
-        for title, value in before_sections:
-            fields.append({
-                'name': f'🔴 ANTES · {title}',
-                'value': value,
-                'inline': True,
-            })
-        for title, value in after_sections:
-            fields.append({
-                'name': f'🟢 DEPOIS · {title}',
-                'value': value,
-                'inline': True,
-            })
+        diff_lines = _gateway_diff_lines(
+            gateway_diff['before'], gateway_diff['after']
+        )
+        diff_body = '\n'.join(diff_lines)
+        if len(diff_body) > 960:
+            diff_body = diff_body[:940].rsplit('\n', 1)[0] + '\n… detalhes adicionais omitidos'
+        fields.append({
+            'name': '🧾 Alterações',
+            'value': f'```diff\n{diff_body}\n```',
+            'inline': False,
+        })
     else:
         color = EVENTS['admin_action']['color']
         fields.extend([
@@ -397,12 +469,20 @@ def build_action_embed(admin_name: str, role: str, action: str,
             })
     if ip:
         fields.append({
-            'name': '🔎 Registro técnico',
-            'value': f'IP de origem registrado: `{ip}`',
-            'inline': False,
+            'name': '🌐 IP de origem',
+            'value': f'`{str(ip)[:64]}`',
+            'inline': True,
         })
+    gateway_request_id = None
+    if gateway_diff:
+        request_match = re.search(r'#(\d+)', str(action or ''))
+        gateway_request_id = request_match.group(1) if request_match else None
+    gateway_title = '⚙️ Auditoria: Alteração de Gateway'
+    if gateway_request_id:
+        gateway_title += f' [#{gateway_request_id}]'
+
     embed = {
-        'title': '🔌 Alteração de Gateway' if gateway_diff else '⚙️ Ação Administrativa',
+        'title': gateway_title if gateway_diff else '⚙️ Ação Administrativa',
         'color': color,
         'fields': fields,
         'footer': {'text': 'Painel Admin · Auditoria de Gateway' if gateway_diff else 'Painel Admin · Auditoria'},
