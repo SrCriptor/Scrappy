@@ -990,6 +990,7 @@ def index():
         'index.html',
         user=user_data,  # Injeta o usuário com o nível VIP corrigido em tempo real
         ranking_rows=updated_ranking,  # Envia a lista corrigida para o frontend
+        donor_nickname_max_length=admin_store.DONOR_NICKNAME_MAX_LENGTH,
         payments_disabled=payments_disabled,
         vip_tiers=vip_tiers,
         vip0_links=_tm.get(0, 100),
@@ -2241,11 +2242,11 @@ def _masked_gateway_config(cfg: dict, owner: bool) -> dict:
 
 
 def _secret_form_value(form, name: str, current: str) -> str:
-    """Preserve a masked value submitted by a non-owner, while allowing edits."""
+    """Preserve an omitted, blank, or masked secret while allowing replacements."""
     if name not in form:
         return current or ''
     candidate = form.get(name, '').strip()
-    if '****' in candidate or candidate == 'sk_test_...':
+    if not candidate or '****' in candidate or candidate == 'sk_test_...':
         return current or ''
     return candidate
 
@@ -2297,6 +2298,7 @@ def _gateway_config_from_form(current: dict, form) -> dict:
     cg_enabled_flags = form.getlist('cg_enabled')
     old_custom = {str(x.get('id')): x for x in current.get('custom_gateways', [])}
     custom_gateways = []
+    custom_id_map = {}
     for i, raw_id in enumerate(cg_ids):
         raw_id = raw_id.strip()
         if not raw_id:
@@ -2307,10 +2309,11 @@ def _gateway_config_from_form(current: dict, form) -> dict:
             final_id = f'custom_{slug}_{uuid.uuid4().hex[:6]}'
         else:
             final_id = raw_id
+        custom_id_map[raw_id] = final_id
         old = old_custom.get(final_id, {})
         posted_key = cg_pix_keys[i] if i < len(cg_pix_keys) else ''
         pix_key = posted_key.strip()
-        if '****' in pix_key:
+        if not pix_key or '****' in pix_key:
             pix_key = old.get('pix_key', '')
         custom_gateways.append({
             'id': final_id,
@@ -2324,6 +2327,22 @@ def _gateway_config_from_form(current: dict, form) -> dict:
             'enabled': i < len(cg_enabled_flags) and cg_enabled_flags[i] == '1',
         })
     cfg['custom_gateways'] = custom_gateways
+    if 'previously_active_ids' in form:
+        raw_previous_ids = [
+            value.strip()
+            for value in form.get('previously_active_ids', '').split(',')
+            if value.strip()
+        ]
+        valid_ids = set(pgw._GATEWAY_CLASSES) | {
+            str(item['id']) for item in custom_gateways
+        }
+        mapped_previous_ids = [
+            custom_id_map.get(value, value)
+            for value in raw_previous_ids
+        ]
+        cfg['previously_active_ids'] = list(dict.fromkeys(
+            value for value in mapped_previous_ids if value in valid_ids
+        ))
     return cfg
 
 
@@ -3549,6 +3568,21 @@ def admin_ranking_view():
         r_dict['banner_url'] = banner_by_tier.get(int(r_dict.get('vip_level', 6)), banner_by_tier[6])
         updated_rows.append(r_dict)
 
+    ranking_snapshot = json.dumps([
+        [
+            str(row.get('id', '')),
+            str(row.get('nickname', '')),
+            str(row.get('avatar_id', '')),
+            f"{float(row.get('total_donated') or 0):.2f}",
+            int(row.get('vip_level', 6)),
+            str(row.get('discriminator') or ''),
+            str(row.get('font_id') or 'default'),
+            str(row.get('text_effect') or 'solid'),
+            str(row.get('name_color') or '#f3f4f6'),
+        ]
+        for row in updated_rows
+    ], ensure_ascii=False, separators=(',', ':'))
+
     internal_access_mod    = admin_store.get_internal_access_moderator()
     internal_access_helper = admin_store.get_internal_access_helper()
     all_active  = admin_store.list_admins()
@@ -3561,6 +3595,7 @@ def admin_ranking_view():
         admin=admin,
         role_meta=admin_store.ROLE_META,
         rows=updated_rows,
+        ranking_snapshot=ranking_snapshot,
         tiers=tiers,
         avatar_ids=sorted(donor_avatars.get_valid_avatar_ids()),
         internal_access_mod=internal_access_mod,
@@ -3600,7 +3635,7 @@ def admin_ranking_create_manual():
         return jsonify({'error': 'Sem permissão'}), 403
 
     data      = request.get_json(silent=True) or {}
-    nickname  = str(data.get('nickname', '')).strip()[:24]
+    nickname  = str(data.get('nickname', '')).strip()[:admin_store.DONOR_NICKNAME_MAX_LENGTH]
     avatar_id = str(data.get('avatar_id', 'm_1')).strip().lower()
     try:
         amount = float(data.get('amount', 0))
@@ -3608,7 +3643,7 @@ def admin_ranking_create_manual():
         return jsonify({'error': 'Valor inválido'}), 400
 
     if not nickname or len(nickname) < 2:
-        return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
+        return jsonify({'error': f'Apelido inválido (use entre 2 e {admin_store.DONOR_NICKNAME_MAX_LENGTH} caracteres)'}), 400
     if amount < 0.01:
         return jsonify({'error': 'Valor deve ser maior que R$ 0,00'}), 400
     if avatar_id not in donor_avatars.get_valid_avatar_ids():
@@ -3723,9 +3758,9 @@ def donation_register():
             # Fetch full row for nickname+avatar
             donor_row = admin_store.check_returning_donor(token, client_ip, client_ua)
             if donor_row:
-                nickname = str(data.get('nickname', donor_row['nickname']) or donor_row['nickname']).strip()[:24]
+                nickname = str(data.get('nickname', donor_row['nickname']) or donor_row['nickname']).strip()[:admin_store.DONOR_NICKNAME_MAX_LENGTH]
                 if len(nickname) < 2:
-                    return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
+                    return jsonify({'error': f'Apelido inválido (use entre 2 e {admin_store.DONOR_NICKNAME_MAX_LENGTH} caracteres)'}), 400
                 avatar_id = donor_row['avatar_id']
                 # Gender-locked avatar refresh: a returning supporter may pick a NEW
                 # avatar from the success-modal grid, but only within their own
@@ -3791,11 +3826,11 @@ def donation_register():
                 return resp
         # Token not verified — fall through to standard new-donor registration
 
-    nickname  = str(data.get('nickname', '')).strip()[:24]
+    nickname  = str(data.get('nickname', '')).strip()[:admin_store.DONOR_NICKNAME_MAX_LENGTH]
     avatar_id = str(data.get('avatar_id', 'm_1')).strip().lower()
 
     if not nickname or len(nickname) < 2:
-        return jsonify({'error': 'Apelido inválido (use entre 2 e 24 caracteres)'}), 400
+        return jsonify({'error': f'Apelido inválido (use entre 2 e {admin_store.DONOR_NICKNAME_MAX_LENGTH} caracteres)'}), 400
     # Gender-prefixed avatar ids: donor_m_*.png -> masculino, donor_f_*.png -> feminino.
     # The valid set is scanned live from static/donors/, so newly-added avatar
     # files are accepted immediately without any code change.
@@ -3883,7 +3918,11 @@ def api_donor_avatars():
 @app.route('/api/public/ranking')
 def api_public_ranking():
     """Public JSON endpoint for the ranking overlay modal."""
-    rows = admin_store.get_ranking(limit=20)
+    try:
+        limit = min(50, max(1, int(request.args.get('limit', 20))))
+    except (TypeError, ValueError):
+        limit = 20
+    rows = admin_store.get_ranking(limit=limit)
     now = time.time()
     for row in rows:
         last_seen = row.get('last_seen_at')

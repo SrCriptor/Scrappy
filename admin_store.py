@@ -514,6 +514,9 @@ def init_db():
 
 # ── Donation Ranking ───────────────────────────────────────────────────────────
 
+DONOR_NICKNAME_MAX_LENGTH = 18
+
+
 def _compute_vip_level_with_conn(c, total_donated: float) -> int:
     """Compute the highest eligible VIP tier from the editable database config."""
     try:
@@ -522,9 +525,15 @@ def _compute_vip_level_with_conn(c, total_donated: float) -> int:
             "ORDER BY tier_id ASC"
         )
         tiers = c.fetchall()
-        for tier in tiers:
-            if total_donated >= float(tier['min_value']):
-                return int(tier['tier_id'])
+        eligible = [
+            int(tier['tier_id'])
+            for tier in tiers
+            if total_donated >= float(tier['min_value'])
+        ]
+        if eligible:
+            # Tier 0 is the highest benefit. Choose the best eligible tier,
+            # not the first threshold that happens to match in DB order.
+            return min(eligible)
         if tiers:
             return max(int(tier['tier_id']) for tier in tiers)
     except Exception:
@@ -697,7 +706,7 @@ def _generate_discriminator(c, nickname: str) -> str:
     """Roll a unique 4-digit #Tag for a given nickname (checked inside current transaction).
     Loops up to 200 times before giving up (9 000 possible slots makes collision near-impossible)."""
     import random as _rand
-    nick = nickname[:24]
+    nick = nickname[:DONOR_NICKNAME_MAX_LENGTH]
     for _ in range(200):
         disc = str(_rand.randint(1000, 9999))
         c.execute(
@@ -786,14 +795,14 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
                 "UPDATE donation_ranking SET total_donated=%s, vip_level=%s, avatar_id=%s, nickname=%s, "
                 "currency=%s, last_ip=%s, last_ua=%s, discriminator=%s, font_id=%s, text_effect=%s, name_color=%s, last_seen_at=%s "
                 "WHERE secret_token=%s",
-                (new_total, vip, avatar_id, nickname[:24], currency, ip, ua, disc, font_id,
+                (new_total, vip, avatar_id, nickname[:DONOR_NICKNAME_MAX_LENGTH], currency, ip, ua, disc, font_id,
                  text_effect, name_color, seen_at, token)
             )
             # is_new=False signals a repeat donation from an already-known supporter
             # (secret_token already had a ranking row) — used by app.py to fire the
             # "apoiador de elite" repeat-donation notification/webhook.
             return {'id': existing['id'], 'total_donated': new_total, 'vip_level': vip,
-                    'nickname': nickname[:24], 'discriminator': disc, 'font_id': font_id,
+                    'nickname': nickname[:DONOR_NICKNAME_MAX_LENGTH], 'discriminator': disc, 'font_id': font_id,
                     'text_effect': text_effect, 'name_color': name_color,
                     'is_new': False, 'previous_vip_level': int(existing['vip_level'])}
         else:
@@ -808,12 +817,12 @@ def register_donation(nickname: str, avatar_id: str, amount: float, token: str,
                    nickname, avatar_id, total_donated, currency, vip_level, secret_token, ts,
                    last_ip, last_ua, discriminator, font_id, text_effect, name_color, last_seen_at)
                    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (nickname[:24], avatar_id, credited, currency, vip, token, ts, ip, ua, disc,
+                (nickname[:DONOR_NICKNAME_MAX_LENGTH], avatar_id, credited, currency, vip, token, ts, ip, ua, disc,
                   font_id, text_effect, name_color, seen_at)
             )
             row = c.fetchone()
             return {'id': row['id'], 'total_donated': credited, 'vip_level': vip,
-                    'nickname': nickname[:24], 'discriminator': disc, 'font_id': font_id,
+                    'nickname': nickname[:DONOR_NICKNAME_MAX_LENGTH], 'discriminator': disc, 'font_id': font_id,
                     'text_effect': text_effect, 'name_color': name_color,
                     'is_new': True, 'previous_vip_level': None}
 
@@ -854,9 +863,13 @@ def get_ranking(limit: int = 50) -> list:
 
 def _compute_vip_level_from_tiers(total_donated: float, tiers) -> int:
     """Compute the highest eligible tier from a previously fetched config list."""
-    for tier in tiers or []:
-        if total_donated >= float(tier['min_value']):
-            return int(tier['tier_id'])
+    eligible = [
+        int(tier['tier_id'])
+        for tier in (tiers or [])
+        if total_donated >= float(tier['min_value'])
+    ]
+    if eligible:
+        return min(eligible)
     if tiers:
         return max(int(tier['tier_id']) for tier in tiers)
     # Only used if the config table is unexpectedly empty.
@@ -911,9 +924,9 @@ def update_donor_profile(donor_id: int, nickname: str, avatar_id: str,
                      'press-start', 'bangers', 'roboto-mono', 'montserrat',
                      'gothic', 'script', 'pixel'}
     allowed_effects = {'solid', 'gradient', 'neon', 'pop', 'gummy', 'prism'}
-    nickname = str(nickname or '').strip()[:24]
+    nickname = str(nickname or '').strip()[:DONOR_NICKNAME_MAX_LENGTH]
     if len(nickname) < 2:
-        raise ValueError('Apelido deve ter entre 2 e 24 caracteres.')
+        raise ValueError(f'Apelido deve ter entre 2 e {DONOR_NICKNAME_MAX_LENGTH} caracteres.')
     if font_id not in allowed_fonts:
         raise ValueError('Fonte inválida.')
     if text_effect not in allowed_effects:
