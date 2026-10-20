@@ -143,8 +143,11 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="/payment/admin" id="mainForm">
+    <form method="POST" action="/payment/admin" id="mainForm"
+          data-previous-active-ids="{{ cfg.get('previously_active_ids', [])|join(',') }}">
     <fieldset {% if gateway_readonly %}disabled{% endif %} style="border:0;padding:0;margin:0;min-width:0;">
+        <input type="hidden" name="previously_active_ids" id="previouslyActiveIds"
+               value="{{ cfg.get('previously_active_ids', [])|join(',') }}" />
 
         <!-- Gateway principal -->
         <div class="mb-3">
@@ -207,8 +210,9 @@
                     <div class="field-group">
                         <label>Chave PIX</label>
                 <div class="secret-field">
-                <input type="password" name="manual_pix_key" class="form-control form-control-sm"
-                               value="{{ gw_cfg.get('pix_key','') }}" placeholder="email, CPF, telefone, CNPJ ou chave aleatória" />
+                <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="manual_pix_key" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('pix_key','') if admin.role == 'owner' else '' }}"
+                               placeholder="{% if admin.role != 'owner' and gw_cfg.get('pix_key') %}******** (chave configurada; digite para substituir){% else %}email, CPF, telefone, CNPJ ou chave aleatória{% endif %}" />
                 {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar chave PIX"><i class="fas fa-eye"></i></button>{% endif %}
                 </div>
                     </div>
@@ -243,8 +247,9 @@
             <div class="field-group">
                 <label>Access Token</label>
                 <div class="secret-field">
-                <input type="password" name="mercadopago_access_token" class="form-control form-control-sm"
-                       value="{{ gw_cfg.get('access_token','') }}" placeholder="APP_USR-..." autocomplete="new-password" />
+                <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="mercadopago_access_token" class="form-control form-control-sm"
+                       value="{{ gw_cfg.get('access_token','') if admin.role == 'owner' else '' }}"
+                       placeholder="{% if admin.role != 'owner' and gw_cfg.get('access_token') %}******** (token configurado; digite para substituir){% else %}APP_USR-...{% endif %}" autocomplete="new-password" />
                 {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar token"><i class="fas fa-eye"></i></button>{% endif %}
                 </div>
                 <div class="env-hint">Ou <code>MERCADOPAGO_ACCESS_TOKEN</code></div>
@@ -256,8 +261,9 @@
                     <div class="field-group">
                         <label>Client ID</label>
                         <div class="secret-field">
-                        <input type="password" name="99pay_client_id" class="form-control form-control-sm"
-                               value="{{ gw_cfg.get('client_id','') }}" autocomplete="off" />
+                        <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="99pay_client_id" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_id','') if admin.role == 'owner' else '' }}"
+                               placeholder="{% if admin.role != 'owner' and gw_cfg.get('client_id') %}******** (configurado; digite para substituir){% endif %}" autocomplete="off" />
                         {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar Client ID"><i class="fas fa-eye"></i></button>{% endif %}
                         </div>
                         <div class="env-hint">Ou <code>NOVENOVE_CLIENT_ID</code></div>
@@ -267,8 +273,9 @@
                     <div class="field-group">
                         <label>Client Secret</label>
                         <div class="secret-field">
-                        <input type="password" name="99pay_client_secret" class="form-control form-control-sm"
-                               value="{{ gw_cfg.get('client_secret','') }}" autocomplete="new-password" />
+                        <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="99pay_client_secret" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_secret','') if admin.role == 'owner' else '' }}"
+                               placeholder="{% if admin.role != 'owner' and gw_cfg.get('client_secret') %}******** (configurado; digite para substituir){% endif %}" autocomplete="new-password" />
                         {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar Client Secret"><i class="fas fa-eye"></i></button>{% endif %}
                         </div>
                         <div class="env-hint">Ou <code>NOVENOVE_CLIENT_SECRET</code></div>
@@ -291,9 +298,9 @@
             <div id="stripeTestKeyWrap" class="field-group stripe-test-key {% if not gw_cfg.get('stripe_test_enabled', False) %}is-hidden{% endif %}">
                 <label>STRIPE TEST SECRET KEY</label>
                 <div class="secret-field">
-                    <input type="password" name="stripe_test_secret_key" class="form-control form-control-sm"
-                           value="{{ gw_cfg.get('stripe_test_secret_key', gw_cfg.get('api_key','')) }}"
-                           placeholder="sk_test_..." autocomplete="new-password" />
+                    <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="stripe_test_secret_key" class="form-control form-control-sm"
+                           value="{{ gw_cfg.get('stripe_test_secret_key', gw_cfg.get('api_key','')) if admin.role == 'owner' else '' }}"
+                           placeholder="{% if admin.role != 'owner' and (gw_cfg.get('stripe_test_secret_key') or gw_cfg.get('api_key')) %}******** (chave configurada; digite para substituir){% else %}sk_test_...{% endif %}" autocomplete="new-password" />
                     {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar Stripe Test Secret Key"><i class="fas fa-eye"></i></button>{% endif %}
                 </div>
             </div>
@@ -315,8 +322,9 @@
                     <div class="field-group">
                         <label>Client ID</label>
                         <div class="secret-field">
-                        <input type="password" name="paypal_client_id" class="form-control form-control-sm"
-                               value="{{ gw_cfg.get('client_id','') }}" autocomplete="off" />
+                        <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="paypal_client_id" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_id','') if admin.role == 'owner' else '' }}"
+                               placeholder="{% if admin.role != 'owner' and gw_cfg.get('client_id') %}******** (configurado; digite para substituir){% endif %}" autocomplete="off" />
                         {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar Client ID"><i class="fas fa-eye"></i></button>{% endif %}
                         </div>
                         <div class="env-hint">Ou <code>PAYPAL_CLIENT_ID</code></div>
@@ -326,8 +334,9 @@
                     <div class="field-group">
                         <label>Client Secret</label>
                         <div class="secret-field">
-                        <input type="password" name="paypal_client_secret" class="form-control form-control-sm"
-                               value="{{ gw_cfg.get('client_secret','') }}" autocomplete="new-password" />
+                        <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="paypal_client_secret" class="form-control form-control-sm"
+                               value="{{ gw_cfg.get('client_secret','') if admin.role == 'owner' else '' }}"
+                               placeholder="{% if admin.role != 'owner' and gw_cfg.get('client_secret') %}******** (configurado; digite para substituir){% endif %}" autocomplete="new-password" />
                         {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar Client Secret"><i class="fas fa-eye"></i></button>{% endif %}
                         </div>
                         <div class="env-hint">Ou <code>PAYPAL_CLIENT_SECRET</code></div>
@@ -396,8 +405,9 @@
                         <div class="field-group">
                             <label>Chave PIX</label>
                             <div class="secret-field">
-                            <input type="password" name="cg_pix_key" class="form-control form-control-sm"
-                                   value="{{ cg.get('pix_key','') }}" placeholder="email, CPF, telefone..." />
+                            <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="cg_pix_key" class="form-control form-control-sm"
+                                   value="{{ cg.get('pix_key','') if admin.role == 'owner' else '' }}"
+                                   placeholder="{% if admin.role != 'owner' and cg.get('pix_key') %}******** (chave configurada; digite para substituir){% else %}email, CPF, telefone...{% endif %}" />
                             {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar chave PIX"><i class="fas fa-eye"></i></button>{% endif %}
                             </div>
                         </div>
@@ -649,7 +659,7 @@
                 <div class="field-group">
                     <label>Chave PIX</label>
                      <div class="secret-field">
-                     <input type="password" name="cg_pix_key" class="form-control form-control-sm" placeholder="email, CPF, telefone..." />
+                     <input type="{% if admin.role == 'owner' %}password{% else %}text{% endif %}" name="cg_pix_key" class="form-control form-control-sm" placeholder="email, CPF, telefone..." />
                      {% if admin.role == 'owner' %}<button type="button" class="secret-eye" onclick="toggleSecret(this)" aria-label="Mostrar chave PIX"><i class="fas fa-eye"></i></button>{% endif %}
                      </div>
                 </div>
@@ -757,6 +767,7 @@
         if (previewI) {
             previewI.className = `fas ${iconCls} cg-preview-i`;
         }
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
     /* ── Selecionar cor ── */
@@ -774,79 +785,27 @@
         }
         // Atualiza icon-opts
         card.querySelectorAll('.icon-opt').forEach(o => o.style.setProperty('--gw-color', color));
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
-    /* ── Toggle enabled (real-time AJAX) ── */
-    async function toggleGatewayRealtime(checkbox, gid) {
+    /* Gateway edits remain local until the administrator explicitly saves. */
+    function toggleGatewayRealtime(checkbox, gid) {
         const enabled = checkbox.checked;
-        checkbox.closest('.gw-card').classList.toggle('active-gw', enabled);
-        try {
-            const r = await fetch('/payment/admin/toggle-gateway', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({gid, enabled})
-            });
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) {
-                // Revert on failure
-                checkbox.checked = !enabled;
-                checkbox.closest('.gw-card').classList.toggle('active-gw', !enabled);
-                showSiteNotice('Erro ao salvar estado do gateway.', { type: 'error' });
-            } else {
-                if (d.queued) showGatewayToast();
-                updateDisableBtn(enabled);
-            }
-        } catch {
-            checkbox.checked = !enabled;
-            checkbox.closest('.gw-card').classList.toggle('active-gw', !enabled);
-            showSiteNotice('Erro de conexão.', { type: 'error' });
+        checkbox.closest('.gw-card')?.classList.toggle('active-gw', enabled);
+        if (checkbox.classList.contains('cg-toggle')) {
+            const flag = checkbox.closest('.gw-card')?.querySelector('.cg-enabled-val');
+            if (flag) flag.value = enabled ? '1' : '0';
         }
+        updateDisableBtn();
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
-    /* ── Item 8: toggle "Habilitar Pix via Stripe" salva imediatamente (AJAX),
-       igual aos demais toggles — antes só era persistido no submit completo
-       do formulário, então o estado se perdia se a página fosse atualizada
-       sem clicar em "Salvar Configurações". ── */
-    async function toggleStripePixRealtime(checkbox) {
-        const enabled = checkbox.checked;
-        try {
-            const r = await fetch('/payment/admin/toggle-stripe-pix', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled })
-            });
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) {
-                checkbox.checked = !enabled;
-                showSiteNotice('Erro ao salvar preferência de Pix via Stripe.', { type: 'error' });
-            } else if (d.queued) {
-                showGatewayToast();
-            }
-        } catch {
-            checkbox.checked = !enabled;
-            showSiteNotice('Erro de conexão.', { type: 'error' });
-        }
+    function toggleStripePixRealtime() {
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
-    async function togglePaypalSandboxRealtime(checkbox) {
-        const sandbox = checkbox.checked;
-        try {
-            const r = await fetch('/payment/admin/paypal-sandbox-toggle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sandbox })
-            });
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) {
-                checkbox.checked = !sandbox;
-                showSiteNotice('Erro ao salvar modo sandbox do PayPal.', { type: 'error' });
-            } else if (d.queued) {
-                showGatewayToast();
-            }
-        } catch {
-            checkbox.checked = !sandbox;
-            showSiteNotice('Erro de conexão.', { type: 'error' });
-        }
+    function togglePaypalSandboxRealtime() {
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
     function toggleCustomGw(checkbox) {
@@ -855,44 +814,18 @@
         const cgId = card.dataset.cgId;
         card.querySelector('.cg-enabled-val').value = flag;
         card.classList.toggle('active-gw', checkbox.checked);
-        // Real-time save only if it's a saved (non-new) gateway
-        if (cgId && !cgId.startsWith('new_')) {
-            toggleGatewayRealtime(checkbox, cgId);
-        }
+        toggleGatewayRealtime(checkbox, cgId);
     }
 
-    /* ── Gateway Padrão: salva imediatamente ao mudar o dropdown ── */
-    (function () {
-        const sel = document.getElementById('primaryGatewaySelect');
-        if (!sel) return;
-        let _saveTimer = null;
-        sel.addEventListener('change', function () {
-            clearTimeout(_saveTimer);
-            const gid = this.value;
-            const icon = document.getElementById('primaryGwSaveIcon');
-            if (icon) { icon.className = 'fas fa-spinner fa-spin ms-2'; icon.style.color = '#8b949e'; }
-            _saveTimer = setTimeout(async () => {
-                try {
-                    const r = await fetch('/payment/admin/set-primary-gateway', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({gid})
-                    });
-                    const d = await r.json();
-                    if (icon) {
-                        if (d.ok) {
-                            icon.className = 'fas fa-check ms-2'; icon.style.color = '#4ade80';
-                            setTimeout(() => { icon.className = ''; }, 2000);
-                        } else {
-                            icon.className = 'fas fa-times ms-2'; icon.style.color = '#f87171';
-                        }
-                    }
-                } catch {
-                    if (icon) { icon.className = 'fas fa-times ms-2'; icon.style.color = '#f87171'; }
-                }
-            }, 300);
-        });
-    })();
+    const _previouslyActiveIds = new Set(
+        (document.getElementById('mainForm')?.dataset.previousActiveIds || '')
+            .split(',').map(id => id.trim()).filter(Boolean)
+    );
+    document.querySelectorAll('.gw-toggle:checked').forEach(cb => _previouslyActiveIds.add(cb.value));
+    document.querySelectorAll('.cg-toggle:checked').forEach(cb => {
+        const id = cb.closest('.gw-card')?.dataset.cgId;
+        if (id) _previouslyActiveIds.add(id);
+    });
 
     function updateDisableBtn(anyEnabled) {
         const btn = document.getElementById('disableAllBtn');
@@ -927,7 +860,11 @@
                 card.style.transition = 'opacity .25s, transform .25s';
                 card.style.opacity = '0';
                 card.style.transform = 'translateX(20px)';
-                setTimeout(() => card.remove(), 250);
+                setTimeout(() => {
+                    card.remove();
+                    updateDisableBtn();
+                    if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
+                }, 250);
             }
         });
     }
@@ -936,76 +873,71 @@
     function disableAllGateways() {
         showConfirmModal({
             title: 'Desativar Todos os Gateways',
-            message: 'Desativar TODOS os meios de pagamento ativos? Ninguém poderá gerar PIX até que você reative. As configurações serão salvas automaticamente.',
-            confirmText: 'Confirmar e Desativar',
+            message: 'Desativar todos os meios de pagamento? A mudança ficará pendente até você clicar em “Salvar Configurações”.',
+            confirmText: 'Desativar e continuar',
             onConfirm: executarDisableAllGateways
         });
     }
 
-    async function executarDisableAllGateways() {
+    function executarDisableAllGateways() {
         const btn = document.getElementById('disableAllBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Desativando…'; }
-        try {
-            const r = await fetch('/payment/admin/disable-all', {method:'POST'});
-            const d = await r.json();
-            if (d.ok) {
-                document.querySelectorAll('input[name="enabled_gateways"]').forEach(cb => {
-                    cb.checked = false;
-                    cb.closest('.gw-card')?.classList.remove('active-gw');
-                });
-                document.querySelectorAll('.cg-toggle').forEach(cb => {
-                    cb.checked = false;
-                    const card = cb.closest('.gw-card');
-                    if (card) {
-                        card.classList.remove('active-gw');
-                        const flag = card.querySelector('.cg-enabled-val');
-                        if (flag) flag.value = '0';
-                    }
-                });
-                if (btn) {
-                    btn.disabled = false;
-                    btn.className = 'btn btn-outline-success btn-sm py-0 px-2';
-                    btn.style.fontSize = '.72rem';
-                    btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores';
-                    btn.onclick = reactivateAllGateways;
-                    btn.title = 'Reativar gateways que estavam ativos antes';
-                }
-            } else {
-                showSiteNotice('Erro: ' + (d.error || 'falha ao desativar'), { type: 'error' });
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban me-1"></i>Desativar Ativos'; }
-            }
-        } catch {
-            showSiteNotice('Erro de conexão ao desativar gateways.', { type: 'error' });
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban me-1"></i>Desativar Ativos'; }
+        const currentActive = [];
+        document.querySelectorAll('.gw-toggle:checked').forEach(cb => currentActive.push(cb.value));
+        document.querySelectorAll('.cg-toggle:checked').forEach(cb => {
+            const id = cb.closest('.gw-card')?.dataset.cgId;
+            if (id) currentActive.push(id);
+        });
+        if (currentActive.length) {
+            _previouslyActiveIds.clear();
+            currentActive.forEach(id => _previouslyActiveIds.add(id));
         }
+        document.querySelectorAll('.gw-toggle, .cg-toggle').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.gw-card')?.classList.remove('active-gw');
+            const flag = cb.closest('.gw-card')?.querySelector('.cg-enabled-val');
+            if (flag) flag.value = '0';
+        });
+        const hidden = document.getElementById('previouslyActiveIds');
+        if (hidden) hidden.value = Array.from(_previouslyActiveIds).join(',');
+        if (btn) btn.disabled = false;
+        updateDisableBtn();
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
     /* ── Reativar gateways que estavam ativos antes ── */
     function reactivateAllGateways() {
         showConfirmModal({
             title: 'Reativar Gateways',
-            message: 'Reativar os gateways que estavam ativos antes?',
-            confirmText: 'Confirmar',
+            message: 'Reativar os gateways anteriores? A mudança ficará pendente até você clicar em “Salvar Configurações”.',
+            confirmText: 'Reativar e continuar',
             onConfirm: executarReactivateAllGateways
         });
     }
 
-    async function executarReactivateAllGateways() {
+    function executarReactivateAllGateways() {
         const btn = document.getElementById('disableAllBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reativando…'; }
-        try {
-            const r = await fetch('/payment/admin/reactivate-all', {method:'POST'});
-            const d = await r.json();
-            if (d.ok) {
-                setTimeout(() => location.reload(), 400);
-            } else {
-                showSiteNotice('Erro: ' + (d.error || 'falha ao reativar'), { type: 'error' });
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores'; }
-            }
-        } catch {
-            showSiteNotice('Erro de conexão.', { type: 'error' });
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate-left me-1"></i>Ativar Anteriores'; }
+        if (!_previouslyActiveIds.size) {
+            showSiteNotice('Não há gateways anteriores para reativar.', { type: 'info' });
+            return;
         }
+        document.querySelectorAll('.gw-toggle').forEach(cb => {
+            cb.checked = _previouslyActiveIds.has(cb.value);
+            cb.closest('.gw-card')?.classList.toggle('active-gw', cb.checked);
+        });
+        document.querySelectorAll('.cg-toggle').forEach(cb => {
+            const card = cb.closest('.gw-card');
+            const id = card?.dataset.cgId;
+            cb.checked = !!id && _previouslyActiveIds.has(id);
+            card?.classList.toggle('active-gw', cb.checked);
+            const flag = card?.querySelector('.cg-enabled-val');
+            if (flag) flag.value = cb.checked ? '1' : '0';
+        });
+        const hidden = document.getElementById('previouslyActiveIds');
+        if (hidden) hidden.value = '';
+        _previouslyActiveIds.clear();
+        if (btn) btn.disabled = false;
+        updateDisableBtn();
+        if (window.markGatewayConfigDirty) window.markGatewayConfigDirty();
     }
 
     /* ── Dirty tracking para botão Salvar ── */
@@ -1014,9 +946,7 @@
         const dirtyhint = document.getElementById('saveDirtyHint');
         if (!saveBtn) return;
 
-        // Seleciona apenas campos de texto/select/password (não toggles)
         const form = document.getElementById('mainForm');
-        const trackSelectors = 'input[type="text"], input[type="password"], select:not(.cg-toggle ~ label), textarea';
 
         function markDirty() {
             saveBtn.disabled = false;
@@ -1025,18 +955,17 @@
             saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Salvar Configurações';
             if (dirtyhint) dirtyhint.style.display = 'inline';
         }
+        window.markGatewayConfigDirty = markDirty;
 
-        // Observe changes to non-toggle inputs
         form.addEventListener('change', function(e) {
             const el = e.target;
-            // Skip toggles and hidden fields
-            if (el.type === 'checkbox' || el.type === 'hidden' || el.type === 'range') return;
+            if (el.type === 'hidden' || el.type === 'range') return;
             markDirty();
         });
 
         form.addEventListener('input', function(e) {
             const el = e.target;
-            if (el.type === 'checkbox' || el.type === 'hidden' || el.type === 'range') return;
+            if (el.type === 'hidden' || el.type === 'range') return;
             markDirty();
         });
 

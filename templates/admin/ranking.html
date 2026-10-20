@@ -14,7 +14,14 @@
         .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid #21262d; }
 
         /* ── Leaderboard table ── */
-        .rank-table { width: 100%; border-collapse: collapse; }
+        .rank-table { width: 100%; min-width: 1050px; table-layout: fixed; border-collapse: collapse; }
+        .rank-table th:nth-child(1), .rank-table td:nth-child(1) { width: 48px; }
+        .rank-table th:nth-child(2), .rank-table td:nth-child(2) { width: 132px; }
+        .rank-table th:nth-child(3), .rank-table td:nth-child(3) { width: 320px; }
+        .rank-table th:nth-child(4), .rank-table td:nth-child(4) { width: 105px; }
+        .rank-table th:nth-child(5), .rank-table td:nth-child(5) { width: 165px; }
+        .rank-table th:nth-child(6), .rank-table td:nth-child(6) { width: 90px; }
+        .rank-table th:nth-child(7), .rank-table td:nth-child(7) { width: 150px; }
         .rank-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; color: #8b949e; padding: .5rem .75rem; border-bottom: 1px solid #21262d; text-align: left; }
         .rank-table td { padding: .65rem .75rem; border-bottom: 1px solid #21262d; vertical-align: middle; }
         .rank-table tr:last-child td { border-bottom: none; }
@@ -97,17 +104,17 @@
         .vip-6 { background: #21262d; color: #7ba4c7; border: 1px dashed rgba(123,164,199,.4); }
 
         /* ── Nickname cell ── */
-        .nick-cell { font-size: .9rem; font-weight: 600; color: #e6edf3; min-width:0; }
-        .nick-content { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; width:100%; }
-        .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 auto; }
-        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+        .nick-cell { font-size: .9rem; font-weight: 600; min-width:0; }
+        .nick-content { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; min-width:0; width:100%; }
+        .nick-identity { display:flex; align-items:center; gap:8px; min-width:0; width:100%; }
+        .nick-text { min-width:0; flex:0 1 auto; overflow:visible; text-overflow:clip; white-space:nowrap; overflow-wrap:normal; word-break:normal; }
         .supporter-presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
-        .admin-style-meta { display:block; margin-top:4px; color:#8b949e; font-size:.65rem; }
+        .admin-style-meta { display:block; width:100%; margin-top:2px; color:#8b949e; font-size:.68rem; line-height:1.4; white-space:normal; overflow-wrap:break-word; }
         .admin-banner-preview {
-            display:inline-flex; align-items:center; min-height:24px; max-width:190px;
-            margin-top:4px; padding:3px 9px; border:1px solid #30363d; border-radius:5px;
+            display:flex; align-items:center; justify-content:center; width:100%; max-width:260px; min-height:36px;
+            margin-top:3px; padding:4px 8px; border:1px solid #30363d; border-radius:5px;
             background-size:cover; background-position:center; color:#e6edf3;
-            font-size:.62rem; font-weight:600; text-shadow:0 1px 3px #000;
+            font-size:.68rem; font-weight:600; text-align:center; text-shadow:0 1px 3px #000;
         }
 
         /* ── User tier name colors — clean, no webkit clip / mask / fade ── */
@@ -182,6 +189,28 @@
         /* ── Empty state ── */
         .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; }
+
+        @media (max-width: 1000px) {
+            /* Keep the donor identity readable at the page's 900px max width.
+               The VIP badge already appears with the avatar, so the duplicate
+               tier column can be omitted on compact screens. */
+            .rank-table { min-width: 0; }
+            .rank-table th:nth-child(1), .rank-table td:nth-child(1) { width: 5%; }
+            .rank-table th:nth-child(2), .rank-table td:nth-child(2) { width: 14%; }
+            .rank-table th:nth-child(3), .rank-table td:nth-child(3) { width: 50%; }
+            .rank-table th:nth-child(4), .rank-table td:nth-child(4) { width: 12%; }
+            .rank-table th:nth-child(5), .rank-table td:nth-child(5),
+            .rank-table th:nth-child(6), .rank-table td:nth-child(6) { display: none; }
+            .rank-table th:nth-child(7), .rank-table td:nth-child(7) { width: 19%; }
+            .rank-table th, .rank-table td { padding: .45rem .35rem; }
+            .profile-block img { width: 44px !important; height: 44px !important; }
+            .vip-badge { font-size: .58rem; padding: 2px 5px; }
+            .nick-cell { font-size: .82rem; }
+            .admin-style-meta, .admin-banner-preview { font-size: .62rem; }
+        }
+        @media (max-width: 768px) {
+            .rank-table { min-width: 760px; }
+        }
     </style>
 </head>
 <body>
@@ -281,12 +310,14 @@
                                       title="{{ r.nickname }}">{{ r.nickname }}<span class="text-muted ms-1" style="font-size:.8em;opacity:.6;">#{{ r.discriminator or '????' }}</span></span>
                                 <span class="supporter-presence-dot" title="{{ 'Disponível agora' if r.online else 'Offline' }}" aria-label="{{ 'Online' if r.online else 'Offline' }}" style="background:{{ '#22c55e' if r.online else '#fff' }};box-shadow:0 0 7px {{ '#22c55e' if r.online else '#fff' }};"></span>
                             </div>
+                            {% set _custom_name = r.font_id|default('default') != 'default' or r.text_effect|default('solid') != 'solid' or r.name_color|default('#f3f4f6') != '#f3f4f6' %}
                             <small class="admin-style-meta">
+                                Nome: {{ 'personalizado pelo apoiador' if _custom_name else 'estilo VIP padrão' }} ·
                                 Efeito: {{ r.text_effect|default('solid') }} · Fonte: {{ r.font_id|default('default') }}
                                 {% if r.text_effect not in ['gradient', 'prism'] %}· Cor: {{ r.name_color|default('#f3f4f6') }}{% endif %}
                             </small>
                             <div class="admin-banner-preview" style="background-image:linear-gradient(90deg,rgba(13,17,23,.45),rgba(13,17,23,.7)),url('{{ r.banner_url }}');">
-                                Banner automático do VIP atual
+                                Banner VIP atual · {% if vip == 0 %}Supreme{% elif vip == 1 %}Diamante{% elif vip == 2 %}Rubi{% elif vip == 3 %}Ouro{% elif vip == 4 %}Prata{% elif vip == 5 %}Bronze{% else %}Estelar{% endif %}
                             </div>
                         </div>
                     </td>
@@ -516,7 +547,7 @@
                     <label class="form-label" style="font-size:.82rem;color:#8b949e;">Apelido / Nick do Doador</label>
                     <input type="text" id="manualNick" class="form-control form-control-sm"
                            style="background:#0d1117;border-color:#30363d;color:#e6edf3;"
-                           placeholder="Ex: TurboDoador99" maxlength="40" />
+                           placeholder="Ex: TurboDoador99" maxlength="18" />
                 </div>
 
                 <!-- Valor -->
@@ -873,10 +904,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- ⚡ Real-time leaderboard auto-refresh: polls latest_ranking_event every 15s -->
+<!-- Atualiza automaticamente o ranking e as personalizações recentes. -->
 <script>
 (function() {
-    var _adminLastSeenTs = 0;
+    var _adminLastRankingSnapshot = {{ ranking_snapshot|tojson }};
     var _reloadScheduled  = false;
 
     function _anyModalOpen() {
@@ -896,28 +927,39 @@
         })();
     }
 
+    function rankingSnapshot(rows) {
+        return JSON.stringify((rows || []).map(function(row) {
+            var vip = parseInt(row.vip_level, 10);
+            return [
+                String(row.id || ''),
+                String(row.nickname || ''),
+                String(row.avatar_id || ''),
+                Number(row.total_donated || 0).toFixed(2),
+                Number.isInteger(vip) ? vip : 6,
+                String(row.discriminator || ''),
+                String(row.font_id || 'default'),
+                String(row.text_effect || 'solid'),
+                String(row.name_color || '#f3f4f6')
+            ];
+        }));
+    }
+
     function pollAdminRanking() {
-        fetch('/api/ranking/latest', { cache: 'no-store' })
+        fetch('/api/public/ranking?limit=50', { cache: 'no-store' })
             .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (!d.ok || !d.event) return;
-                var evTs = parseFloat(d.event.ts || 0);
-                if (_adminLastSeenTs === 0) {
-                    /* First poll — just record current timestamp as baseline */
-                    _adminLastSeenTs = evTs;
-                    return;
-                }
-                if (evTs > _adminLastSeenTs) {
-                    _adminLastSeenTs = evTs;
+            .then(function(rows) {
+                var currentSnapshot = rankingSnapshot(rows);
+                if (currentSnapshot !== _adminLastRankingSnapshot) {
+                    _adminLastRankingSnapshot = currentSnapshot;
                     _scheduleReload();
                 }
             }).catch(function() {});
     }
 
-    /* Start polling after 3s to let page settle, then every 15s */
+    /* Detect edits, new supporters, totals and tier changes within 3 seconds. */
     setTimeout(function() {
         pollAdminRanking();
-        setInterval(pollAdminRanking, 15000);
+        setInterval(pollAdminRanking, 3000);
     }, 3000);
 })();
 </script>

@@ -394,8 +394,9 @@
                 color: #8b949e;
                 margin: 0;
             }
-            #toggleErrorsBtn {
-                display: none;
+            #toggleErrorsBtn[hidden],
+            #batchCopyFailuresBtn[hidden] {
+                display: none !important;
             }
             @keyframes olhinho-pulse {
                 0%,
@@ -1653,65 +1654,23 @@
                                         style="font-size:0.85em;color:#00ff88;border:1px solid rgba(0,255,136,.35);vertical-align:middle;"
                                         >♾️ Bônus Developer Ativado</span
                                     >
-                                    {% elif session_vip_level == 1 %}
-                                    <span
-                                        class="badge bg-opacity-10 text-cyan ms-1"
-                                        style="
-                                            font-size: 0.85em;
-                                            border: 1px solid
-                                                rgba(0, 240, 255, 0.3);
-                                            vertical-align: middle;
-                                        "
-                                        >💎 Bônus VIP Aplicado</span
-                                    >
-                                    {% elif session_vip_level == 2 %}
-                                    <span
-                                        class="badge"
-                                        style="
-                                            color: #ffc107;
-                                            font-size: 0.85em;
-                                            border: 1px solid
-                                                rgba(255, 193, 7, 0.3);
-                                            vertical-align: middle;
-                                        "
-                                        >🥇 Bônus VIP Aplicado</span
-                                    >
-                                    {% elif session_vip_level == 3 %}
-                                    <span
-                                        class="badge"
-                                        style="
-                                            color: #c0c0c0;
-                                            font-size: 0.85em;
-                                            border: 1px solid
-                                                rgba(192, 192, 192, 0.3);
-                                            vertical-align: middle;
-                                        "
-                                        >🥈 Bônus VIP Aplicado</span
-                                    >
-                                    {% elif session_vip_level == 4 %}
-                                    <span
-                                        class="badge"
-                                        style="
-                                            color: #cd7f32;
-                                            font-size: 0.85em;
-                                            border: 1px solid
-                                                rgba(205, 127, 50, 0.3);
-                                            vertical-align: middle;
-                                        "
-                                        >🥉 Bônus VIP Aplicado</span
-                                    >
-                                    {% elif session_vip_level == 5 %}
-                                    <span
-                                        class="badge"
-                                        style="
-                                            color: #ffffff;
-                                            font-size: 0.85em;
-                                            border: 1px solid
-                                                rgba(255, 255, 255, 0.25);
-                                            vertical-align: middle;
-                                        "
-                                        >🌟 Bônus VIP Aplicado</span
-                                    >
+                                    {% elif session_vip_level is not none %}
+                                    {% set _vip_badges = {
+                                        0: ['🔥', '#ff4500', 'Supreme'],
+                                        1: ['💎', '#00f0ff', 'Diamante'],
+                                        2: ['🩸', '#dc143c', 'Rubi'],
+                                        3: ['👑', '#ffd700', 'Ouro'],
+                                        4: ['🥈', '#c0c0c0', 'Prata'],
+                                        5: ['🥉', '#cd7f32', 'Bronze'],
+                                        6: ['🌟', '#7ba4c7', 'Estelar']
+                                    } %}
+                                    {% set _vip_badge = _vip_badges.get(session_vip_level|int) %}
+                                    {% if _vip_badge %}
+                                    <span class="badge ms-1"
+                                          style="color:{{ _vip_badge[1] }};font-size:.85em;border:1px solid {{ _vip_badge[1] }}55;vertical-align:middle;">
+                                        {{ _vip_badge[0] }} Bônus VIP {{ _vip_badge[2] }} Aplicado
+                                    </span>
+                                    {% endif %}
                                     {% endif %}
                                 </small>
                             </div>
@@ -2240,7 +2199,7 @@
                                         id="batchCopyFailuresBtn"
                                         data-tip="Copiar URLs das falhas de conexão"
                                         data-tip-color="secondary"
-                                        style="display:none;"
+                                        hidden
                                         type="button"
                                     >
                                         <i class="fas fa-clipboard"></i>
@@ -2310,6 +2269,7 @@
                                 <button
                                     class="btn btn-sm btn-outline-secondary icon-btn"
                                     id="toggleErrorsBtn"
+                                    hidden
                                     type="button"
                                     data-tip="Mostrar/ocultar itens com erro"
                                     data-tip-color="secondary"
@@ -4226,6 +4186,7 @@
                 var hasVids = _batchVideoUrls.length > 0;
                 var selImgs = _batchSelected.images.size;
                 var selVids = _batchSelected.videos.size;
+                var selecting = _batchIsSelectionMode;
 
                 var btnImg = document.getElementById('batchDlImages');
                 var btnVid = document.getElementById('batchDlVideos');
@@ -4236,32 +4197,39 @@
                 if (card) card.style.display = (hasImgs || hasVids) ? '' : 'none';
 
                 if (btnImg) {
-                    btnImg.style.display = hasImgs ? '' : 'none';
+                    btnImg.style.display = (selecting ? selImgs > 0 : hasImgs) ? '' : 'none';
                     btnImg.setAttribute('data-tip',
-                        (_batchIsSelectionMode && selImgs > 0)
+                        (selecting && selImgs > 0)
                             ? 'Baixar ' + selImgs + ' imagem(ns) selecionada(s)'
                             : 'Baixar todas as imagens (' + _batchImageUrls.length + ')');
+                    btnImg.setAttribute('aria-label', btnImg.getAttribute('data-tip'));
                 }
                 if (btnVid) {
-                    btnVid.style.display = hasVids ? '' : 'none';
+                    btnVid.style.display = (selecting ? selVids > 0 : hasVids) ? '' : 'none';
                     btnVid.setAttribute('data-tip',
-                        (_batchIsSelectionMode && selVids > 0)
+                        (selecting && selVids > 0)
                             ? 'Baixar ' + selVids + ' vídeo(s) selecionado(s)'
                             : 'Baixar todos os vídeos (' + _batchVideoUrls.length + ')');
+                    btnVid.setAttribute('aria-label', btnVid.getAttribute('data-tip'));
                 }
                 if (btnAll) {
-                    btnAll.style.display = (hasImgs && hasVids) ? '' : 'none';
                     var total = selImgs + selVids;
+                    var showAll = selecting
+                        ? (selImgs > 0 && selVids > 0)
+                        : (hasImgs && hasVids);
+                    btnAll.style.display = showAll ? '' : 'none';
                     btnAll.setAttribute('data-tip',
-                        (_batchIsSelectionMode && total > 0)
+                        (selecting && total > 0)
                             ? 'Baixar ' + total + ' arquivo(s) selecionado(s)'
                             : 'Baixar tudo (' + (_batchImageUrls.length + _batchVideoUrls.length) + ')');
+                    btnAll.setAttribute('aria-label', btnAll.getAttribute('data-tip'));
                 }
                 if (desc) {
                     var tot = selImgs + selVids;
-                    desc.textContent = (_batchIsSelectionMode && tot > 0)
-                        ? tot + ' arquivo(s) selecionado(s)'
-                        : 'Baixe todas as mídias encontradas';
+                    desc.textContent = selecting && tot === 0
+                        ? 'Selecione as mídias que deseja baixar'
+                        : '';
+                    desc.style.display = selecting && tot === 0 ? '' : 'none';
                 }
             }
 
@@ -4414,7 +4382,7 @@
             async function downloadBatchThrottled(urlsArray) {
                 const copyFailuresBtn = document.getElementById('batchCopyFailuresBtn');
                 if (copyFailuresBtn) {
-                    copyFailuresBtn.style.display = 'none';
+                    copyFailuresBtn.hidden = true;
                     copyFailuresBtn._failedUrls = [];
                 }
                 if (!urlsArray || urlsArray.length === 0) {
@@ -4440,7 +4408,7 @@
                         if (pages) pages.forEach(function(pageUrl) { sourceUrls.add(pageUrl); });
                     });
                     copyFailuresBtn._failedUrls = Array.from(sourceUrls);
-                    copyFailuresBtn.style.display = sourceUrls.size > 0 ? '' : 'none';
+                    copyFailuresBtn.hidden = sourceUrls.size === 0;
                 }
                 updateBatchDownloadProgress({
                     phase: 'queue-progress',
@@ -4640,8 +4608,8 @@
             }
 
             /* ── Estado compartilhado do Olhinho (os dois grids) ──────────────── */
-            var _batchEyeShowingErrors = true;
-            var _batchEyeHasBeenUsed = false;
+            var _batchEyeShowingErrors = { image: true, video: true };
+            var _batchEyeHasBeenUsed = { image: false, video: false };
             var _isTogglingBatchEye = false;
 
             function _batchEyeMediaCols(type) {
@@ -4663,61 +4631,50 @@
                 return activePane && activePane.id === 'batchVideosPane' ? 'video' : 'image';
             }
 
-            /* O botão é global quando as duas abas têm erros; caso contrário,
-               acompanha exclusivamente a aba que contém os erros. */
+            /* O botão e seu estado pertencem somente à aba que está aberta. */
             function updateEyeButtonVisibility(tabOverride) {
                 var btn = document.getElementById('toggleErrorsBtn');
                 if (!btn) return;
 
-                var imageHasErrors = _batchEyeHasErrors('image');
-                var videoHasErrors = _batchEyeHasErrors('video');
                 var activeType = _batchEyeActiveType(tabOverride);
-                var activeHasErrors = activeType === 'image' ? imageHasErrors : videoHasErrors;
-                var shouldShow = (imageHasErrors && videoHasErrors) || activeHasErrors;
+                var activeHasErrors = _batchEyeHasErrors(activeType);
+                var shouldShow = activeHasErrors;
 
-                btn.style.display = shouldShow ? 'inline-flex' : 'none';
-                if (shouldShow && !_batchEyeHasBeenUsed) {
+                btn.hidden = !shouldShow;
+                btn.style.display = shouldShow ? 'inline-flex' : '';
+                var icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = _batchEyeShowingErrors[activeType] ? 'fas fa-eye' : 'fas fa-eye-slash';
+                }
+                var tooltip = _batchEyeShowingErrors[activeType]
+                    ? 'Ocultar mídias não encontradas / bloqueadas'
+                    : 'Mostrar mídias não encontradas / bloqueadas';
+                btn.setAttribute('data-tip', tooltip);
+                btn.setAttribute('title', tooltip);
+                if (shouldShow && !_batchEyeHasBeenUsed[activeType]) {
                     btn.classList.add('olhinho-alerta');
                 } else {
                     btn.classList.remove('olhinho-alerta');
                 }
             }
 
-            /* ── Botão Olhinho — toggle global de cards com erro ─────────────── */
+            /* ── Botão Olhinho — toggle somente da aba ativa ─────────────────── */
             function toggleErrorCards() {
                 if (_isTogglingBatchEye) return;
+                var activeType = _batchEyeActiveType();
+                if (!_batchEyeHasErrors(activeType)) return;
                 _isTogglingBatchEye = true;
-                _batchEyeShowingErrors = !_batchEyeShowingErrors;
-                _batchEyeHasBeenUsed = true;
+                _batchEyeShowingErrors[activeType] = !_batchEyeShowingErrors[activeType];
+                _batchEyeHasBeenUsed[activeType] = true;
 
                 const btn  = document.getElementById('toggleErrorsBtn');
                 // Ao clicar, o alerta piscante para permanentemente.
                 if (btn) btn.classList.remove('olhinho-alerta');
-                const icon = btn ? btn.querySelector('i') : null;
-                const allMediaCols = Array.prototype.slice.call(_batchEyeMediaCols('image'))
-                    .concat(Array.prototype.slice.call(_batchEyeMediaCols('video')));
 
-                allMediaCols.forEach(col => {
+                Array.prototype.forEach.call(_batchEyeMediaCols(activeType), col => {
                     var isError = _batchEyeCardHasError(col);
-                    if (_batchEyeShowingErrors) col.style.display = '';
-                    else if (isError) col.style.display = 'none';
+                    if (isError) col.style.display = _batchEyeShowingErrors[activeType] ? '' : 'none';
                 });
-
-                if (icon) {
-                    if (_batchEyeShowingErrors) {
-                        icon.className = 'fas fa-eye';
-                        if (btn) {
-                            btn.setAttribute('data-tip', 'Ocultar mídias não encontradas / bloqueadas');
-                            btn.setAttribute('title', 'Ocultar mídias não encontradas / bloqueadas');
-                        }
-                    } else {
-                        icon.className = 'fas fa-eye-slash';
-                        if (btn) {
-                            btn.setAttribute('data-tip', 'Mostrar mídias não encontradas / bloqueadas');
-                            btn.setAttribute('title', 'Mostrar mídias não encontradas / bloqueadas');
-                        }
-                    }
-                }
                 updateEyeButtonVisibility();
                 setTimeout(() => { _isTogglingBatchEye = false; }, 250);
             }
@@ -4786,8 +4743,8 @@
                 _batchVideoUrls = [];
                 _batchSelected.images.clear();
                 _batchSelected.videos.clear();
-                _batchEyeShowingErrors = true;
-                _batchEyeHasBeenUsed = false;
+                _batchEyeShowingErrors = { image: true, video: true };
+                _batchEyeHasBeenUsed = { image: false, video: false };
 
                 /* Normalizar protocolo: linhas sem http(s):// recebem https:// automaticamente */
                                           (function normalizeProtocols() {
@@ -4853,11 +4810,11 @@
                 document.getElementById('batchVideosGrid').innerHTML = '';
                 document.getElementById('batchUrlLog').innerHTML = '';
                 _batchSourceByMedia.clear();
-                _batchEyeShowingErrors = true;
-                _batchEyeHasBeenUsed = false;
+                _batchEyeShowingErrors = { image: true, video: true };
+                _batchEyeHasBeenUsed = { image: false, video: false };
                 var copyFailuresBtn = document.getElementById('batchCopyFailuresBtn');
                 if (copyFailuresBtn) {
-                    copyFailuresBtn.style.display = 'none';
+                    copyFailuresBtn.hidden = true;
                     copyFailuresBtn._failedUrls = [];
                 }
                 ['batchStatImgs','batchStatVids','batchStatTotal','batchTabImgCount','batchTabVidCount'].forEach(id => document.getElementById(id).textContent = '0');
@@ -5023,7 +4980,7 @@
             document.getElementById('batchCopyFailuresBtn').addEventListener('click', async function() {
                 const currentFailures = Array.isArray(this._failedUrls) ? this._failedUrls : [];
                 if (!currentFailures.length) {
-                    this.style.display = 'none';
+                    this.hidden = true;
                     return;
                 }
                 const copied = await window.MediaDownloadManager.copyFailedUrls(currentFailures);
@@ -5150,7 +5107,10 @@
                 var card = document.getElementById('batchDownloadCard');
                 if (card) card.style.display = 'none';
                 var copyFailuresBtn = document.getElementById('batchCopyFailuresBtn');
-                if (copyFailuresBtn) copyFailuresBtn.style.display = 'none';
+                if (copyFailuresBtn) {
+                    copyFailuresBtn.hidden = true;
+                    copyFailuresBtn._failedUrls = [];
+                }
 
                 /* Back to the pre-processing state: legal notice + donate button
                    visible again, header back to "Dashboard". */
@@ -5691,8 +5651,8 @@
                     var fontId = ((document.getElementById('rankFontSelect') || {}).value || 'default');
                     var defaultLabel = isUpdateMode ? '🔄 Atualizar Perfil no Ranking' : 'Enviar para o Ranking';
 
-                    if (nickname.length < 2 || nickname.length > 24) {
-                        showSiteNotice('Use um apelido com 2 a 24 caracteres.', { type: 'warning' });
+                    if (nickname.length < 2 || nickname.length > {{ donor_nickname_max_length }}) {
+                        showSiteNotice('Use um apelido com 2 a {{ donor_nickname_max_length }} caracteres.', { type: 'warning' });
                         return;
                     }
                     if (!aid) {
@@ -5708,8 +5668,11 @@
                     if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
 
                     var payload = {
-                        nickname: nickname, avatar_id: aid, font_id: styleState.font_id,
-                        text_effect: styleState.text_effect, name_color: styleState.name_color,
+                        nickname: nickname,
+                        avatar_id: aid,
+                        font_id: (window._rankStyleState || {}).font_id || 'default',
+                        text_effect: (window._rankStyleState || {}).text_effect || 'solid',
+                        name_color: (window._rankStyleState || {}).name_color || '#f3f4f6',
                         payment_id: currentPayId
                     };
                     if (isUpdateMode) payload.returning = true;
@@ -5894,7 +5857,7 @@
                                       'data-bs-toggle="tooltip" data-bs-placement="top"></i>' +
                                 '</div>' +
                                 '<div id="rankNicknameWrap">' +
-                                    '<input id="rankNickname" type="text" maxlength="24"' +
+                                '<input id="rankNickname" type="text" maxlength="{{ donor_nickname_max_length }}"' +
                                     ' class="form-control form-control-sm bg-dark text-white border-secondary mb-2"' +
                                     ' placeholder="Seu apelido/Nick (Ex: LeviskBR)…" />' +
                                 '</div>' +
@@ -5988,6 +5951,7 @@
                             text_effect: 'solid',
                             name_color: '#f3f4f6'
                         };
+                        window._rankStyleState = styleState;
                         function styleVisualCss() {
                             var color = styleState.name_color;
                             var css = {
@@ -6079,6 +6043,9 @@
                         if (fontSelect) fontSelect.addEventListener('change', function() { setFontStyle(this.value); });
                         var nameInput = document.getElementById('rankNickname');
                         if (nameInput) nameInput.addEventListener('input', updateStylePreview);
+                        setFontStyle(styleState.font_id);
+                        setEffectStyle(styleState.text_effect);
+                        setColorStyle(styleState.name_color);
                         window._applyReturningNameStyle = function(info) {
                             setFontStyle(info.font_id || 'default');
                             setEffectStyle(info.text_effect || 'solid');
@@ -6920,9 +6887,7 @@ function renderPublicRanking(rows) {
         /* Keep the established one-line layout, but make the text itself
            shrink enough that every nickname remains visible beside the dot.
            This is intentionally length-aware instead of using ellipsis. */
-        var rankNameSize = rawNickname.length > 30 ? '.32rem'
-            : rawNickname.length > 24 ? '.38rem'
-            : rawNickname.length > 18 ? '.46rem'
+        var rankNameSize = rawNickname.length > 18 ? '.38rem'
             : rawNickname.length > 13 ? '.54rem'
             : rawNickname.length > 7 ? '.62rem'
             : '.78rem';

@@ -115,7 +115,7 @@
         font-size: .62rem; color: #8b949e; margin: 0;
       }
 
-      #toggleErrorsBtn { display: none; }
+      #toggleErrorsBtn[hidden] { display: none !important; }
       @keyframes olhinho-pulse {
         0%, 100% { box-shadow: 0 0 0 0 rgba(255,152,0,0.7); border-color: #ff9800; }
         50%      { box-shadow: 0 0 8px 4px rgba(255,152,0,0.5); border-color: #ff9800; }
@@ -397,6 +397,7 @@
           <button
             id="toggleErrorsBtn"
             class="btn btn-sm btn-outline-secondary"
+            hidden
             data-tip="Ocultar mídias não encontradas / bloqueadas"
             data-tip-color="secondary"
             onclick="toggleErrorCards()"
@@ -972,21 +973,27 @@
       specs.forEach(function(s) {
         var el = document.getElementById(s.id);
         if (!el) return;
+        var selectedAcrossBoth = selectedMedia.images.size > 0 && selectedMedia.videos.size > 0;
+        var showAction = !isSelectionMode || (
+          s.id === 'btnDownloadAll' ? selectedAcrossBoth : s.set.size > 0
+        );
+        el.style.display = showAction ? '' : 'none';
         var tooltipText = (isSelectionMode && s.set.size > 0) ? s.sel(s.set.size) : s.all;
         /* Use the site's single custom tooltip; a native title creates a second
            browser tooltip on the same hover. */
         el.setAttribute('data-tip', tooltipText);
+        el.setAttribute('aria-label', tooltipText);
         el.removeAttribute('title');
         el.removeAttribute('data-bs-original-title');
       });
 
-      /* ── Sync the descriptive counter below the Download em Massa heading ── */
       var desc = document.getElementById('singleDlDesc');
       if (desc) {
         var tot = selectedMedia.images.size + selectedMedia.videos.size;
-        desc.textContent = (isSelectionMode && tot > 0)
-          ? tot + ' arquivo(s) selecionado(s)'
-          : 'Baixe todos os arquivos encontrados';
+        desc.textContent = isSelectionMode && tot === 0
+          ? 'Selecione as mídias que deseja baixar'
+          : '';
+        desc.style.display = isSelectionMode && tot === 0 ? '' : 'none';
       }
     }
 
@@ -1028,15 +1035,17 @@
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-outline-danger');
       } else {
-        // Cancel: clear current tab set, remove visuals
-        selectedMedia[tab].clear();
+        // Cancel clears all selected items so the normal "download all" actions
+        // cannot retain a stale selection from the other tab.
+        selectedMedia.images.clear();
+        selectedMedia.videos.clear();
         _reapplySelectionUI();
         document.body.classList.remove('selection-mode-active');
         btn.classList.remove('btn-outline-danger');
         btn.classList.add('btn-outline-secondary');
       }
       _updateSelectionBtnText();
-      _updateHeaderTooltips();
+        _updateHeaderTooltips();
     }
 
     // ── Card toggle logic ─────────────────────────────────────────────────
@@ -1086,12 +1095,15 @@
         });
       });
 
+      _updateHeaderTooltips();
+
       // Tab switch: update button label + restore selection visuals
       var tabsEl = document.getElementById('mediaTabs');
       if (tabsEl) {
         tabsEl.addEventListener('shown.bs.tab', function() {
           _updateSelectionBtnText();
           _reapplySelectionUI();
+          _updateHeaderTooltips();
           updateEyeButtonVisibility();
         });
         tabsEl.addEventListener('show.bs.tab', function(event) {
@@ -1149,12 +1161,10 @@
     ─────────────────────────────────────────────────────────────────────────── -->
     <script>
       // Estado global do toggle: true = exibindo erros, false = ocultando
-      var _eyeShowingErrors = true;
-      var _eyeHasBeenUsed = false;
+      var _eyeShowingErrors = { image: true, video: true };
+      var _eyeHasBeenUsed = { image: false, video: false };
       // Anti-spam: impede cliques durante a transição
       var _isTogglingEye = false;
-
-      var _eyeErrorKeywords = ['404', '403', 'Bloqueado', 'Não Encontrado', 'Indisponível', 'Removido', 'Copyright'];
 
       function _eyeMediaCols(type) {
         var paneId = type === 'image' ? 'images' : 'videos';
@@ -1162,16 +1172,7 @@
       }
 
       function _eyeCardHasError(col) {
-        if (col.querySelector('.video-error-overlay.active, .placeholder-image')) {
-          return true;
-        }
-
-        // Usa texto visível como fallback sem classificar o texto padrão de
-        // overlays de vídeo que ainda não foram ativados como erro.
-        var visibleText = col.innerText || '';
-        return _eyeErrorKeywords.some(function(keyword) {
-          return visibleText.indexOf(keyword) !== -1;
-        });
+        return !!col.querySelector('.video-error-overlay.active, .placeholder-image');
       }
 
       function _eyeHasErrors(type) {
@@ -1184,21 +1185,28 @@
       }
 
       /**
-       * O botão fica global quando as duas abas têm erros. Se apenas uma
-       * contém erros, sua visibilidade acompanha a aba atualmente selecionada.
+       * O botão e o estado de ocultação pertencem apenas à aba ativa.
        */
       function updateEyeButtonVisibility(tabOverride) {
         var btn = document.getElementById('toggleErrorsBtn');
         if (!btn) return;
 
-        var imageHasErrors = _eyeHasErrors('image');
-        var videoHasErrors = _eyeHasErrors('video');
         var activeType = _eyeActiveType(tabOverride);
-        var activeHasErrors = activeType === 'image' ? imageHasErrors : videoHasErrors;
-        var shouldShow = (imageHasErrors && videoHasErrors) || activeHasErrors;
+        var activeHasErrors = _eyeHasErrors(activeType);
+        var shouldShow = activeHasErrors;
 
+        btn.hidden = !shouldShow;
         btn.style.display = shouldShow ? 'inline-flex' : 'none';
-        if (shouldShow && !_eyeHasBeenUsed) {
+        var icon = document.getElementById('toggleErrorsIcon');
+        if (icon) {
+          icon.className = _eyeShowingErrors[activeType] ? 'fas fa-eye' : 'fas fa-eye-slash';
+        }
+        var tooltip = _eyeShowingErrors[activeType]
+          ? 'Ocultar mídias não encontradas / bloqueadas'
+          : 'Mostrar mídias não encontradas / bloqueadas';
+        btn.setAttribute('data-tip', tooltip);
+        btn.setAttribute('title', tooltip);
+        if (shouldShow && !_eyeHasBeenUsed[activeType]) {
           btn.classList.add('olhinho-alerta');
         } else {
           btn.classList.remove('olhinho-alerta');
@@ -1206,49 +1214,23 @@
       }
 
       /**
-       * Varre os dois grids. O estado é único: ocultar na aba atual também
-       * oculta os erros da outra aba, inclusive antes de ela ser visualizada.
+       * Altera apenas os cards da aba ativa; trocar de aba não afeta o outro grid.
        */
       function toggleErrorCards() {
         if (_isTogglingEye) return;
+        var activeType = _eyeActiveType();
+        if (!_eyeHasErrors(activeType)) return;
         _isTogglingEye = true;
-        _eyeShowingErrors = !_eyeShowingErrors;
-        _eyeHasBeenUsed = true;
+        _eyeShowingErrors[activeType] = !_eyeShowingErrors[activeType];
+        _eyeHasBeenUsed[activeType] = true;
 
         var btn  = document.getElementById('toggleErrorsBtn');
-        var icon = document.getElementById('toggleErrorsIcon');
-
         if (btn) btn.classList.remove('olhinho-alerta');
 
-        var allMediaCols = Array.prototype.slice.call(_eyeMediaCols('image'))
-          .concat(Array.prototype.slice.call(_eyeMediaCols('video')));
-
-        allMediaCols.forEach(function(col) {
+        Array.prototype.forEach.call(_eyeMediaCols(activeType), function(col) {
           var isError = _eyeCardHasError(col);
-          if (_eyeShowingErrors) {
-            // Restaura todos os cards, inclusive os que estavam na outra aba.
-            col.style.display = '';
-          } else if (isError) {
-            col.style.display = 'none';
-          }
+          if (isError) col.style.display = _eyeShowingErrors[activeType] ? '' : 'none';
         });
-
-        if (icon) {
-          if (_eyeShowingErrors) {
-            icon.className = 'fas fa-eye';
-            if (btn) {
-              btn.setAttribute('data-tip', 'Ocultar mídias não encontradas / bloqueadas');
-              btn.title = 'Ocultar mídias não encontradas / bloqueadas';
-            }
-          } else {
-            icon.className = 'fas fa-eye-slash';
-            if (btn) {
-              btn.setAttribute('data-tip', 'Mostrar mídias não encontradas / bloqueadas');
-              btn.title = 'Mostrar mídias não encontradas / bloqueadas';
-            }
-          }
-        }
-
         updateEyeButtonVisibility();
         setTimeout(function() { _isTogglingEye = false; }, 250);
       }
