@@ -1,7 +1,9 @@
 import oci, threading, time, os, requests, urllib.request, json, ssl
 from datetime import datetime
 
-DISCORD_WEBHOOK = "https://discordapp.com/api/webhooks/1518755432368181398/qlhss1_k8E4U0dPdJ5fuy7ez-uCFGy7rB7Doib5n7c87j33zaF5FbQ5lEKgQ9A4w8Ey7"
+# Puxa o novo webhook direto da memória do Render de forma 100% invisível para o GitHub
+DISCORD_WEBHOOK = os.environ.get("ORACLE_WEBHOOK")
+
 STACKS = [
     "ocid1.ormstack.oc1.iad.amaaaaaafumdbciauyydukjvbfoqz6b3obmrbb6azrrttqnhu4hrsty4mnsq",
     "ocid1.ormstack.oc1.iad.amaaaaaafumdbcia4gij3gjkhbgnaez7yq2xioqb2iifj2zycczpbx5vlyxa",
