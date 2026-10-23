@@ -101,7 +101,28 @@ def validar_e_montar_config():
     if not ("-----BEGIN RSA PRIVATE KEY-----" in key or "-----BEGIN PRIVATE KEY-----" in key):
         adicionar_log("❌ [CRÍTICO] Falta o cabeçalho correto da chave privada!")
         return None
-    config = {"user": os.environ.get("OCI_USER_OCID"), "fingerprint": fpt, "key_content": key, "tenancy": os.environ.get("OCI_TENANCY_OCID"), "region": os.environ.get("OCI_REGION", "us-ashburn-1")}
+        
+    # Injeta IDs fictícios válidos em formato para forçar a API da Oracle a responder
+    user_fake = "ocid1.user.oc1..aaaaaaaaxxx"
+    tenancy_fake = "ocid1.tenancy.oc1..aaaaaaaaxxx"
+    
+    config = {
+        "user": os.environ.get("OCI_USER_OCID") or user_fake, 
+        "fingerprint": fpt, 
+        "key_content": key, 
+        "tenancy": os.environ.get("OCI_TENANCY_OCID") or tenancy_fake, 
+        "region": os.environ.get("OCI_REGION", "us-ashburn-1")
+    }
+    
+    # Executa uma chamada direta de teste para capturar a resposta detalhada da API
+    try:
+        adicionar_log("[⚡] Enviando ping de diagnóstico para a Oracle...")
+        identity_client = oci.identity.IdentityClient(config)
+        identity_client.list_regions()
+    except Exception as e:
+        # Força o print da resposta bruta no console do Render
+        adicionar_log(f"📋 RESPOSTA BRUTA DA API: {str(e)}")
+
     try:
         oci.config.validate_config(config)
         adicionar_log("✅ [DIAGNÓSTICO] Estrutura aprovada!")
